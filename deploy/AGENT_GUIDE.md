@@ -26,7 +26,7 @@ operator before running commands.
 
 | Variable                  | What it is | Where the operator gets it |
 |---------------------------|------------|----------------------------|
-| `DOMAIN`                  | Public hostname the Mini App will live at, e.g. `oxenfurt.example.com` | A registrar (Porkbun, Namecheap, Cloudflare). A DNS A-record must already point at this VPS's public IP. Verify with `dig +short A "$DOMAIN"`. |
+| `DOMAIN`                  | Public hostname the Mini App will live at | A registrar (Porkbun, Namecheap, Cloudflare) **or** free DuckDNS (see "Free domain via DuckDNS" below). A DNS A-record must already point at this VPS's public IP. Verify with `dig +short A "$DOMAIN"`. |
 | `BOT_TOKEN`               | Telegram bot token from `@BotFather` | The operator already has a bot for the `english` Hermes profile — re-use the same token. |
 | `OWNER_TELEGRAM_USER_ID`  | The operator's numeric Telegram user ID | `/start` to `@userinfobot` in Telegram. |
 | `REPO_URL`                | git URL of the Oxenfurt repository | The operator either pushed to GitHub/GitLab or will scp a tarball — confirm. |
@@ -63,6 +63,48 @@ test "$(dig +short A "$DOMAIN" | head -1)" = "$(curl -s https://api.ipify.org)" 
 
 If the check fails, stop and tell the operator: TLS via Let's Encrypt
 requires this to resolve correctly before Caddy starts.
+
+### Free domain via DuckDNS (recommended for personal-use deploys)
+
+If the operator hasn't bought a domain and isn't planning to share this
+Mini App publicly, DuckDNS is the path. `$0/year`, no email verification,
+stable since 2014. Telegram BotFather accepts `*.duckdns.org` for Mini
+Apps, and Caddy obtains a Let's Encrypt cert via HTTP-01 with no extra
+configuration.
+
+Have the operator do this once **before** Stage 1:
+
+1. Open https://www.duckdns.org and log in via GitHub / Google / Reddit / Twitter.
+2. Pick a subdomain name (e.g. `oxenfurt-mdfr`) and click **add domain**.
+   The resulting hostname is `oxenfurt-mdfr.duckdns.org`.
+3. Paste the VPS's public IP into the "current ip" box and click
+   **update ip**.
+4. Wait ~30 seconds, then verify from your shell:
+   ```bash
+   dig +short A oxenfurt-mdfr.duckdns.org
+   # Must return the VPS's public IP.
+   ```
+
+Then in `/root/oxenfurt-inputs.env`:
+
+```
+DOMAIN=oxenfurt-mdfr.duckdns.org
+```
+
+The rest of the guide works without changes — Caddy doesn't care that
+the apex is `duckdns.org` instead of a paid TLD.
+
+Migration to a real domain later is one Caddyfile edit + one
+`@BotFather /setdomain` round-trip; the backend and database don't move.
+
+### Off-site backups
+
+If the operator doesn't want or have an S3/R2 account, leave
+`BACKUP_RCLONE_REMOTE=` empty in `oxenfurt-inputs.env`. Daily backups
+will still run and rotate locally at `/opt/oxenfurt/backups/`. For a
+single-user personal deploy this is acceptable risk; if you ever do want
+off-site, install `rclone`, configure a remote, and set the variable in
+`/etc/oxenfurt/backend.env`.
 
 ---
 
