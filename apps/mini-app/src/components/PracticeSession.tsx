@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Coffee } from 'lucide-react';
 import {
   backButton,
   disableVerticalSwipes,
@@ -206,10 +207,20 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
 
   if (error || cards.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <h2 className="text-xl font-bold mb-2">Нет карточек на сегодня</h2>
-        <p className="text-tg-hint mb-6">Отдыхай или загрузи новый транскрипт!</p>
-        <button onClick={onExit} className="text-tg-link font-semibold">Вернуться</button>
+      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-app-bg text-app-text">
+        <div className="w-20 h-20 bg-app-surface border border-app-border rounded-full flex items-center justify-center text-app-primary shadow-sm mb-6">
+          <Coffee size={36} strokeWidth={1.5} />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">На сегодня всё</h2>
+        <p className="text-app-hint mb-10 max-w-[260px]">
+          Отличная работа! Отдыхай или загрузи новый транскрипт в бот.
+        </p>
+        <button 
+          onClick={onExit} 
+          className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
+        >
+          Вернуться на главную
+        </button>
       </div>
     );
   }
