@@ -375,7 +375,16 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
       <div className="p-4 flex justify-between items-center text-[10px] text-app-hint uppercase tracking-wider font-bold">
         <span>Карточка {currentIndex + 1} / {cards.length}</span>
-        {currentCard!.type === 'theory' && <span className="text-app-primary">📖 Theory</span>}
+        <div className="flex items-center gap-3">
+          {currentCard!.type === 'theory' && <span className="text-app-primary">📖 Theory</span>}
+          <button
+            onClick={onExit}
+            className="text-app-hint text-xs normal-case font-medium tracking-normal active:opacity-60 underline underline-offset-4 decoration-app-hint/40"
+            aria-label="Завершить сессию"
+          >
+            Выйти
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 px-4 flex items-center justify-center">
@@ -408,7 +417,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       onChange={setTypedAnswer}
                       onSubmit={handleAnswerSubmit}
                       onGiveUp={handleGiveUp}
-                      placeholder="Введи слово"
+                      placeholder="Введи пропущенное слово"
                     />
                   </>
                 ) : variant === 'translation' && vocab ? (
@@ -421,7 +430,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       onChange={setTypedAnswer}
                       onSubmit={handleAnswerSubmit}
                       onGiveUp={handleGiveUp}
-                      placeholder="Type in English"
+                      placeholder="Напиши по-английски"
                     />
                   </>
                 ) : variant === 'listening' && vocab ? (
@@ -441,7 +450,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       onChange={setTypedAnswer}
                       onSubmit={handleAnswerSubmit}
                       onGiveUp={handleGiveUp}
-                      placeholder="Type what you heard"
+                      placeholder="Напиши что услышал"
                     />
                   </>
                 ) : vocab ? (

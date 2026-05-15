@@ -69,4 +69,15 @@ describe('matchAnswer', () => {
     // "of" has threshold 1; 2 edits → miss
     expect(matchAnswer('to', 'of').kind).toBe('miss')
   })
+
+  test('Cyrillic input is case-insensitive', () => {
+    // Regression guard: JS toLowerCase handles Cyrillic in modern engines,
+    // so an answer typed with a capital first letter (mobile keyboard
+    // autocapitalisation, ignored .autoCapitalize="off" or not) still
+    // matches a lowercased expected term.
+    expect(matchAnswer('Провод', 'провод').kind).toBe('exact')
+    expect(matchAnswer('ПРОВОД', 'провод').kind).toBe('exact')
+    expect(matchAnswer('провод', 'Провод').kind).toBe('exact')
+    expect(matchAnswer('ПрОвОд', 'провод').kind).toBe('exact')
+  })
 })
