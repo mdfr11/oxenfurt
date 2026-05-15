@@ -23,6 +23,7 @@ import { formatInterval, previewIntervals } from '../lib/fsrs';
 import { playPopSound, playSuccessChime, playThudSound } from '../lib/audio';
 import { pickVariantFor, type PracticeMode, type ExerciseVariant } from '../lib/practiceMode';
 import { speak, stopSpeaking } from '../lib/tts';
+import { cycleTtsSpeed, labelForSpeed, loadTtsSpeed, rateForSpeed, saveTtsSpeed, type TtsSpeed } from '../lib/audioSettings';
 
 interface PracticeSessionProps {
   mode: PracticeMode;
@@ -185,30 +186,40 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   void inputRef // keep the ref reachable for the field, even if we don't focus
 
 
+  // Persisted TTS speed preference — toggle via the chip below the 🔊 button.
+  const [ttsSpeed, setTtsSpeed] = useState<TtsSpeed>(() => loadTtsSpeed())
+
   // Listening variant: pronounce the term on card show.
   useEffect(() => {
     if (variant === 'listening' && !isRevealed && currentCard?.type === 'vocab') {
       const vocab = currentCard.payload as VocabPayload
       // Small delay so the card animation finishes before audio starts.
-      const t = setTimeout(() => { void speak(vocab.term) }, 250)
+      const t = setTimeout(() => { void speak(vocab.term, { rate: rateForSpeed(ttsSpeed) }) }, 250)
       return () => {
         clearTimeout(t)
         stopSpeaking()
       }
     }
     return undefined
-  }, [currentCard?.id, variant, isRevealed, currentCard])
+  }, [currentCard?.id, variant, isRevealed, currentCard, ttsSpeed])
 
   // Stop any pronunciation when leaving the screen.
   useEffect(() => () => stopSpeaking(), [])
 
   const handleReveal = () => {
-    // Recognition variants reveal on tap; typed variants reveal via submit.
-    if (!isRevealed && !expectsTypedAnswer) {
-      setIsRevealed(true);
-      safeHaptic('impactOccurred', 'light')
-      playPopSound()
-    }
+    // Typed variants reveal via submit, not tap.
+    if (expectsTypedAnswer) return
+    // Recognition: tap toggles reveal — second tap flips back to the front.
+    setIsRevealed((prev) => !prev)
+    safeHaptic('impactOccurred', 'light')
+    playPopSound()
+  };
+
+  const cycleSpeed = () => {
+    const next = cycleTtsSpeed(ttsSpeed)
+    setTtsSpeed(next)
+    saveTtsSpeed(next)
+    safeHaptic('selectionChanged')
   };
 
   const handleAnswerSubmit = () => {
@@ -229,7 +240,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   const handleReplayAudio = () => {
     if (currentCard?.type !== 'vocab') return
     const vocab = currentCard.payload as VocabPayload
-    void speak(vocab.term)
+    void speak(vocab.term, { rate: rateForSpeed(ttsSpeed) })
     safeHaptic('selectionChanged')
   };
 
@@ -486,6 +497,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                     >
                       🔊
                     </button>
+                    <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
                     <p className="text-[11px] text-app-hint">Тап чтобы повторить</p>
                     <TypedAnswerField
                       inputRef={inputRef}
@@ -512,6 +524,9 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       >
                         🔊
                       </button>
+                    </div>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
                     </div>
                     <p className="text-xl text-app-text leading-relaxed">
                       "{vocab.context_sentence}"
@@ -637,6 +652,18 @@ function TypedAnswerField({
         Не знаю — показать ответ
       </button>
     </>
+  )
+}
+
+function SpeedChip({ speed, onCycle }: { speed: TtsSpeed; onCycle: () => void }) {
+  return (
+    <button
+      onClick={onCycle}
+      className="text-[10px] uppercase tracking-widest font-bold px-3 py-1 rounded-full border border-app-border text-app-hint active:bg-app-surface active:scale-95 transition-all"
+      aria-label="Скорость произношения"
+    >
+      {labelForSpeed(speed)}
+    </button>
   )
 }
 
