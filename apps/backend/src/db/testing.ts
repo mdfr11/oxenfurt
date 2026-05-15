@@ -9,8 +9,15 @@ import { runMigrations } from './migrate.ts'
  * test DB is available — CI runs against a real Postgres, local quick-iter
  * runs may not have one.
  *
- * Migrations are applied once. Tables are truncated between tests via
- * `resetTestDb`.
+ * The connection is a **module-level singleton** intentionally: Bun runs all
+ * test files in the same process, so a fresh `createDb(...)` per file would
+ * exhaust the pool quickly. The trade-off: test files MUST NOT call
+ * `conn.close()` in afterAll — closing the shared connection mid-suite
+ * makes every subsequent file fail with `CONNECTION_ENDED`. The connection
+ * is reaped on process exit by Bun.
+ *
+ * Migrations are applied once on first access. Tables are truncated between
+ * tests via `resetTestDb`.
  */
 let cached: DbConnection | null = null
 let initFailed = false

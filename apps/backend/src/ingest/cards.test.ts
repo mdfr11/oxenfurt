@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { FsrsService } from '@oxenfurt/shared'
 import { getTestDb, resetTestDb } from '../db/testing.ts'
@@ -16,9 +16,7 @@ beforeEach(async () => {
   if (conn) await resetTestDb(conn.db)
 })
 
-afterAll(async () => {
-  if (conn) await conn.close()
-})
+// Don't close `conn` — shared singleton, see db/testing.ts.
 
 describe.skipIf(noDb)('ingestCards (DB)', () => {
   test('inserts a vocab card with status=active and an initial FSRS state', async () => {

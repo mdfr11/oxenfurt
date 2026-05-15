@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { FsrsService, RATING } from '@oxenfurt/shared'
 import { signSession } from '../auth/jwt.ts'
@@ -55,9 +55,8 @@ beforeEach(async () => {
   if (conn) await resetTestDb(conn.db)
 })
 
-afterAll(async () => {
-  if (conn) await conn.close()
-})
+// NB: we don't close `conn` in afterAll — it's a module-level singleton
+// shared across all test files in the same Bun process. See db/testing.ts.
 
 describe.skipIf(noDb)('GET /due', () => {
   test('returns 401 without a JWT', async () => {
@@ -78,9 +77,12 @@ describe.skipIf(noDb)('GET /due', () => {
     expect(body.cards).toHaveLength(1)
   })
 
-  test('excludes draft and archived cards', async () => {
+  test('returns both vocab and theory when both are active', async () => {
+    // Sanity check that the draft-gate is well and truly gone — theory
+    // cards used to enter as `status='draft'` and would have been missing
+    // from /due. After the gate was removed (commit 35d0e87), they enter
+    // as `active` and should be returned alongside vocab.
     await seedActiveVocab('one')
-    // sneak in a draft theory card
     await ingestCards(
       conn!.db,
       fsrs,
@@ -97,7 +99,7 @@ describe.skipIf(noDb)('GET /due', () => {
     )
     const res = await buildApp().request('/due', { headers: await authHeader() })
     const body = (await res.json()) as { cards: Array<{ type: string }> }
-    expect(body.cards.map((c) => c.type)).toEqual(['vocab'])
+    expect(body.cards.map((c) => c.type).sort()).toEqual(['theory', 'vocab'])
   })
 
   test('respects the limit query parameter', async () => {

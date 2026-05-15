@@ -6,6 +6,7 @@ import {
   savePracticeMode,
   type PracticeMode,
 } from '../lib/practiceMode';
+import { primeSpeech } from '../lib/tts';
 
 interface HomeProps {
   onStart: (mode: PracticeMode) => void;
@@ -28,7 +29,10 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
     let unsubscribe: (() => void) | undefined
     try {
       mainButton.setParams({ text: 'Начать сессию', isVisible: true, isEnabled: true })
-      unsubscribe = mainButton.onClick(() => onStart(mode))
+      unsubscribe = mainButton.onClick(() => {
+        primeSpeech()
+        onStart(mode)
+      })
     } catch {
       // SDK not mounted — fine, the in-webview button still works
     }
@@ -89,7 +93,14 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
         {/* In-webview fallback for dev / non-Telegram environments. */}
         <button
           className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
-          onClick={() => onStart(mode)}
+          onClick={() => {
+            // Unlock speechSynthesis on Android/iOS WebView — this onClick
+            // is a real user gesture, so the synth will permit a silent
+            // warmup utterance and subsequent .speak() calls during the
+            // session. Required for the "Слух" (listening) mode to work.
+            primeSpeech()
+            onStart(mode)
+          }}
         >
           Начать сессию
         </button>
