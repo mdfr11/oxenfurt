@@ -4,11 +4,10 @@ import * as v from 'valibot'
 import {
   FsrsService,
   RatingSchema,
+  type DraftCardDto,
   type DueCardDto,
   type FsrsCardState,
   type Rating,
-  type TheoryPayload,
-  type VocabPayload,
 } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { cardReviews, cards, type CardRow } from '../db/schema.ts'
@@ -39,6 +38,37 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
       .limit(limit)
 
     return c.json({ cards: rows.map(toDueDto) })
+  })
+
+  // List cards pending operator approval. Theory cards arrive in `draft`
+  // state because LLM extraction occasionally hallucinates rules — the
+  // operator approves or skips them before they enter the SRS queue.
+  app.get('/drafts', async (c) => {
+    const rows = await deps.db
+      .select()
+      .from(cards)
+      .where(eq(cards.status, 'draft'))
+      .orderBy(asc(cards.createdAt))
+
+    return c.json({ cards: rows.map(toDraftDto) })
+  })
+
+  app.post('/:id/approve', async (c) => {
+    const id = c.req.param('id')
+    if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
+    const result = await transitionDraft(deps.db, id, 'active')
+    if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
+    if (result === 'not_in_draft') return c.json({ error: 'not_in_draft' }, 400)
+    return c.json({ status: 'active' })
+  })
+
+  app.post('/:id/skip', async (c) => {
+    const id = c.req.param('id')
+    if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
+    const result = await transitionDraft(deps.db, id, 'archived')
+    if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
+    if (result === 'not_in_draft') return c.json({ error: 'not_in_draft' }, 400)
+    return c.json({ status: 'archived' })
   })
 
   app.post('/:id/review', async (c) => {
@@ -129,6 +159,37 @@ export async function applyReview(
 
     return next
   })
+}
+
+export type DraftTransitionResult = 'ok' | 'not_found' | 'not_in_draft'
+
+export async function transitionDraft(
+  db: Db,
+  cardId: string,
+  toStatus: 'active' | 'archived',
+): Promise<DraftTransitionResult> {
+  return await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(cards)
+      .where(eq(cards.id, cardId))
+      .for('update')
+    if (row === undefined) return 'not_found'
+    if (row.status !== 'draft') return 'not_in_draft'
+    await tx.update(cards).set({ status: toStatus }).where(eq(cards.id, cardId))
+    return 'ok'
+  })
+}
+
+function toDraftDto(row: CardRow): DraftCardDto {
+  return {
+    id: row.id,
+    type: row.type,
+    payload: row.payload,
+    source: row.source,
+    source_quote: row.sourceQuote,
+    created_at: row.createdAt.toISOString(),
+  }
 }
 
 function toDueDto(row: CardRow): DueCardDto {

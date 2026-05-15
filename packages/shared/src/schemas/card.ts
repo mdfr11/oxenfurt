@@ -30,3 +30,12 @@ export interface DueCardDto {
   source_quote: string | null
   fsrs: FsrsCardState
 }
+
+export interface DraftCardDto {
+  id: string
+  type: 'vocab' | 'theory'
+  payload: VocabPayload | TheoryPayload
+  source: string | null
+  source_quote: string | null
+  created_at: string
+}

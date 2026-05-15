@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# Cancel in-flight CI runs from older commits on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: typecheck + test + lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      # Real Postgres so backend integration tests (~19 currently skipped
+      # locally) actually run in CI. The TEST_DATABASE_URL env down below
+      # points the test runner at this container.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: oxenfurt
+          POSTGRES_PASSWORD: oxenfurt
+          POSTGRES_DB: oxenfurt_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oxenfurt -d oxenfurt_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.0
+
+      - name: Setup Node (for pnpm + Vite)
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Bun (for backend dev/test runner)
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        env:
+          TEST_DATABASE_URL: postgres://oxenfurt:oxenfurt@127.0.0.1:5432/oxenfurt_test
+        run: pnpm test
+
+      - name: Lint (mini-app)
+        run: pnpm -F @oxenfurt/mini-app lint
+
+      - name: Build (mini-app)
+        env:
+          VITE_API_URL: ''
+        run: pnpm -F @oxenfurt/mini-app build
