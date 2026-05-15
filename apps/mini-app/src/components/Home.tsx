@@ -12,6 +12,8 @@ import { primeSpeech } from '../lib/tts';
 import { primeAudio } from '../lib/audio';
 import { SettingsSheet } from './SettingsSheet';
 
+import { AnimatePresence, motion } from 'framer-motion';
+
 interface HomeProps {
   onStart: (mode: PracticeMode) => void;
   onOpenLibrary: () => void;
@@ -183,15 +185,23 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
           </div>
 
           {/* Minimalist Dropdown for Mode Selection */}
-          {isModeSelectOpen && (
-            <div className="absolute bottom-[4.5rem] left-1/2 -translate-x-1/2 w-56 bg-app-surface border border-app-border rounded-2xl shadow-xl overflow-hidden z-20 flex flex-col p-1">
-              <ModeOption active={mode === 'mixed'} onClick={() => selectMode('mixed')}>Смешанно</ModeOption>
-              <ModeOption active={mode === 'recognition'} onClick={() => selectMode('recognition')}>Узнавание</ModeOption>
-              <ModeOption active={mode === 'cloze'} onClick={() => selectMode('cloze')}>Письмо</ModeOption>
-              <ModeOption active={mode === 'translation'} onClick={() => selectMode('translation')}>Перевод</ModeOption>
-              <ModeOption active={mode === 'listening'} onClick={() => selectMode('listening')}>Слух</ModeOption>
-            </div>
-          )}
+          <AnimatePresence>
+            {isModeSelectOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95, translateX: '-50%' }}
+                animate={{ opacity: 1, y: 0, scale: 1, translateX: '-50%' }}
+                exit={{ opacity: 0, y: 10, scale: 0.95, translateX: '-50%' }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                className="absolute bottom-[4.5rem] left-1/2 w-56 bg-app-surface border border-app-border rounded-2xl shadow-xl overflow-hidden z-20 flex flex-col p-1 origin-bottom"
+              >
+                <ModeOption active={mode === 'mixed'} onClick={() => selectMode('mixed')}>Смешанно</ModeOption>
+                <ModeOption active={mode === 'recognition'} onClick={() => selectMode('recognition')}>Узнавание</ModeOption>
+                <ModeOption active={mode === 'cloze'} onClick={() => selectMode('cloze')}>Письмо</ModeOption>
+                <ModeOption active={mode === 'translation'} onClick={() => selectMode('translation')}>Перевод</ModeOption>
+                <ModeOption active={mode === 'listening'} onClick={() => selectMode('listening')}>Слух</ModeOption>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mt-2">
@@ -213,9 +223,18 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
       </div>
       
       {/* Dim overlay when dropdown is open */}
-      {isModeSelectOpen && (
-         <div className="fixed inset-0 bg-black/10 z-0" onClick={() => setIsModeSelectOpen(false)}></div>
-      )}
+      <AnimatePresence>
+        {isModeSelectOpen && (
+           <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             transition={{ duration: 0.15 }}
+             className="fixed inset-0 bg-black/10 z-0" 
+             onClick={() => setIsModeSelectOpen(false)}
+           />
+        )}
+      </AnimatePresence>
 
       <SettingsSheet isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>

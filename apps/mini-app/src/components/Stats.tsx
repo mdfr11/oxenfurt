@@ -62,7 +62,7 @@ export function Stats({ onExit }: StatsProps) {
 
   return (
     <div
-      className="flex-1 flex flex-col bg-app-bg text-app-text overflow-y-auto"
+      className="flex-1 flex flex-col h-full w-full min-h-0 bg-app-bg text-app-text overflow-y-auto"
       style={{
         paddingTop: `calc(0.75rem + var(--tg-safe-area-inset-top, 0px))`,
         paddingBottom: `calc(1rem + var(--tg-safe-area-inset-bottom, 0px))`,

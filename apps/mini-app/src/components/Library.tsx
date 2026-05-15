@@ -100,7 +100,7 @@ export function Library({ onExit }: LibraryProps) {
 
   return (
     <div
-      className="flex-1 flex flex-col bg-app-bg text-app-text"
+      className="flex-1 flex flex-col h-full w-full min-h-0 bg-app-bg text-app-text"
       style={{
         paddingTop: `calc(0.75rem + var(--tg-safe-area-inset-top, 0px))`,
         paddingBottom: `calc(0.5rem + var(--tg-safe-area-inset-bottom, 0px))`,
