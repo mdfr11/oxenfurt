@@ -7,6 +7,8 @@ import type { Db } from '../db/client.ts'
 import { createIngestRouter } from '../ingest/cards.ts'
 import { createCardsRouter } from '../cards/router.ts'
 import { createSessionsRouter } from '../sessions/router.ts'
+import { createStatsRouter } from '../stats/router.ts'
+import { createTtsRouter } from '../tts/router.ts'
 
 export interface AppDeps {
   botToken: string
@@ -163,6 +165,23 @@ export function createApp(deps: AppDeps): Hono {
     '/sessions',
     createSessionsRouter({
       db: deps.db,
+      jwtSecret: deps.jwtSecret,
+      now,
+    }),
+  )
+
+  app.route(
+    '/stats',
+    createStatsRouter({
+      db: deps.db,
+      jwtSecret: deps.jwtSecret,
+      now,
+    }),
+  )
+
+  app.route(
+    '/tts',
+    createTtsRouter({
       jwtSecret: deps.jwtSecret,
       now,
     }),

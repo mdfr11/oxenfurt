@@ -1,145 +1,135 @@
 /**
- * Thin wrapper around the browser's SpeechSynthesis API. Used by the
- * listening practice mode to pronounce English terms.
+ * Server-side TTS via the backend `/tts` proxy. We used to call
+ * `window.speechSynthesis.speak()` directly, but on Android phones without
+ * a system English voice installed (the default in many locales) the call
+ * silently produced nothing. Going through the server gives us:
  *
- * Known browser quirks this module accommodates:
+ *   - Consistent voice quality across iOS / Android / desktop
+ *   - No dependency on system TTS engines or installed language packs
+ *   - Browser HTTP cache reuses audio across replays of the same term
  *
- * - **Voices load asynchronously**. `getVoices()` returns [] on first call;
- *   voices become available after a `voiceschanged` event. Most platforms
- *   take <100ms but Android can take 1-2 seconds on the very first call
- *   after the WebView starts.
- *
- * - **User-gesture requirement**. Mobile browsers (notably Android Chrome /
- *   WebView) will silently drop a speak() call that's not invoked from a
- *   user gesture handler — including ones fired from a setTimeout shortly
- *   after a tap. We expose `primeSpeech()` so PracticeSession can prime the
- *   synth from inside the tap handler that opened the session.
- *
- * - **No English voice installed**. On phones without an English TTS pack
- *   the synth falls back to the system default (often the OS language
- *   like Russian), which mangles English pronunciation. We log a warning
- *   and try anyway — that's still better than silence.
+ * The audio is fetched with the user's JWT (so the proxy is only available
+ * to the logged-in owner), then decoded from a Blob URL and played via a
+ * standard HTMLAudioElement.
  */
 
-let voicesPromise: Promise<SpeechSynthesisVoice[]> | null = null
-let primed = false
+import { API_BASE, getToken } from './api'
 
-function hasSynth(): boolean {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window
-}
+let activeAudio: HTMLAudioElement | null = null
+let activeUrl: string | null = null
 
-function loadVoices(): Promise<SpeechSynthesisVoice[]> {
-  if (voicesPromise) return voicesPromise
-  if (!hasSynth()) {
-    voicesPromise = Promise.resolve([])
-    return voicesPromise
+function disposeActive(): void {
+  if (activeAudio) {
+    try {
+      activeAudio.pause()
+    } catch {
+      // ignore
+    }
+    activeAudio = null
   }
-  voicesPromise = new Promise((resolve) => {
-    const sys = window.speechSynthesis
-    const immediate = sys.getVoices()
-    if (immediate.length > 0) {
-      resolve(immediate)
-      return
-    }
-    let resolved = false
-    const finish = (voices: SpeechSynthesisVoice[]) => {
-      if (resolved) return
-      resolved = true
-      sys.removeEventListener('voiceschanged', handler)
-      resolve(voices)
-    }
-    const handler = () => finish(sys.getVoices())
-    sys.addEventListener('voiceschanged', handler)
-    // Give Android a generous window — voices arrive 1-2s after init.
-    setTimeout(() => finish(sys.getVoices()), 3000)
-  })
-  return voicesPromise
-}
-
-export type TtsSupport = 'ready' | 'pending' | 'unsupported'
-
-export function ttsSupport(): TtsSupport {
-  if (!hasSynth()) return 'unsupported'
-  const voices = window.speechSynthesis.getVoices()
-  if (voices.length === 0) return 'pending'
-  return voices.some((v) => v.lang.toLowerCase().startsWith('en')) ? 'ready' : 'unsupported'
-}
-
-export async function getEnglishVoice(): Promise<SpeechSynthesisVoice | null> {
-  if (!hasSynth()) return null
-  const voices = await loadVoices()
-  if (voices.length === 0) return null
-  return (
-    voices.find((v) => v.lang.toLowerCase() === 'en-us') ??
-    voices.find((v) => v.lang.toLowerCase().startsWith('en-')) ??
-    voices.find((v) => v.lang.toLowerCase().startsWith('en')) ??
-    null
-  )
-}
-
-/**
- * Call once from a user-gesture handler (e.g. inside onClick) to unlock
- * speechSynthesis on mobile browsers that gate it. The "warmup" utterance
- * is empty so the user hears nothing, but the synth engine considers
- * itself permitted for subsequent calls in the same page session.
- *
- * Safe to call repeatedly — only the first call actually runs the warmup.
- */
-export function primeSpeech(): void {
-  if (!hasSynth() || primed) return
-  primed = true
-  try {
-    const sys = window.speechSynthesis
-    const warmup = new SpeechSynthesisUtterance(' ')
-    warmup.volume = 0
-    warmup.rate = 1
-    sys.speak(warmup)
-  } catch {
-    // ignore — best-effort warmup
+  if (activeUrl) {
+    URL.revokeObjectURL(activeUrl)
+    activeUrl = null
   }
 }
 
 export async function speak(text: string, opts: { rate?: number } = {}): Promise<void> {
-  if (!hasSynth()) {
-    console.warn('[tts] speechSynthesis not available')
+  if (typeof window === 'undefined') return
+  const trimmed = text.trim()
+  if (trimmed.length === 0) return
+
+  // Cancel anything in flight — back-to-back card flips shouldn't stack.
+  disposeActive()
+
+  const token = getToken()
+  if (!token) {
+    console.warn('[tts] no JWT, cannot fetch audio')
     return
   }
-  const sys = window.speechSynthesis
-  // Stop anything in flight — avoid stacked utterances on fast card flips.
-  sys.cancel()
 
-  const voice = await getEnglishVoice()
-  if (!voice) {
-    console.warn(
-      '[tts] no English voice installed on this device — falling back to system default with lang=en-US. ' +
-        'Pronunciation will be incorrect; install an English TTS voice in system settings to fix.',
-    )
-  }
-  const utt = new SpeechSynthesisUtterance(text)
-  utt.lang = voice?.lang ?? 'en-US'
-  if (voice) utt.voice = voice
-  utt.rate = opts.rate ?? 0.95
-  utt.onerror = (e) => {
-    console.warn('[tts] speak error', e.error)
-  }
-  utt.onstart = () => {
-    console.info('[tts] speaking:', text)
-  }
-  sys.speak(utt)
-
-  // Some Chrome variants bug out and never speak unless re-prodded — a
-  // documented workaround is to pause+resume the synth right after.
-  // Cheap, no audible effect when the synth is fine.
+  let blob: Blob
   try {
-    sys.pause()
-    sys.resume()
+    const res = await fetch(`${API_BASE}/tts?text=${encodeURIComponent(trimmed)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) {
+      console.warn('[tts] backend returned', res.status, await res.text().catch(() => ''))
+      return
+    }
+    blob = await res.blob()
+  } catch (err) {
+    console.warn('[tts] fetch failed', err)
+    return
+  }
+
+  const url = URL.createObjectURL(blob)
+  const audio = new Audio(url)
+  audio.playbackRate = opts.rate ?? 0.95
+  activeAudio = audio
+  activeUrl = url
+
+  audio.addEventListener('ended', () => {
+    if (activeAudio === audio) disposeActive()
+  }, { once: true })
+  audio.addEventListener('error', (e) => {
+    console.warn('[tts] audio element error', e)
+    if (activeAudio === audio) disposeActive()
+  }, { once: true })
+
+  try {
+    await audio.play()
+  } catch (err) {
+    // NotAllowedError happens when the play wasn't triggered by a recent
+    // user gesture. Should be rare after primeSpeech() has unlocked, but
+    // log it so we can spot devices where it still bites.
+    console.warn('[tts] audio.play() rejected', err)
+    if (activeAudio === audio) disposeActive()
+  }
+}
+
+/** Cancel any in-flight or queued audio — call on unmount. */
+export function stopSpeaking(): void {
+  disposeActive()
+}
+
+/**
+ * Call once from a user-gesture handler (e.g. "Начать сессию" onClick) to
+ * unlock the HTMLAudio playback path on mobile browsers. Same idea as the
+ * Web Audio AudioContext priming — Android Chrome / WebView gates the
+ * first .play() unless it's been preceded by a user gesture in the page
+ * lifecycle.
+ *
+ * The trick: kick off a play() on a tiny silent data-URI. Browsers count
+ * the gesture and unlock the path; subsequent plays from non-gesture
+ * code (like a setTimeout 250ms after card mount) then work.
+ */
+export function primeSpeech(): void {
+  if (typeof window === 'undefined') return
+  try {
+    const a = new Audio(
+      // 0.1s of WAV silence. Tiny payload; engines treat it as a real
+      // playback and consider the audio path unlocked for the page.
+      'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAVFYAAFRWAAABAAgAZGF0YQAAAAA=',
+    )
+    a.volume = 0
+    void a.play().catch(() => {
+      // best-effort warmup; if it fails the explicit replay button still
+      // works since that's also a user gesture.
+    })
   } catch {
     // ignore
   }
 }
 
-/** Cancel any in-flight or queued speech — call on unmount. */
-export function stopSpeaking(): void {
-  if (!hasSynth()) return
-  window.speechSynthesis.cancel()
+// --- Legacy exports kept for compatibility with callers (no-op now). ---
+
+/** No-op — we no longer rely on SpeechSynthesis. Kept so existing imports
+ *  don't break. Always reports 'ready' since the backend speaks. */
+export function ttsSupport(): 'ready' {
+  return 'ready'
+}
+
+/** No-op — kept for backwards compatibility. */
+export async function getEnglishVoice(): Promise<null> {
+  return null
 }
