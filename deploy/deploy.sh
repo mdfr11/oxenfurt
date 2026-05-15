@@ -96,9 +96,12 @@ fi
 echo "[VPS] Switching symlink..."
 ln -sfn "\${REL_DIR}" /opt/oxenfurt/current
 
+# IMPORTANT: Also symlink backend since the service uses /opt/oxenfurt/current
+ln -sfn "\${REL_DIR}/apps" /opt/oxenfurt/current/apps 2>/dev/null || true
+
 echo "[VPS] Restarting backend..."
 systemctl restart oxenfurt-backend.service
-sleep 2
+sleep 3
 
 HEALTH=\$(curl -sf "https://\${DOMAIN}/api/health" || echo "FAIL")
 echo ""
