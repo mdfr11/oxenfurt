@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import { Coffee, X } from 'lucide-react';
 import {
   backButton,
@@ -9,7 +9,6 @@ import {
   hapticFeedback,
   popup,
 } from '@telegram-apps/sdk-react';
-import { Spinner } from '@telegram-apps/telegram-ui';
 import {
   RATING,
   matchAnswer,
@@ -21,6 +20,7 @@ import {
 } from '@oxenfurt/shared';
 import { fetchWithAuth } from '../lib/api';
 import { formatInterval, previewIntervals } from '../lib/fsrs';
+import { playPopSound, playSuccessChime, playThudSound } from '../lib/audio';
 import { pickVariantFor, type PracticeMode, type ExerciseVariant } from '../lib/practiceMode';
 import { speak, stopSpeaking } from '../lib/tts';
 
@@ -207,6 +207,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     if (!isRevealed && !expectsTypedAnswer) {
       setIsRevealed(true);
       safeHaptic('impactOccurred', 'light')
+      playPopSound()
     }
   };
 
@@ -220,9 +221,9 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     const result = matchAnswer(typedAnswer, expected);
     setMatchResult(result);
     setIsRevealed(true);
-    if (result.kind === 'exact') safeHaptic('notificationOccurred', 'success')
-    else if (result.kind === 'close') safeHaptic('impactOccurred', 'medium')
-    else safeHaptic('notificationOccurred', 'error')
+    if (result.kind === 'exact') { safeHaptic('notificationOccurred', 'success'); playPopSound(); }
+    else if (result.kind === 'close') { safeHaptic('impactOccurred', 'medium'); playPopSound(); }
+    else { safeHaptic('notificationOccurred', 'error'); playThudSound(); }
   };
 
   const handleReplayAudio = () => {
@@ -241,15 +242,16 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     setMatchResult(null)
     setIsRevealed(true)
     safeHaptic('impactOccurred', 'light')
+    playThudSound()
   };
 
   const handleRate = (rating: Rating) => {
     if (!currentCard) return;
 
-    if (rating === RATING.Again) safeHaptic('notificationOccurred', 'error')
-    else if (rating === RATING.Hard) safeHaptic('impactOccurred', 'medium')
-    else if (rating === RATING.Good) safeHaptic('selectionChanged')
-    else safeHaptic('notificationOccurred', 'success')
+    if (rating === RATING.Again) { safeHaptic('notificationOccurred', 'error'); playThudSound(); }
+    else if (rating === RATING.Hard) { safeHaptic('impactOccurred', 'medium'); playPopSound(); }
+    else if (rating === RATING.Good) { safeHaptic('selectionChanged'); playPopSound(); }
+    else { safeHaptic('notificationOccurred', 'success'); playPopSound(); }
 
     const isCorrect = rating !== RATING.Again;
     const nextStats = {
@@ -266,6 +268,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       setCurrentIndex((idx) => idx + 1);
     } else {
       safeHaptic('notificationOccurred', 'success')
+      playSuccessChime()
       finishBackendSession(nextStats.total, nextStats.correct)
       onComplete(nextStats.total, nextStats.correct);
     }
@@ -287,8 +290,35 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <Spinner size="l" />
+      <div className="flex-1 flex flex-col bg-app-bg text-app-text overflow-hidden">
+        {/* Skeleton Progress Bar */}
+        <div className="h-1 w-full bg-black/5 dark:bg-white/5"></div>
+        
+        <div className="p-4 flex justify-between items-center">
+          <div className="h-3 w-20 bg-app-hint/20 rounded animate-pulse"></div>
+          <div className="h-7 w-7 rounded-full bg-app-hint/20 animate-pulse"></div>
+        </div>
+
+        <div className="flex-1 px-4 flex items-center justify-center">
+          <div className="w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center relative border border-app-border shadow-xl">
+             <div className="flex flex-col items-center gap-6 w-full animate-pulse">
+               <div className="h-10 w-3/4 bg-app-hint/20 rounded-lg"></div>
+               <div className="h-4 w-5/6 bg-app-hint/20 rounded"></div>
+               <div className="h-4 w-4/6 bg-app-hint/20 rounded"></div>
+             </div>
+             <div className="absolute bottom-10 h-3 w-24 bg-app-hint/20 rounded animate-pulse"></div>
+          </div>
+        </div>
+
+        {/* Skeleton Rating Buttons */}
+        <div className="px-2 pb-10 pt-4" style={{ paddingBottom: `calc(2.5rem + var(--tg-safe-area-inset-bottom, 0px))` }}>
+          <div className="flex gap-2 h-16 animate-pulse">
+            <div className="flex-1 rounded-2xl bg-app-hint/10"></div>
+            <div className="flex-1 rounded-2xl bg-app-hint/10"></div>
+            <div className="flex-1 rounded-2xl bg-app-hint/10"></div>
+            <div className="flex-1 rounded-2xl bg-app-hint/10"></div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -388,9 +418,24 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       <div className="flex-1 px-4 flex items-center justify-center">
         <motion.div
           onClick={expectsTypedAnswer ? undefined : handleReveal}
+          drag={isRevealed}
+          dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+          dragElastic={0.6}
+          onDragEnd={(_, info: PanInfo) => {
+            if (!isRevealed) return;
+            const { offset } = info;
+            const threshold = 100;
+            if (Math.abs(offset.x) > Math.abs(offset.y)) {
+              if (offset.x > threshold) handleRate(RATING.Good);
+              else if (offset.x < -threshold) handleRate(RATING.Hard);
+            } else {
+              if (offset.y > threshold) handleRate(RATING.Again);
+              else if (offset.y < -threshold) handleRate(RATING.Easy);
+            }
+          }}
           className={`w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center relative border border-app-border shadow-xl ${
             expectsTypedAnswer ? '' : 'cursor-pointer'
-          }`}
+          } ${isRevealed ? 'cursor-grab active:cursor-grabbing' : ''}`}
           whileTap={expectsTypedAnswer ? undefined : { scale: 0.98 }}
         >
           <AnimatePresence mode="wait">
@@ -516,7 +561,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
           {!isRevealed && !expectsTypedAnswer && (
             <div className="absolute inset-x-0 bottom-4 text-[9px] text-app-hint opacity-30 uppercase font-bold tracking-[0.3em]">
-              Tap to reveal
+              Тап чтобы открыть
             </div>
           )}
         </motion.div>

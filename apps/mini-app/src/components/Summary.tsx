@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { sendData } from '@telegram-apps/sdk-react';
 import { CheckCircle2 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 
 interface SummaryProps {
   stats: { total: number; correct: number };
@@ -12,6 +13,17 @@ export function Summary({ stats, onFinish, onRepeatHard }: SummaryProps) {
   const accuracy = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 100;
   const wrong = stats.total - stats.correct;
   const sentRef = useRef(false)
+
+  useEffect(() => {
+    // Elegant, subtle confetti burst
+    confetti({
+      particleCount: 80,
+      spread: 60,
+      origin: { y: 0.4 },
+      colors: ['#10b981', '#3b82f6', '#f59e0b'],
+      disableForReducedMotion: true
+    });
+  }, []);
 
   // Send a one-line session summary back to the bot chat via sendData().
   // The Hermes agent receives it and can comment in the chat.
