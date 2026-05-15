@@ -59,17 +59,28 @@ export class FsrsService {
     const card = fromCardState(state)
     const options = this.scheduler.repeat(card, now)
     return {
-      1: extractPreview(options[FsrsRating.Again].card),
-      2: extractPreview(options[FsrsRating.Hard].card),
-      3: extractPreview(options[FsrsRating.Good].card),
-      4: extractPreview(options[FsrsRating.Easy].card),
+      1: extractPreview(options[FsrsRating.Again].card, now),
+      2: extractPreview(options[FsrsRating.Hard].card, now),
+      3: extractPreview(options[FsrsRating.Good].card, now),
+      4: extractPreview(options[FsrsRating.Easy].card, now),
     }
   }
 }
 
-function extractPreview(card: Card): IntervalPreview {
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+/**
+ * Time-until-due in fractional days. We derive this from `due - now` rather
+ * than `card.scheduled_days` because ts-fsrs leaves `scheduled_days = 0`
+ * during learning-step transitions — the actual short interval lives in
+ * `due` (e.g. `due = now + 1m`). Reading `scheduled_days` blindly would
+ * make a brand-new card show "<1м" under every rating except Easy, which
+ * defeats the whole point of showing intervals.
+ */
+function extractPreview(card: Card, now: Date): IntervalPreview {
+  const days = Math.max(0, (card.due.getTime() - now.getTime()) / MS_PER_DAY)
   return {
-    days: card.scheduled_days,
+    days,
     next_state: card.state as FsrsCardState['fsrs_state'],
   }
 }

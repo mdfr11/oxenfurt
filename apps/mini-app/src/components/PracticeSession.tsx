@@ -234,6 +234,17 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     safeHaptic('selectionChanged')
   };
 
+  // "I don't know" / "show me the answer" — bypass fuzzy match entirely and
+  // reveal the card. No match feedback chip is shown (the user wasn't testing
+  // a guess), and the FSRS rating is still theirs to pick — they might want
+  // Hard if they almost had it, or Again if they were clueless.
+  const handleGiveUp = () => {
+    if (isRevealed || !expectsTypedAnswer || !currentCard) return
+    setMatchResult(null)
+    setIsRevealed(true)
+    safeHaptic('impactOccurred', 'light')
+  };
+
   const handleRate = (rating: Rating) => {
     if (!currentCard) return;
 
@@ -396,6 +407,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       value={typedAnswer}
                       onChange={setTypedAnswer}
                       onSubmit={handleAnswerSubmit}
+                      onGiveUp={handleGiveUp}
                       placeholder="Введи слово"
                     />
                   </>
@@ -408,6 +420,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       value={typedAnswer}
                       onChange={setTypedAnswer}
                       onSubmit={handleAnswerSubmit}
+                      onGiveUp={handleGiveUp}
                       placeholder="Type in English"
                     />
                   </>
@@ -427,6 +440,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       value={typedAnswer}
                       onChange={setTypedAnswer}
                       onSubmit={handleAnswerSubmit}
+                      onGiveUp={handleGiveUp}
                       placeholder="Type what you heard"
                     />
                   </>
@@ -512,12 +526,14 @@ function TypedAnswerField({
   value,
   onChange,
   onSubmit,
+  onGiveUp,
   placeholder,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
   value: string
   onChange: (v: string) => void
   onSubmit: () => void
+  onGiveUp: () => void
   placeholder: string
 }) {
   return (
@@ -544,6 +560,12 @@ function TypedAnswerField({
         className="w-full max-w-[240px] py-3 rounded-xl bg-app-primary text-app-primary-text font-semibold active:scale-95 transition-transform"
       >
         Готово
+      </button>
+      <button
+        onClick={onGiveUp}
+        className="text-[12px] text-app-hint underline underline-offset-4 decoration-app-hint/50 active:opacity-60"
+      >
+        Не знаю — показать ответ
       </button>
     </>
   )

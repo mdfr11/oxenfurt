@@ -120,6 +120,33 @@ describe('FsrsService.previewIntervals', () => {
     svc.previewIntervals(state, NOW)
     expect(state).toEqual(snapshot)
   })
+
+  test('new card preview shows learning-step intervals as small fractions of a day', () => {
+    // Regression guard: previously we read `card.scheduled_days` directly,
+    // which is 0 during learning-step transitions. That made every rating
+    // except Easy display "<1м" on brand-new cards. The fix reads
+    // `due - now`, so a 1-minute step now reads as ~0.0007 days.
+    const svc = freshService()
+    const state = svc.createInitialState(NOW)
+    const preview = svc.previewIntervals(state, NOW)
+    const oneMinuteInDays = 1 / (24 * 60)
+
+    // Again should be roughly the first learning step (1 minute) ± fuzz.
+    expect(preview[1].days).toBeGreaterThan(0)
+    expect(preview[1].days).toBeLessThan(0.1) // way under 1 day
+
+    // Good should be ≥ Again (later learning step or graduation).
+    expect(preview[3].days).toBeGreaterThanOrEqual(preview[1].days)
+
+    // Easy graduates the card straight to Review — should be days, not minutes.
+    expect(preview[4].days).toBeGreaterThan(1)
+    expect(preview[4].days).toBeGreaterThan(preview[3].days)
+
+    // And critically: nothing falls back to 0 / "<1m" by accident.
+    expect(preview[1].days).toBeGreaterThanOrEqual(oneMinuteInDays * 0.5)
+    expect(preview[2].days).toBeGreaterThanOrEqual(oneMinuteInDays * 0.5)
+    expect(preview[3].days).toBeGreaterThanOrEqual(oneMinuteInDays * 0.5)
+  })
 })
 
 describe('round-trip card state', () => {
