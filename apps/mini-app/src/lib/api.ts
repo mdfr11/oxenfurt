@@ -1,6 +1,6 @@
 // Empty string is a valid prod value (same-origin via reverse proxy).
 // Only fall back to the dev backend when the env var is *missing*.
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL ?? (typeof window !== 'undefined' ? window.location.origin + '/api' : 'http://localhost:3000');
 
 const TOKEN_KEY = 'oxenfurt_token';
 

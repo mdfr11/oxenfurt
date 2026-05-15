@@ -28,7 +28,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
     async function auth() {
-      const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+      const API_BASE = import.meta.env.VITE_API_URL ?? (typeof window !== 'undefined' ? window.location.origin + '/api' : 'http://localhost:3000');
 
       // Dev path: backend issues a dev token without HMAC validation.
       // Production: real Telegram initData → /auth/session.
