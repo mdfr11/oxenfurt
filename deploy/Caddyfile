@@ -1,0 +1,64 @@
+# Oxenfurt — Caddy reverse proxy + static host
+#
+# 1. Replace `oxenfurt.example.com` below with your real domain.
+# 2. Make sure DNS A (and AAAA, if IPv6) records resolve to this VPS.
+# 3. Install: cp deploy/Caddyfile /etc/caddy/Caddyfile && systemctl reload caddy
+#
+# Caddy obtains a Let's Encrypt cert automatically on first hit.
+
+{
+	# Global options. Email is used for ACME registration / expiry notices.
+	# Replace with a real address if you want renewal warnings by email.
+	email you@example.com
+}
+
+oxenfurt.example.com {
+	encode zstd gzip
+
+	log {
+		output file /var/log/caddy/oxenfurt.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+		format console
+	}
+
+	# --- Security headers ---
+	# CSP keeps the app same-origin. `frame-ancestors` permits Telegram's
+	# web/desktop client to embed the Mini App; native iOS/Android clients
+	# load it in a WebView and ignore this header entirely.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self' data:; frame-ancestors 'self' https://web.telegram.org https://*.telegram.org;"
+		-Server
+	}
+
+	# --- Backend API ---
+	# Mini-app fetches `/api/auth/session`, `/api/cards/due`, etc.
+	# The `handle_path` matcher strips the `/api` prefix before forwarding,
+	# so backend routes stay `/auth/session`, `/cards/due`, …
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:3000 {
+			# Backend issues 401 on bad JWT; let it surface untouched.
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# --- Static mini-app ---
+	# Versioned Vite assets are cache-busted by content hash; cache them hard.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	# `index.html` must never be cached — agressive TWA caching otherwise
+	# pins users to a stale bundle for weeks.
+	@html path /index.html /
+	header @html Cache-Control "no-cache, no-store, must-revalidate"
+
+	root * /opt/oxenfurt/mini-app
+	try_files {path} /index.html
+	file_server
+}

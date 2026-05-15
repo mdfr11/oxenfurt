@@ -1,0 +1,50 @@
+node_modules/
+dist/
+build/
+.turbo/
+.cache/
+coverage/
+
+# env / secrets — keep .env.example and deploy/*.production templates tracked;
+# real .env (with secrets filled in) must never be committed.
+.env
+.env.local
+.env.*.local
+!.env.example
+!deploy/.env.production
+!deploy/mini-app.env.production
+
+# logs
+*.log
+logs/
+.pnpm-debug.log*
+.npm-debug.log*
+
+# editors
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# tooling
+*.tsbuildinfo
+.eslintcache
+
+# bun
+bun.lock
+bun.lockb
+
+# test / debug artefacts
+.playwright-mcp/
+playwright-report/
+test-results/
+/frontend-*.png
+/practice-*.png
+*.screenshot.png

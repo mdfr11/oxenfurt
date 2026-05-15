@@ -1,0 +1,14 @@
+[Unit]
+Description=Daily Oxenfurt Postgres backup
+Requires=oxenfurt-backup.service
+
+[Timer]
+# Fire at 03:00 server time daily. Persistent=true catches up if the VPS
+# was off at the scheduled moment.
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=15min
+Unit=oxenfurt-backup.service
+
+[Install]
+WantedBy=timers.target

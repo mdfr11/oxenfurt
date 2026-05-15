@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@theme {
+  --color-tg-bg: var(--tg-theme-bg-color);
+  --color-tg-secondary-bg: var(--tg-theme-secondary-bg-color);
+  --color-tg-text: var(--tg-theme-text-color);
+  --color-tg-hint: var(--tg-theme-hint-color);
+  --color-tg-link: var(--tg-theme-link-color);
+  --color-tg-button: var(--tg-theme-button-color);
+  --color-tg-button-text: var(--tg-theme-button-text-color);
+}
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: var(--tg-theme-text-color, rgba(255, 255, 255, 0.87));
+  background-color: var(--tg-theme-bg-color, #242424);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+}

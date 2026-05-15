@@ -1,0 +1,24 @@
+# Local-dev Postgres only. The backend and mini-app run from terminal
+# (`pnpm dev` / `bun --watch`). Production deploys to VPS via systemd —
+# see deploy/README.md.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: oxenfurt-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: oxenfurt
+      POSTGRES_PASSWORD: oxenfurt
+      POSTGRES_DB: oxenfurt
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - oxenfurt_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oxenfurt -d oxenfurt"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  oxenfurt_pg_data:
