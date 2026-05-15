@@ -143,3 +143,58 @@ describe.skipIf(noDb)('POST /:id/finish', () => {
     expect(result).not.toBe('already_finished')
   })
 })
+
+describe.skipIf(noDb)('GET /stats', () => {
+  test('returns 401 without a JWT', async () => {
+    const res = await buildApp().request('/stats')
+    expect(res.status).toBe(401)
+  })
+
+  test('returns zero counters on an empty database', async () => {
+    const res = await buildApp().request('/stats', { headers: await authHeader() })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      reviews: { today: { count: number; correct: number } }
+      sessions: { today: number; last_7d: number }
+      forecast: { due_now: number; active_total: number }
+      heatmap: unknown[]
+      recent_sessions: unknown[]
+      generated_at: string
+    }
+    expect(body.reviews.today.count).toBe(0)
+    expect(body.sessions.today).toBe(0)
+    expect(body.forecast.active_total).toBe(0)
+    expect(body.heatmap).toEqual([])
+    expect(body.recent_sessions).toEqual([])
+    expect(body.generated_at).toBe(NOW.toISOString())
+  })
+
+  test('counts a finished session in sessions.today', async () => {
+    const res = await buildApp().request('/', { method: 'POST', headers: await authHeader() })
+    const id = ((await res.json()) as { id: string }).id
+    await buildApp().request(`/${id}/finish`, {
+      method: 'POST',
+      headers: await authHeader(),
+      body: JSON.stringify({ cards_reviewed: 7, cards_correct: 5 }),
+    })
+    const stats = await buildApp().request('/stats', { headers: await authHeader() })
+    const body = (await stats.json()) as {
+      sessions: { today: number }
+      recent_sessions: Array<{ cards_reviewed: number; cards_correct: number }>
+    }
+    expect(body.sessions.today).toBe(1)
+    expect(body.recent_sessions).toHaveLength(1)
+    expect(body.recent_sessions[0]!.cards_reviewed).toBe(7)
+    expect(body.recent_sessions[0]!.cards_correct).toBe(5)
+  })
+
+  test('unfinished sessions are excluded from recent_sessions', async () => {
+    // Two starts, no finish — should not appear in recent_sessions.
+    await buildApp().request('/', { method: 'POST', headers: await authHeader() })
+    await buildApp().request('/', { method: 'POST', headers: await authHeader() })
+    const stats = await buildApp().request('/stats', { headers: await authHeader() })
+    const body = (await stats.json()) as { recent_sessions: unknown[]; sessions: { today: number } }
+    expect(body.recent_sessions).toEqual([])
+    expect(body.sessions.today).toBe(2)
+  })
+})

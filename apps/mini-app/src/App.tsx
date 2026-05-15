@@ -6,9 +6,10 @@ import { PracticeSession } from './components/PracticeSession';
 import { Home } from './components/Home';
 import { Summary } from './components/Summary';
 import { Library } from './components/Library';
+import { Stats } from './components/Stats';
 import { loadPracticeMode, type PracticeMode } from './lib/practiceMode';
 
-type Screen = 'home' | 'practice' | 'summary' | 'loading' | 'library';
+type Screen = 'home' | 'practice' | 'summary' | 'loading' | 'library' | 'stats';
 
 interface SessionStats {
   total: number;
@@ -95,6 +96,9 @@ export default function App() {
       {screen === 'library' && (
         <Library onExit={() => setScreen('home')} />
       )}
+      {screen === 'stats' && (
+        <Stats onExit={() => setScreen('home')} />
+      )}
       {screen === 'home' && (
         <Home
           onStart={(mode) => {
@@ -102,6 +106,7 @@ export default function App() {
             setScreen('practice');
           }}
           onOpenLibrary={() => setScreen('library')}
+          onOpenStats={() => setScreen('stats')}
           userFirstName={userFirstName}
         />
       )}

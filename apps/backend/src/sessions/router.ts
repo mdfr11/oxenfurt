@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
-import { eq } from 'drizzle-orm'
+import { desc, eq, isNotNull, sql } from 'drizzle-orm'
 import * as v from 'valibot'
+import type { StatsResponse } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { sessions } from '../db/schema.ts'
 import { jwtAuth } from '../middleware/auth.ts'
@@ -26,6 +27,12 @@ export function createSessionsRouter(deps: SessionsRouterDeps): Hono {
   const now = deps.now ?? (() => new Date())
 
   app.use('*', jwtAuth({ jwtSecret: deps.jwtSecret, now }))
+
+  // Aggregated stats — single round-trip for the Stats screen.
+  app.get('/stats', async (c) => {
+    const stats = await computeStats(deps.db, now())
+    return c.json(stats)
+  })
 
   // Start a session. The client is free to ignore the response — if this
   // request fails (e.g. backend down) the practice flow still works locally
@@ -77,6 +84,125 @@ export function createSessionsRouter(deps: SessionsRouterDeps): Hono {
   })
 
   return app
+}
+
+/**
+ * Aggregated stats for the mobile Stats screen. All dates are computed in
+ * UTC — clients render in their local zone if they want. Single-user
+ * deployments don't need per-user filtering; if/when this becomes
+ * multi-tenant, add a userId filter to every WHERE.
+ */
+export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
+  const dayStart = new Date(when)
+  dayStart.setUTCHours(0, 0, 0, 0)
+  const weekStart = new Date(when.getTime() - 7 * 24 * 3600 * 1000)
+  const monthStart = new Date(when.getTime() - 30 * 24 * 3600 * 1000)
+  const yearStart = new Date(when.getTime() - 365 * 24 * 3600 * 1000)
+  const next24h = new Date(when.getTime() + 24 * 3600 * 1000)
+
+  // All five queries can run concurrently — no FK or ordering deps between them.
+  const [reviewsAgg, sessionsAgg, forecastAgg, heatmapRows, recentRows] = await Promise.all([
+    db.execute<{
+      today_count: string
+      today_correct: string
+      week_count: string
+      week_correct: string
+      month_count: string
+      month_correct: string
+    }>(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE reviewed_at >= ${dayStart})                                   AS today_count,
+        COUNT(*) FILTER (WHERE reviewed_at >= ${dayStart}  AND rating >= 3)                  AS today_correct,
+        COUNT(*) FILTER (WHERE reviewed_at >= ${weekStart})                                  AS week_count,
+        COUNT(*) FILTER (WHERE reviewed_at >= ${weekStart} AND rating >= 3)                  AS week_correct,
+        COUNT(*) FILTER (WHERE reviewed_at >= ${monthStart})                                 AS month_count,
+        COUNT(*) FILTER (WHERE reviewed_at >= ${monthStart} AND rating >= 3)                 AS month_correct
+      FROM card_reviews
+    `),
+    db.execute<{ today_count: string; week_count: string }>(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE started_at >= ${dayStart})  AS today_count,
+        COUNT(*) FILTER (WHERE started_at >= ${weekStart}) AS week_count
+      FROM sessions
+    `),
+    db.execute<{ due_now: string; due_next_24h: string; active_total: string }>(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE due <= ${when})                                       AS due_now,
+        COUNT(*) FILTER (WHERE due >  ${when} AND due <= ${next24h})                 AS due_next_24h,
+        COUNT(*)                                                                     AS active_total
+      FROM cards
+      WHERE status = 'active'
+    `),
+    db.execute<{ day: string; cnt: string }>(sql`
+      SELECT
+        TO_CHAR(DATE_TRUNC('day', reviewed_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
+        COUNT(*)                                                                  AS cnt
+      FROM card_reviews
+      WHERE reviewed_at >= ${yearStart}
+      GROUP BY day
+      ORDER BY day
+    `),
+    db
+      .select({
+        id: sessions.id,
+        startedAt: sessions.startedAt,
+        finishedAt: sessions.finishedAt,
+        cardsReviewed: sessions.cardsReviewed,
+        cardsCorrect: sessions.cardsCorrect,
+      })
+      .from(sessions)
+      .where(isNotNull(sessions.finishedAt))
+      .orderBy(desc(sessions.startedAt))
+      .limit(10),
+  ])
+
+  const r = reviewsAgg[0] ?? defaultReviewRow()
+  const s = sessionsAgg[0] ?? { today_count: '0', week_count: '0' }
+  const f = forecastAgg[0] ?? { due_now: '0', due_next_24h: '0', active_total: '0' }
+
+  return {
+    reviews: {
+      today: { count: toInt(r.today_count), correct: toInt(r.today_correct) },
+      last_7d: { count: toInt(r.week_count), correct: toInt(r.week_correct) },
+      last_30d: { count: toInt(r.month_count), correct: toInt(r.month_correct) },
+    },
+    sessions: {
+      today: toInt(s.today_count),
+      last_7d: toInt(s.week_count),
+    },
+    forecast: {
+      due_now: toInt(f.due_now),
+      due_next_24h: toInt(f.due_next_24h),
+      active_total: toInt(f.active_total),
+    },
+    heatmap: heatmapRows.map((row) => ({ date: row.day, count: toInt(row.cnt) })),
+    recent_sessions: recentRows.map((row) => ({
+      id: row.id,
+      started_at: row.startedAt.toISOString(),
+      finished_at: row.finishedAt!.toISOString(),
+      cards_reviewed: row.cardsReviewed,
+      cards_correct: row.cardsCorrect,
+    })),
+    generated_at: when.toISOString(),
+  }
+}
+
+function defaultReviewRow() {
+  return {
+    today_count: '0',
+    today_correct: '0',
+    week_count: '0',
+    week_correct: '0',
+    month_count: '0',
+    month_correct: '0',
+  }
+}
+
+function toInt(s: string | number | null | undefined): number {
+  if (s === null || s === undefined) return 0
+  if (typeof s === 'number') return s
+  const n = Number.parseInt(s, 10)
+  return Number.isFinite(n) ? n : 0
 }
 
 export type FinishSessionResult =

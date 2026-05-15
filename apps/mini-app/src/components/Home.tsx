@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { mainButton } from '@telegram-apps/sdk-react';
-import { BookOpen, Library as LibraryIcon } from 'lucide-react';
+import { BookOpen, Library as LibraryIcon, BarChart3 } from 'lucide-react';
 import {
   loadPracticeMode,
   savePracticeMode,
@@ -10,10 +10,11 @@ import {
 interface HomeProps {
   onStart: (mode: PracticeMode) => void;
   onOpenLibrary: () => void;
+  onOpenStats: () => void;
   userFirstName?: string;
 }
 
-export function Home({ onStart, onOpenLibrary, userFirstName }: HomeProps) {
+export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: HomeProps) {
   const [mode, setMode] = useState<PracticeMode>(() => loadPracticeMode());
 
   function selectMode(next: PracticeMode) {
@@ -93,13 +94,22 @@ export function Home({ onStart, onOpenLibrary, userFirstName }: HomeProps) {
           Начать сессию
         </button>
 
-        <button
-          onClick={onOpenLibrary}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-app-border bg-app-surface text-app-text font-semibold active:scale-95 transition-transform"
-        >
-          <LibraryIcon size={18} />
-          Все карточки
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={onOpenLibrary}
+            className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-app-border bg-app-surface text-app-text font-semibold active:scale-95 transition-transform"
+          >
+            <LibraryIcon size={18} />
+            Карточки
+          </button>
+          <button
+            onClick={onOpenStats}
+            className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-app-border bg-app-surface text-app-text font-semibold active:scale-95 transition-transform"
+          >
+            <BarChart3 size={18} />
+            Статистика
+          </button>
+        </div>
       </div>
     </div>
   );
