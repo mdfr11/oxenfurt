@@ -1,0 +1,28 @@
+[Unit]
+Description=Oxenfurt Backend (Bun + Hono)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=oxenfurt
+Group=oxenfurt
+WorkingDirectory=/opt/oxenfurt/backend
+ExecStart=/usr/local/bin/bun /opt/oxenfurt/backend/src/index.ts
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Env vars from file (only non-secret vars; secrets from .env)
+EnvironmentFile=/opt/oxenfurt/backend/.env
+
+# Graceful shutdown
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# Logging
+SyslogIdentifier=oxenfurt-backend
+
+[Install]
+WantedBy=multi-user.target

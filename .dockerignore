@@ -1,0 +1,40 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+.turbo
+.cache
+*.tsbuildinfo
+
+# Git
+.git
+.gitignore
+
+# Dev files
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.yml
+Dockerfile*
+.dockerignore
+deploy/
+
+# Docs
+*.md
+!README.md

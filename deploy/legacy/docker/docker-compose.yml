@@ -1,0 +1,58 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: oxenfurt-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: oxenfurt
+      POSTGRES_PASSWORD: oxenfurt
+      POSTGRES_DB: oxenfurt
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - oxenfurt_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oxenfurt -d oxenfurt"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - oxenfurt
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: oxenfurt-backend
+    restart: unless-stopped
+    env_file:
+      - ./apps/backend/.env
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - oxenfurt
+
+  mini-app:
+    build:
+      context: .
+      dockerfile: apps/mini-app/Dockerfile
+      args:
+        VITE_API_URL: ""
+    container_name: oxenfurt-mini-app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    networks:
+      - oxenfurt
+
+networks:
+  oxenfurt:
+    driver: bridge
+
+volumes:
+  oxenfurt_pg_data:

@@ -1,0 +1,52 @@
+[Unit]
+Description=Oxenfurt Practice Backend (Bun + Hono)
+Documentation=https://github.com/your-org/oxenfurt
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=oxenfurt
+Group=oxenfurt
+
+WorkingDirectory=/opt/oxenfurt/current/apps/backend
+ExecStart=/usr/local/bin/bun src/index.ts
+EnvironmentFile=/etc/oxenfurt/backend.env
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+KillSignal=SIGTERM
+
+# Resource caps — sane defaults for an 8 GB VPS with co-located services.
+MemoryMax=512M
+TasksMax=128
+
+# Hardening (defence in depth; the box is single-user, but cost is zero).
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+ReadWritePaths=/opt/oxenfurt/current /var/log/oxenfurt
+
+# Logs go to journald.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=oxenfurt-backend
+
+[Install]
+WantedBy=multi-user.target
