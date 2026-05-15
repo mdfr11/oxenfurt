@@ -677,11 +677,40 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         <p className="text-center text-[10px] text-app-hint uppercase tracking-widest font-bold pb-2 px-3">
           Как легко вспомнил? · тап = следующая карточка
         </p>
-        <div className="flex gap-2 h-16">
+        <div className="flex gap-2 h-16 relative">
           <RatingButton label="Снова" sub={intervalLabels?.[RATING.Again] ?? '…'} bg="bg-rose-500/10" color="text-rose-600 dark:text-rose-400" onClick={() => handleRate(RATING.Again)} />
           <RatingButton label="Трудно" sub={intervalLabels?.[RATING.Hard] ?? '…'} bg="bg-orange-500/10" color="text-orange-600 dark:text-orange-400" onClick={() => handleRate(RATING.Hard)} />
           <RatingButton label="Хорошо" sub={intervalLabels?.[RATING.Good] ?? '…'} bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" onClick={() => handleRate(RATING.Good)} />
           <RatingButton label="Легко" sub={intervalLabels?.[RATING.Easy] ?? '…'} bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" onClick={() => handleRate(RATING.Easy)} />
+
+          <AnimatePresence>
+            {pendingReview && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="absolute inset-x-2 -top-[4.5rem] flex items-center justify-between bg-app-text text-app-bg px-4 py-3 rounded-xl shadow-lg z-20 pointer-events-auto"
+              >
+                <span className="text-sm font-medium">
+                  Оценено: <span className="font-bold">
+                    {pendingReview.rating === RATING.Again && 'Снова'}
+                    {pendingReview.rating === RATING.Hard && 'Трудно'}
+                    {pendingReview.rating === RATING.Good && 'Хорошо'}
+                    {pendingReview.rating === RATING.Easy && 'Легко'}
+                  </span>
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleUndo();
+                  }}
+                  className="text-sm font-bold text-app-bg bg-white/20 px-3 py-1 rounded-lg active:bg-white/30 transition-colors"
+                >
+                  Отменить
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>
