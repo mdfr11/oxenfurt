@@ -20,7 +20,7 @@ interface SessionStats {
 const pageVariants = {
   initial: { opacity: 0, scale: 0.98 },
   animate: { opacity: 1, scale: 1 },
-  exit: { opacity: 0, scale: 1.02 },
+  exit: { opacity: 0, scale: 1.02, pointerEvents: 'none' as any },
 };
 
 export default function App() {
@@ -36,16 +36,12 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
     async function auth() {
-      // Dev path: backend issues a dev token without HMAC validation.
-      // Production: real Telegram initData → /auth/session.
       if (import.meta.env.DEV) {
         try {
           const res = await fetch(`${API_BASE}/auth/dev-token`);
           if (res.ok) {
             const data = (await res.json()) as { token: string };
             setToken(data.token);
-          } else {
-            console.warn('Dev token endpoint returned', res.status, '— continuing without auth.');
           }
         } catch (err) {
           console.error('Dev auth failed', err);
@@ -78,14 +74,14 @@ export default function App() {
     <div className="app-container overflow-hidden relative">
       <AnimatePresence>
         {screen === 'loading' && (
-          <motion.div key="loading" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
+          <motion.div key="loading" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-50">
             <div className="flex-1 flex items-center justify-center">
               <Spinner size="l" />
             </div>
           </motion.div>
         )}
         {screen === 'practice' && (
-          <motion.div key="practice" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
+          <motion.div key="practice" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <PracticeSession
               mode={practiceMode}
               onComplete={(total, correct) => {
@@ -97,7 +93,7 @@ export default function App() {
           </motion.div>
         )}
         {screen === 'summary' && (
-          <motion.div key="summary" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
+          <motion.div key="summary" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <Summary
               stats={stats}
               onFinish={() => setScreen('home')}
@@ -106,12 +102,12 @@ export default function App() {
           </motion.div>
         )}
         {screen === 'library' && (
-          <motion.div key="library" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
+          <motion.div key="library" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <Library onExit={() => setScreen('home')} />
           </motion.div>
         )}
         {screen === 'stats' && (
-          <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
+          <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <Stats onExit={() => setScreen('home')} />
           </motion.div>
         )}
@@ -132,7 +128,6 @@ export default function App() {
     </div>
   );
 }
-
 
 function safeRetrieveInitData(): string | undefined {
   try {

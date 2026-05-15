@@ -49,6 +49,14 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // state — early-reviewed cards just get rescheduled normally.
   const [bypassDue, setBypassDue] = useState(false);
 
+  // Prevent double-exit or lingering handlers during transition
+  const [isExiting, setIsExiting] = useState(false);
+  const handleExit = useMemo(() => () => {
+    if (isExiting) return;
+    setIsExiting(true);
+    onExit();
+  }, [isExiting, onExit]);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['cards', 'due', bypassDue],
     queryFn: async () => {
@@ -105,6 +113,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     return () => {
       try {
         enableVerticalSwipes()
+        stopSpeaking()
       } catch {
         // ditto
       }
@@ -117,6 +126,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     try {
       backButton.show()
       unsubscribe = backButton.onClick(async () => {
+        if (isExiting) return;
         try {
           const result = await popup.open({
             title: 'Завершить сессию?',
@@ -126,10 +136,10 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
               { id: 'leave', type: 'destructive', text: 'Выйти' },
             ],
           })
-          if (result === 'leave') onExit()
+          if (result === 'leave') handleExit()
         } catch {
           // popup unavailable — exit immediately
-          onExit()
+          handleExit()
         }
       })
     } catch {
@@ -143,7 +153,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         // SDK not mounted — ignore
       }
     }
-  }, [onExit])
+  }, [handleExit, isExiting])
 
   const reviewMutation = useMutation({
     mutationFn: async ({ id, rating }: { id: string; rating: Rating }) => {
@@ -412,7 +422,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
           Проверь подключение или попробуй ещё раз.
         </p>
         <button
-          onClick={onExit}
+          onClick={handleExit}
           className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
         >
           На главную
@@ -449,7 +459,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
             </button>
           )}
           <button
-            onClick={onExit}
+            onClick={handleExit}
             className={`w-full py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform ${
               bypassDue
                 ? 'bg-app-primary text-app-primary-text shadow-lg shadow-app-primary/20'
@@ -503,7 +513,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         <div className="flex items-center gap-3">
           {currentCard!.type === 'theory' && <span className="text-app-primary">📖 Theory</span>}
           <button
-            onClick={onExit}
+            onClick={handleExit}
             className="w-7 h-7 flex items-center justify-center rounded-full bg-black/5 dark:bg-white/10 text-app-hint active:scale-95 transition-transform"
             aria-label="Завершить сессию"
           >
