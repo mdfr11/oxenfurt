@@ -522,173 +522,176 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         </div>
       </div>
 
-      <div className="flex-1 px-4 flex items-center justify-center">
-        <motion.div
-          onClick={expectsTypedAnswer ? undefined : handleReveal}
-          drag={isRevealed}
-          dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-          dragElastic={0.6}
-          onDragEnd={(_, info: PanInfo) => {
-            if (!isRevealed) return;
-            const { offset } = info;
-            const threshold = 100;
-            if (Math.abs(offset.x) > Math.abs(offset.y)) {
-              if (offset.x > threshold) handleRate(RATING.Good);
-              else if (offset.x < -threshold) handleRate(RATING.Hard);
-            } else {
-              if (offset.y > threshold) handleRate(RATING.Again);
-              else if (offset.y < -threshold) handleRate(RATING.Easy);
-            }
-          }}
-          className={`w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center relative border border-app-border shadow-xl ${
-            expectsTypedAnswer ? '' : 'cursor-pointer'
-          } ${isRevealed ? 'cursor-grab active:cursor-grabbing' : ''}`}
-          whileTap={expectsTypedAnswer ? undefined : { scale: 0.98 }}
-        >
-          <AnimatePresence>
-            {!isRevealed ? (
-              <motion.div
-                key="front"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 1.1 }}
-                className="flex flex-col items-center gap-6 w-full h-full justify-center"
-              >
-                {variant === 'cloze' && vocab && clozePrompt ? (
-                  <>
-                    <p className="text-lg text-app-text leading-relaxed">
-                      {clozePrompt.before}
-                      <span className="text-app-primary font-bold">{'_'.repeat(Math.max(3, Math.min(12, clozePrompt.targetLength)))}</span>
-                      {clozePrompt.after}
-                    </p>
-                    <TypedAnswerField
-                      inputRef={inputRef}
-                      value={typedAnswer}
-                      onChange={setTypedAnswer}
-                      onSubmit={handleAnswerSubmit}
-                      onGiveUp={handleGiveUp}
-                      placeholder="Введи пропущенное слово"
-                      matchResult={matchResult}
-                    />
-                  </>
-                ) : variant === 'translation' && vocab ? (
-                  <>
-                    <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Перевод</div>
-                    <h2 className="text-2xl font-bold leading-snug">{vocab.translation}</h2>
-                    <TypedAnswerField
-                      inputRef={inputRef}
-                      value={typedAnswer}
-                      onChange={setTypedAnswer}
-                      onSubmit={handleAnswerSubmit}
-                      onGiveUp={handleGiveUp}
-                      placeholder="Напиши по-английски"
-                      matchResult={matchResult}
-                    />
-                  </>
-                ) : variant === 'listening' && vocab ? (
-                  <>
-                    <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Слушай</div>
-                    <button
-                      onClick={handleReplayAudio}
-                      className="w-20 h-20 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-3xl active:scale-95 transition-transform"
-                      aria-label="Replay"
-                    >
-                      🔊
-                    </button>
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
-                    </div>
-                    <p className="text-[11px] text-app-hint mt-2">Тап чтобы повторить</p>
-                    <TypedAnswerField
-                      inputRef={inputRef}
-                      value={typedAnswer}
-                      onChange={setTypedAnswer}
-                      onSubmit={handleAnswerSubmit}
-                      onGiveUp={handleGiveUp}
-                      placeholder="Напиши что услышал"
-                      matchResult={matchResult}
-                    />
-                  </>
-                ) : vocab ? (
-                  <>
-                    <div className="flex items-center gap-3">
-                      <h2 className="text-4xl font-bold tracking-tight">
-                        {vocab.term}
-                      </h2>
+      <div className="flex-1 px-4 flex items-center justify-center relative min-h-0">
+        <AnimatePresence mode="popLayout">
+          <motion.div
+            key={currentCard.id}
+            initial={{ opacity: 0, x: 50, scale: 0.9 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: -50, scale: 0.9, pointerEvents: 'none' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            onClick={expectsTypedAnswer ? undefined : handleReveal}
+            drag={isRevealed}
+            dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+            dragElastic={0.6}
+            onDragEnd={(_, info: PanInfo) => {
+              if (!isRevealed) return;
+              const { offset } = info;
+              const threshold = 100;
+              if (Math.abs(offset.x) > Math.abs(offset.y)) {
+                if (offset.x > threshold) handleRate(RATING.Good);
+                else if (offset.x < -threshold) handleRate(RATING.Hard);
+              } else {
+                if (offset.y > threshold) handleRate(RATING.Again);
+                else if (offset.y < -threshold) handleRate(RATING.Easy);
+              }
+            }}
+            className={`w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center relative border border-app-border shadow-xl ${
+              expectsTypedAnswer ? '' : 'cursor-pointer'
+            } ${isRevealed ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            whileTap={expectsTypedAnswer ? undefined : { scale: 0.98 }}
+          >
+            <AnimatePresence initial={false}>
+              {!isRevealed ? (
+                <motion.div
+                  key="front"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 1.05 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col items-center gap-6 w-full h-full justify-center"
+                >
+                  {variant === 'cloze' && vocab && clozePrompt ? (
+                    <>
+                      <p className="text-lg text-app-text leading-relaxed">
+                        {clozePrompt.before}
+                        <span className="text-app-primary font-bold">{'_'.repeat(Math.max(3, Math.min(12, clozePrompt.targetLength)))}</span>
+                        {clozePrompt.after}
+                      </p>
+                      <TypedAnswerField
+                        inputRef={inputRef}
+                        value={typedAnswer}
+                        onChange={setTypedAnswer}
+                        onSubmit={handleAnswerSubmit}
+                        onGiveUp={handleGiveUp}
+                        placeholder="Введи пропущенное слово"
+                        matchResult={matchResult}
+                      />
+                    </>
+                  ) : variant === 'translation' && vocab ? (
+                    <>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Перевод</div>
+                      <h2 className="text-2xl font-bold leading-snug">{vocab.translation}</h2>
+                      <TypedAnswerField
+                        inputRef={inputRef}
+                        value={typedAnswer}
+                        onChange={setTypedAnswer}
+                        onSubmit={handleAnswerSubmit}
+                        onGiveUp={handleGiveUp}
+                        placeholder="Напиши по-английски"
+                        matchResult={matchResult}
+                      />
+                    </>
+                  ) : variant === 'listening' && vocab ? (
+                    <>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Слушай</div>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation() // don't trigger card-level handleReveal
-                          handleReplayAudio()
-                        }}
-                        className="w-10 h-10 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform"
-                        aria-label="Произнести слово"
+                        onClick={handleReplayAudio}
+                        className="w-20 h-20 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-3xl active:scale-95 transition-transform"
+                        aria-label="Replay"
                       >
                         🔊
                       </button>
-                    </div>
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
-                    </div>
-                    <p className="text-xl text-app-text leading-relaxed">
-                      "{vocab.context_sentence}"
-                    </p>
-                  </>
-                ) : theory ? (
-                  <h2 className="text-2xl font-bold">
-                    {theory.question}
-                  </h2>
-                ) : null}
-                
-                {currentCard!.source && !expectsTypedAnswer && (
-                  <div className="absolute inset-x-0 bottom-10 text-[10px] text-app-hint uppercase tracking-[0.2em] font-bold opacity-40 pointer-events-none">
-                    {currentCard!.source}
-                  </div>
-                )}
-
-                {!expectsTypedAnswer && (
-                  <div className="absolute inset-x-0 bottom-4 text-[9px] text-app-hint opacity-30 uppercase font-bold tracking-[0.3em] pointer-events-none">
-                    Тап чтобы открыть
-                  </div>
-                )}
-              </motion.div>
-            ) : (
-              <motion.div
-                key="back"
-                initial={{ opacity: 0, scale: 1.1 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="flex flex-col items-center gap-5 w-full h-full justify-center"
-              >
-                {matchResult && expectsTypedAnswer && (
-                  <ClozeFeedback result={matchResult} typedAnswer={typedAnswer} />
-                )}
-                {vocab ? (
-                  <>
-                    <span className="bg-app-primary/10 text-app-primary px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
-                      {vocab.translation}
-                    </span>
-                    {renderSentenceWithHighlight(vocab.context_sentence, vocab.term)}
-                  </>
-                ) : theory ? (
-                  <>
-                    <p className="text-xl">{theory.answer}</p>
-                    {currentCard!.source_quote && (
-                      <p className="text-sm text-app-hint italic">
-                        Из урока: «{currentCard!.source_quote}»
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
+                      </div>
+                      <p className="text-[11px] text-app-hint mt-2">Тап чтобы повторить</p>
+                      <TypedAnswerField
+                        inputRef={inputRef}
+                        value={typedAnswer}
+                        onChange={setTypedAnswer}
+                        onSubmit={handleAnswerSubmit}
+                        onGiveUp={handleGiveUp}
+                        placeholder="Напиши что услышал"
+                        matchResult={matchResult}
+                      />
+                    </>
+                  ) : vocab ? (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-4xl font-bold tracking-tight">
+                          {vocab.term}
+                        </h2>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation() // don't trigger card-level handleReveal
+                            handleReplayAudio()
+                          }}
+                          className="w-10 h-10 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform"
+                          aria-label="Произнести слово"
+                        >
+                          🔊
+                        </button>
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
+                      </div>
+                      <p className="text-xl text-app-text leading-relaxed">
+                        "{vocab.context_sentence}"
                       </p>
-                    )}
-                  </>
-                ) : null}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                    </>
+                  ) : theory ? (
+                    <h2 className="text-2xl font-bold">
+                      {theory.question}
+                    </h2>
+                  ) : null}
+                  
+                  {currentCard!.source && !expectsTypedAnswer && (
+                    <div className="absolute inset-x-0 bottom-10 text-[10px] text-app-hint uppercase tracking-[0.2em] font-bold opacity-40 pointer-events-none">
+                      {currentCard!.source}
+                    </div>
+                  )}
 
-          {!isRevealed && !expectsTypedAnswer && (
-            <div className="absolute inset-x-0 bottom-4 text-[9px] text-app-hint opacity-30 uppercase font-bold tracking-[0.3em]">
-              Тап чтобы открыть
-            </div>
-          )}
-        </motion.div>
+                  {!expectsTypedAnswer && (
+                    <div className="absolute inset-x-0 bottom-4 text-[9px] text-app-hint opacity-30 uppercase font-bold tracking-[0.3em] pointer-events-none">
+                      Тап чтобы открыть
+                    </div>
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="back"
+                  initial={{ opacity: 0, scale: 1.05 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col items-center gap-5 w-full h-full justify-center"
+                >
+                  {matchResult && expectsTypedAnswer && (
+                    <ClozeFeedback result={matchResult} typedAnswer={typedAnswer} />
+                  )}
+                  {vocab ? (
+                    <>
+                      <span className="bg-app-primary/10 text-app-primary px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
+                        {vocab.translation}
+                      </span>
+                      {renderSentenceWithHighlight(vocab.context_sentence, vocab.term)}
+                    </>
+                  ) : theory ? (
+                    <>
+                      <p className="text-xl">{theory.answer}</p>
+                      {currentCard!.source_quote && (
+                        <p className="text-sm text-app-hint italic">
+                          Из урока: «{currentCard!.source_quote}»
+                        </p>
+                      )}
+                    </>
+                  ) : null}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Rating Buttons */}
