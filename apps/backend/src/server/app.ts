@@ -34,6 +34,20 @@ export function createApp(deps: AppDeps): Hono {
   const now = deps.now ?? (() => new Date())
   const fsrs = deps.fsrs ?? new FsrsService()
 
+  // Print every unhandled error to stderr (journald) before returning the
+  // generic 500 to the client. Without this Hono swallows the stack and a
+  // 500 in production becomes a blind guess; with it the failure is
+  // immediately visible in `journalctl -u oxenfurt-backend`.
+  app.onError((err, c) => {
+    console.error('[oxenfurt-backend] unhandled', {
+      method: c.req.method,
+      path: c.req.path,
+      message: err.message,
+      stack: err.stack,
+    })
+    return c.json({ error: 'internal_error', message: err.message }, 500)
+  })
+
   // CORS only when explicit allow-list is provided (dev / staging).
   // In production the reverse proxy serves both Mini App and API from the
   // same origin, so the browser never sends a preflight.
