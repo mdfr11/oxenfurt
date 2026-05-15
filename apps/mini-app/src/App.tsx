@@ -75,15 +75,17 @@ export default function App() {
   }, [initDataRaw]);
 
   return (
-    <div className="app-container overflow-hidden">
-      <AnimatePresence mode="wait">
+    <div className="app-container overflow-hidden relative">
+      <AnimatePresence>
         {screen === 'loading' && (
-          <motion.div key="loading" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex items-center justify-center">
-            <Spinner size="l" />
+          <motion.div key="loading" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
+            <div className="flex-1 flex items-center justify-center">
+              <Spinner size="l" />
+            </div>
           </motion.div>
         )}
         {screen === 'practice' && (
-          <motion.div key="practice" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg">
+          <motion.div key="practice" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-20">
             <PracticeSession
               mode={practiceMode}
               onComplete={(total, correct) => {
@@ -95,7 +97,7 @@ export default function App() {
           </motion.div>
         )}
         {screen === 'summary' && (
-          <motion.div key="summary" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg">
+          <motion.div key="summary" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-20">
             <Summary
               stats={stats}
               onFinish={() => setScreen('home')}
@@ -104,17 +106,17 @@ export default function App() {
           </motion.div>
         )}
         {screen === 'library' && (
-          <motion.div key="library" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg">
+          <motion.div key="library" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-20">
             <Library onExit={() => setScreen('home')} />
           </motion.div>
         )}
         {screen === 'stats' && (
-          <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg">
+          <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-20">
             <Stats onExit={() => setScreen('home')} />
           </motion.div>
         )}
         {screen === 'home' && (
-          <motion.div key="home" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg">
+          <motion.div key="home" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
             <Home
               onStart={(mode) => {
                 setPracticeMode(mode);
