@@ -55,13 +55,17 @@ export async function ingestCards(
 
   for (const item of batch.cards) {
     const fsrsState = fsrs.createInitialState(whenIngested)
-    const status: 'draft' | 'active' = item.type === 'vocab' ? 'active' : 'draft'
     const sourceQuote =
       'source_quote' in item && item.source_quote ? item.source_quote : null
 
     const values = {
       type: item.type,
-      status,
+      // All cards — vocab and theory alike — enter the review queue
+      // immediately. The previous draft-gate (theory → status='draft' awaiting
+      // manual approval) added friction without enough payoff for a
+      // single-user setup; the operator can archive a bad card from the
+      // browse view later instead.
+      status: 'active' as const,
       payload: item.payload,
       source: item.source ?? null,
       sourceQuote,

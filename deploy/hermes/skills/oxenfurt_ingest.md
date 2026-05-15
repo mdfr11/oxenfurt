@@ -70,10 +70,11 @@ Response: `{ created: number, skipped: number }`.
   bad cards poison the FSRS schedule for weeks.
 - **Vocab dedup is case-insensitive on `term`.** Sending the same term twice
   is safe — the second insert returns `skipped: 1`.
-- **Theory has no dedup.** Each ingest creates a new draft card. The learner
-  approves them in the Mini App before they enter the review queue.
-- **Vocab → `active`, theory → `draft`.** This is enforced server-side; no
-  knob to flip it from this skill.
+- **Theory has no dedup.** Each ingest creates a new active card. Duplicate
+  questions accumulate; the learner can archive ones they don't want from
+  the Mini App browse view (planned).
+- **Everything enters the SRS queue immediately.** Both vocab and theory
+  are written with `status='active'`. There is no approval step.
 - **`source_quote` is mandatory on theory.** It is the learner's only
   pointer back to the original tutor utterance. Be generous with vocab too —
   include the original sentence whenever you have it.

@@ -5,9 +5,8 @@ import { loginWithTelegram, setToken } from './lib/api';
 import { PracticeSession } from './components/PracticeSession';
 import { Home } from './components/Home';
 import { Summary } from './components/Summary';
-import { DraftReview } from './components/DraftReview';
 
-type Screen = 'home' | 'practice' | 'summary' | 'loading' | 'drafts';
+type Screen = 'home' | 'practice' | 'summary' | 'loading';
 
 interface SessionStats {
   total: number;
@@ -89,13 +88,9 @@ export default function App() {
           onRepeatHard={() => setScreen('practice')}
         />
       )}
-      {screen === 'drafts' && (
-        <DraftReview onExit={() => setScreen('home')} />
-      )}
       {screen === 'home' && (
         <Home
           onStart={() => setScreen('practice')}
-          onReviewDrafts={() => setScreen('drafts')}
           userFirstName={userFirstName}
         />
       )}

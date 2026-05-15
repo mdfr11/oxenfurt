@@ -205,7 +205,30 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
     );
   }
 
-  if (error || cards.length === 0) {
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-app-bg text-app-text">
+        <div className="w-20 h-20 bg-rose-500/10 border border-rose-500/30 rounded-full flex items-center justify-center text-rose-500 shadow-sm mb-6 text-3xl">
+          ⚠
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Не удалось загрузить</h2>
+        <p className="text-app-hint mb-2 max-w-[260px] text-sm">
+          {error instanceof Error ? error.message : String(error)}
+        </p>
+        <p className="text-app-hint mb-10 max-w-[260px] text-xs opacity-60">
+          Проверь подключение или попробуй ещё раз.
+        </p>
+        <button
+          onClick={onExit}
+          className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
+        >
+          На главную
+        </button>
+      </div>
+    );
+  }
+
+  if (cards.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-app-bg text-app-text">
         <div className="w-20 h-20 bg-app-surface border border-app-border rounded-full flex items-center justify-center text-app-primary shadow-sm mb-6">
@@ -215,8 +238,8 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
         <p className="text-app-hint mb-10 max-w-[260px]">
           Отличная работа! Отдыхай или загрузи новый транскрипт в бот.
         </p>
-        <button 
-          onClick={onExit} 
+        <button
+          onClick={onExit}
           className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
         >
           Вернуться на главную

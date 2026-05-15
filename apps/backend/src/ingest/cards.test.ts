@@ -51,7 +51,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
     expect(rows[0]!.reps).toBe(0)
   })
 
-  test('inserts a theory card with status=draft requiring approval', async () => {
+  test('inserts a theory card directly into the active queue', async () => {
     const summary = await ingestCards(
       conn!.db,
       fsrs,
@@ -73,7 +73,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
     )
     expect(summary).toEqual({ created: 1, skipped: 0 })
     const rows = await conn!.db.select().from(cards)
-    expect(rows[0]!.status).toBe('draft')
+    expect(rows[0]!.status).toBe('active')
     expect(rows[0]!.sourceQuote).toBe('Take an umbrella in case it rains.')
   })
 

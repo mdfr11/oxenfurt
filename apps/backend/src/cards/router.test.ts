@@ -160,7 +160,17 @@ describe.skipIf(noDb)('POST /:id/review', () => {
     expect(reviews[0]!.fsrsStateBefore).toBe(0)
   })
 
-  test('applyReview returns null for a draft card (theory still pending approval)', async () => {
+  test('applyReview returns null for an archived card', async () => {
+    const id = await seedActiveVocab('archive-me')
+    await conn!.db
+      .update(cards)
+      .set({ status: 'archived' })
+      .where(eq(cards.id, id))
+    const result = await applyReview(conn!.db, fsrs, id, RATING.Good, NOW)
+    expect(result).toBeNull()
+  })
+
+  test('theory cards from ingest enter the active queue immediately', async () => {
     await ingestCards(
       conn!.db,
       fsrs,
@@ -175,138 +185,19 @@ describe.skipIf(noDb)('POST /:id/review', () => {
       },
       NOW,
     )
-    const draftRows = await conn!.db.select().from(cards)
-    const result = await applyReview(conn!.db, fsrs, draftRows[0]!.id, RATING.Good, NOW)
-    expect(result).toBeNull()
-  })
-})
-
-async function seedDraftTheory(
-  question: string,
-  answer = 'A',
-  sourceQuote = 'quote',
-): Promise<string> {
-  await ingestCards(
-    conn!.db,
-    fsrs,
-    {
-      cards: [
-        {
-          type: 'theory',
-          payload: { question, answer },
-          source_quote: sourceQuote,
-        },
-      ],
-    },
-    NOW,
-  )
-  const rows = await conn!.db.select().from(cards)
-  return rows.find((r) => (r.payload as { question: string }).question === question)!.id
-}
-
-describe.skipIf(noDb)('GET /drafts', () => {
-  test('returns 401 without a JWT', async () => {
-    const res = await buildApp().request('/drafts')
-    expect(res.status).toBe(401)
+    const rows = await conn!.db.select().from(cards).where(eq(cards.type, 'theory'))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.status).toBe('active')
   })
 
-  test('returns empty list when nothing is in draft', async () => {
-    const res = await buildApp().request('/drafts', { headers: await authHeader() })
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ cards: [] })
-  })
-
-  test('returns theory cards with status=draft in creation order', async () => {
-    await seedDraftTheory('Q1')
-    await seedDraftTheory('Q2')
-    await seedActiveVocab('not-a-draft')
-
-    const res = await buildApp().request('/drafts', { headers: await authHeader() })
-    const body = (await res.json()) as {
-      cards: Array<{ type: string; payload: { question: string }; created_at: string }>
-    }
-    expect(body.cards).toHaveLength(2)
-    expect(body.cards.map((c) => c.payload.question)).toEqual(['Q1', 'Q2'])
-    expect(body.cards.every((c) => c.type === 'theory')).toBe(true)
-    expect(typeof body.cards[0]!.created_at).toBe('string')
-  })
-})
-
-describe.skipIf(noDb)('POST /:id/approve', () => {
-  test('flips a draft theory card to active', async () => {
-    const id = await seedDraftTheory('When to use the perfect tense?')
-    const res = await buildApp().request(`/${id}/approve`, {
-      method: 'POST',
-      headers: await authHeader(),
-    })
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ status: 'active' })
-
-    const [row] = await conn!.db.select().from(cards).where(eq(cards.id, id))
-    expect(row!.status).toBe('active')
-  })
-
-  test('returns 400 when approving a non-draft card (already active vocab)', async () => {
-    const id = await seedActiveVocab('already-active')
-    const res = await buildApp().request(`/${id}/approve`, {
-      method: 'POST',
-      headers: await authHeader(),
-    })
-    expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ error: 'not_in_draft' })
-  })
-
-  test('returns 404 for an unknown id', async () => {
-    const res = await buildApp().request(
-      '/00000000-0000-0000-0000-000000000000/approve',
-      { method: 'POST', headers: await authHeader() },
-    )
-    expect(res.status).toBe(404)
-  })
-
-  test('returns 400 for a malformed id', async () => {
-    const res = await buildApp().request('/not-a-uuid/approve', {
-      method: 'POST',
-      headers: await authHeader(),
-    })
-    expect(res.status).toBe(400)
-  })
-})
-
-describe.skipIf(noDb)('POST /:id/skip', () => {
-  test('archives a draft theory card', async () => {
-    const id = await seedDraftTheory('Some bad theory')
-    const res = await buildApp().request(`/${id}/skip`, {
-      method: 'POST',
-      headers: await authHeader(),
-    })
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ status: 'archived' })
-
-    const [row] = await conn!.db.select().from(cards).where(eq(cards.id, id))
-    expect(row!.status).toBe('archived')
-  })
-
-  test('archived card does not show in /due', async () => {
-    const id = await seedDraftTheory('Skip me')
-    await buildApp().request(`/${id}/skip`, {
-      method: 'POST',
-      headers: await authHeader(),
-    })
+  test('manually archived card disappears from /due', async () => {
+    const id = await seedActiveVocab('hide-me')
+    await conn!.db
+      .update(cards)
+      .set({ status: 'archived' })
+      .where(eq(cards.id, id))
     const due = await buildApp().request('/due', { headers: await authHeader() })
     const body = (await due.json()) as { cards: unknown[] }
     expect(body.cards).toHaveLength(0)
-  })
-
-  test('approved card shows up in /due', async () => {
-    const id = await seedDraftTheory('Approve me')
-    await buildApp().request(`/${id}/approve`, {
-      method: 'POST',
-      headers: await authHeader(),
-    })
-    const due = await buildApp().request('/due', { headers: await authHeader() })
-    const body = (await due.json()) as { cards: Array<{ id: string }> }
-    expect(body.cards).toHaveLength(1)
-    expect(body.cards[0]!.id).toBe(id)
   })
 })
