@@ -1,24 +1,63 @@
 /**
- * Server-side TTS via the backend `/tts` proxy. We used to call
- * `window.speechSynthesis.speak()` directly, but on Android phones without
- * a system English voice installed (the default in many locales) the call
- * silently produced nothing. Going through the server gives us:
+ * TTS playback with three fallbacks:
  *
- *   - Consistent voice quality across iOS / Android / desktop
- *   - No dependency on system TTS engines or installed language packs
- *   - Browser HTTP cache reuses audio across replays of the same term
+ *   1. Server-side TTS via `/api/tts`, decoded and played through Web Audio
+ *      (AudioContext + AudioBufferSourceNode). This is the path we want
+ *      on Android: the UI sound effects already use Web Audio successfully
+ *      there, while HTMLAudio + blob URLs proved flaky in the Telegram
+ *      Android WebView (Audio.play() either rejects or no-ops with no
+ *      audible output).
  *
- * The audio is fetched with the user's JWT (so the proxy is only available
- * to the logged-in owner), then decoded from a Blob URL and played via a
- * standard HTMLAudioElement.
+ *   2. Server-side TTS via HTMLAudio. If Web Audio decode fails (some
+ *      older WebViews struggle with MP3 framing), we try the simpler
+ *      `<audio>` element route.
+ *
+ *   3. Browser SpeechSynthesis. Last-resort fallback for the case where
+ *      the server proxy is unreachable. Works on most desktops; on Android
+ *      it depends on a system English voice that may not be installed,
+ *      so don't rely on it.
+ *
+ * Errors at each layer log to console with the `[tts]` prefix so DevTools
+ * shows exactly which path was attempted and why it failed.
  */
 
 import { API_BASE, getToken } from './api'
 
+// --- Dedicated AudioContext just for TTS playback ---
+//
+// We deliberately do NOT reuse lib/audio.ts's context because that one is
+// gated by the user's "soundEnabled" setting (which controls UI clicks,
+// not pronunciation). TTS has its own meaning and its own enable state.
+let ttsCtx: AudioContext | null = null
+
+function getTtsContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null
+  if (!ttsCtx) {
+    const Ctor =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext
+    if (Ctor) ttsCtx = new Ctor()
+  }
+  if (ttsCtx && ttsCtx.state === 'suspended') {
+    void ttsCtx.resume().catch(() => {})
+  }
+  return ttsCtx
+}
+
+let activeSource: AudioBufferSourceNode | null = null
 let activeAudio: HTMLAudioElement | null = null
 let activeUrl: string | null = null
 
 function disposeActive(): void {
+  if (activeSource) {
+    try {
+      activeSource.stop()
+    } catch {
+      // ignore
+    }
+    activeSource = null
+  }
   if (activeAudio) {
     try {
       activeAudio.pause()
@@ -38,59 +77,109 @@ export async function speak(text: string, opts: { rate?: number } = {}): Promise
   const trimmed = text.trim()
   if (trimmed.length === 0) return
 
-  // Cancel anything in flight — back-to-back card flips shouldn't stack.
   disposeActive()
 
-  // Try server-side first (consistent voice across devices). Fall back to
-  // the browser's SpeechSynthesis if the proxy fails — desktop typically
-  // has a usable English voice, so the fallback keeps the feature working
-  // there even while the server endpoint is being debugged.
-  const okServer = await trySpeakServer(trimmed, opts)
-  if (okServer) return
+  const buf = await fetchTtsBuffer(trimmed)
+  if (buf !== null) {
+    // Path 1: Web Audio decode + play. The canonical mobile-friendly path.
+    if (await tryPlayWebAudio(buf, opts)) return
+    // Path 2: HTMLAudio fallback for desktops where Web Audio decoding
+    // might have failed for some reason.
+    if (await tryPlayHtmlAudio(buf, opts)) return
+  }
+
+  // Path 3: ultimate fallback — system synthesizer.
   trySpeakSystem(trimmed, opts)
 }
 
-async function trySpeakServer(text: string, opts: { rate?: number }): Promise<boolean> {
+async function fetchTtsBuffer(text: string): Promise<ArrayBuffer | null> {
   const token = getToken()
   if (!token) {
     console.warn('[tts] no JWT, skipping server TTS')
-    return false
+    return null
   }
-  let blob: Blob
   try {
     const res = await fetch(`${API_BASE}/tts?text=${encodeURIComponent(text)}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) {
       console.warn('[tts] server returned', res.status)
-      return false
+      return null
     }
-    blob = await res.blob()
+    const buf = await res.arrayBuffer()
+    if (buf.byteLength === 0) {
+      console.warn('[tts] server returned empty body')
+      return null
+    }
+    return buf
   } catch (err) {
     console.warn('[tts] server fetch failed', err)
-    return false
+    return null
   }
-  if (blob.size === 0) {
-    console.warn('[tts] server returned empty body')
-    return false
-  }
+}
 
+async function tryPlayWebAudio(buffer: ArrayBuffer, opts: { rate?: number }): Promise<boolean> {
+  const ctx = getTtsContext()
+  if (!ctx) {
+    console.warn('[tts] no AudioContext, skipping Web Audio path')
+    return false
+  }
+  let decoded: AudioBuffer
+  try {
+    // decodeAudioData mutates its input ArrayBuffer in some implementations;
+    // copy before decoding so the buffer remains usable for the HTMLAudio
+    // fallback if needed.
+    const copy = buffer.slice(0)
+    decoded = await ctx.decodeAudioData(copy)
+  } catch (err) {
+    console.warn('[tts] decodeAudioData failed', err)
+    return false
+  }
+  try {
+    const source = ctx.createBufferSource()
+    source.buffer = decoded
+    source.playbackRate.value = opts.rate ?? 0.95
+    source.connect(ctx.destination)
+    activeSource = source
+    source.addEventListener('ended', () => {
+      if (activeSource === source) activeSource = null
+    })
+    source.start(0)
+    console.info('[tts] playing via Web Audio')
+    return true
+  } catch (err) {
+    console.warn('[tts] Web Audio start failed', err)
+    return false
+  }
+}
+
+async function tryPlayHtmlAudio(buffer: ArrayBuffer, opts: { rate?: number }): Promise<boolean> {
+  const blob = new Blob([buffer], { type: 'audio/mpeg' })
   const url = URL.createObjectURL(blob)
   const audio = new Audio(url)
   audio.playbackRate = opts.rate ?? 0.95
   activeAudio = audio
   activeUrl = url
 
-  audio.addEventListener('ended', () => {
-    if (activeAudio === audio) disposeActive()
-  }, { once: true })
-  audio.addEventListener('error', (e) => {
-    console.warn('[tts] audio element error', e)
-    if (activeAudio === audio) disposeActive()
-  }, { once: true })
+  audio.addEventListener(
+    'ended',
+    () => {
+      if (activeAudio === audio) disposeActive()
+    },
+    { once: true },
+  )
+  audio.addEventListener(
+    'error',
+    (e) => {
+      console.warn('[tts] audio element error', e)
+      if (activeAudio === audio) disposeActive()
+    },
+    { once: true },
+  )
 
   try {
     await audio.play()
+    console.info('[tts] playing via HTMLAudio')
     return true
   } catch (err) {
     console.warn('[tts] audio.play() rejected', err)
@@ -101,7 +190,7 @@ async function trySpeakServer(text: string, opts: { rate?: number }): Promise<bo
 
 function trySpeakSystem(text: string, opts: { rate?: number }): void {
   if (!('speechSynthesis' in window)) {
-    console.warn('[tts] SpeechSynthesis not available — no fallback')
+    console.warn('[tts] SpeechSynthesis not available — no further fallback')
     return
   }
   try {
@@ -124,43 +213,38 @@ export function stopSpeaking(): void {
 }
 
 /**
- * Call once from a user-gesture handler (e.g. "Начать сессию" onClick) to
- * unlock the HTMLAudio playback path on mobile browsers. Same idea as the
- * Web Audio AudioContext priming — Android Chrome / WebView gates the
- * first .play() unless it's been preceded by a user gesture in the page
- * lifecycle.
- *
- * The trick: kick off a play() on a tiny silent data-URI. Browsers count
- * the gesture and unlock the path; subsequent plays from non-gesture
- * code (like a setTimeout 250ms after card mount) then work.
+ * Call from a user-gesture handler (e.g. "Начать сессию" onClick) to
+ * unlock both audio playback paths on mobile browsers. Plays a tiny
+ * silent buffer through Web Audio AND fires a no-op HTMLAudio play —
+ * each path is gated separately by the browser, so we cover both.
  */
 export function primeSpeech(): void {
   if (typeof window === 'undefined') return
+
+  // Unlock Web Audio context.
+  const ctx = getTtsContext()
+  if (ctx && ctx.state === 'suspended') {
+    void ctx.resume().catch(() => {})
+  }
+
+  // Unlock HTMLAudio path with a 100ms silent data URI.
   try {
     const a = new Audio(
-      // 0.1s of WAV silence. Tiny payload; engines treat it as a real
-      // playback and consider the audio path unlocked for the page.
       'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAVFYAAFRWAAABAAgAZGF0YQAAAAA=',
     )
     a.volume = 0
-    void a.play().catch(() => {
-      // best-effort warmup; if it fails the explicit replay button still
-      // works since that's also a user gesture.
-    })
+    void a.play().catch(() => {})
   } catch {
     // ignore
   }
 }
 
-// --- Legacy exports kept for compatibility with callers (no-op now). ---
+// --- Legacy exports kept for compatibility ---
 
-/** No-op — we no longer rely on SpeechSynthesis. Kept so existing imports
- *  don't break. Always reports 'ready' since the backend speaks. */
 export function ttsSupport(): 'ready' {
   return 'ready'
 }
 
-/** No-op — kept for backwards compatibility. */
 export async function getEnglishVoice(): Promise<null> {
   return null
 }
