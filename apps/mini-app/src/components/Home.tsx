@@ -1,20 +1,33 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { mainButton } from '@telegram-apps/sdk-react';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Library as LibraryIcon } from 'lucide-react';
+import {
+  loadPracticeMode,
+  savePracticeMode,
+  type PracticeMode,
+} from '../lib/practiceMode';
 
 interface HomeProps {
-  onStart: () => void;
+  onStart: (mode: PracticeMode) => void;
+  onOpenLibrary: () => void;
   userFirstName?: string;
 }
 
-export function Home({ onStart, userFirstName }: HomeProps) {
-  // Wire the Telegram MainButton to "Start session". When the SDK isn't
-  // mounted (dev outside Telegram) we fall back to the in-webview button below.
+export function Home({ onStart, onOpenLibrary, userFirstName }: HomeProps) {
+  const [mode, setMode] = useState<PracticeMode>(() => loadPracticeMode());
+
+  function selectMode(next: PracticeMode) {
+    setMode(next);
+    savePracticeMode(next);
+  }
+
+  // Wire the Telegram MainButton to "Start session" — fires with the
+  // currently-selected mode, captured fresh each render.
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
     try {
       mainButton.setParams({ text: 'Начать сессию', isVisible: true, isEnabled: true })
-      unsubscribe = mainButton.onClick(onStart)
+      unsubscribe = mainButton.onClick(() => onStart(mode))
     } catch {
       // SDK not mounted — fine, the in-webview button still works
     }
@@ -26,7 +39,7 @@ export function Home({ onStart, userFirstName }: HomeProps) {
         // ditto
       }
     }
-  }, [onStart])
+  }, [onStart, mode])
 
   return (
     <div
@@ -47,13 +60,61 @@ export function Home({ onStart, userFirstName }: HomeProps) {
         </p>
       </div>
 
-      {/* In-webview fallback for dev / non-Telegram environments. */}
-      <button
-        className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
-        onClick={onStart}
-      >
-        Начать сессию
-      </button>
+      <div className="flex flex-col gap-3">
+        {/* Mode picker */}
+        <div className="flex gap-1 bg-app-surface border border-app-border rounded-2xl p-1">
+          <ModeChip active={mode === 'mixed'} onClick={() => selectMode('mixed')}>
+            Смешанно
+          </ModeChip>
+          <ModeChip active={mode === 'recognition'} onClick={() => selectMode('recognition')}>
+            Узнавание
+          </ModeChip>
+          <ModeChip active={mode === 'cloze'} onClick={() => selectMode('cloze')}>
+            Письмо
+          </ModeChip>
+        </div>
+
+        <p className="text-[11px] text-app-hint text-center -mt-1 mb-1">
+          {modeHelp(mode)}
+        </p>
+
+        {/* In-webview fallback for dev / non-Telegram environments. */}
+        <button
+          className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
+          onClick={() => onStart(mode)}
+        >
+          Начать сессию
+        </button>
+
+        <button
+          onClick={onOpenLibrary}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-app-border bg-app-surface text-app-text font-semibold active:scale-95 transition-transform"
+        >
+          <LibraryIcon size={18} />
+          Все карточки
+        </button>
+      </div>
     </div>
   );
+}
+
+function ModeChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-colors ${
+        active
+          ? 'bg-app-primary text-app-primary-text shadow-sm'
+          : 'text-app-hint active:bg-app-bg'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function modeHelp(mode: PracticeMode): string {
+  if (mode === 'recognition') return 'Видишь слово — вспоминаешь перевод';
+  if (mode === 'cloze') return 'Видишь предложение с пропуском — пишешь слово';
+  return 'Перемешиваю оба варианта';
 }

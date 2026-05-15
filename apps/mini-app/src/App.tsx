@@ -5,8 +5,10 @@ import { loginWithTelegram, setToken } from './lib/api';
 import { PracticeSession } from './components/PracticeSession';
 import { Home } from './components/Home';
 import { Summary } from './components/Summary';
+import { Library } from './components/Library';
+import { loadPracticeMode, type PracticeMode } from './lib/practiceMode';
 
-type Screen = 'home' | 'practice' | 'summary' | 'loading';
+type Screen = 'home' | 'practice' | 'summary' | 'loading' | 'library';
 
 interface SessionStats {
   total: number;
@@ -16,6 +18,7 @@ interface SessionStats {
 export default function App() {
   const [screen, setScreen] = useState<Screen>('loading');
   const [stats, setStats] = useState<SessionStats>({ total: 0, correct: 0 });
+  const [practiceMode, setPracticeMode] = useState<PracticeMode>(() => loadPracticeMode());
   const initDataRaw = useRawInitData();
   const launchParams = useLaunchParams();
 
@@ -74,6 +77,7 @@ export default function App() {
       )}
       {screen === 'practice' && (
         <PracticeSession
+          mode={practiceMode}
           onComplete={(total, correct) => {
             setStats({ total, correct });
             setScreen('summary');
@@ -88,9 +92,16 @@ export default function App() {
           onRepeatHard={() => setScreen('practice')}
         />
       )}
+      {screen === 'library' && (
+        <Library onExit={() => setScreen('home')} />
+      )}
       {screen === 'home' && (
         <Home
-          onStart={() => setScreen('practice')}
+          onStart={(mode) => {
+            setPracticeMode(mode);
+            setScreen('practice');
+          }}
+          onOpenLibrary={() => setScreen('library')}
           userFirstName={userFirstName}
         />
       )}

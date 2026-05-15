@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
-import { and, asc, eq, lte } from 'drizzle-orm'
+import { and, asc, count, desc, eq, lte, or, sql } from 'drizzle-orm'
 import * as v from 'valibot'
 import {
   FsrsService,
   RatingSchema,
+  type CardListDto,
   type DueCardDto,
   type FsrsCardState,
   type Rating,
@@ -25,6 +26,49 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
 
   app.use('*', jwtAuth({ jwtSecret: deps.jwtSecret, now }))
 
+  // List + filter + search for the Library screen. Defaults to active cards
+  // sorted newest-first. The `q` query parameter does case-insensitive
+  // contains-match against vocab term/translation and theory question.
+  app.get('/', async (c) => {
+    const statusRaw = c.req.query('status') ?? 'active'
+    const status: 'active' | 'archived' | 'draft' =
+      statusRaw === 'archived' ? 'archived'
+        : statusRaw === 'draft' ? 'draft'
+        : 'active'
+    const typeRaw = c.req.query('type')
+    const typeFilter: 'vocab' | 'theory' | undefined =
+      typeRaw === 'vocab' || typeRaw === 'theory' ? typeRaw : undefined
+    const q = (c.req.query('q') ?? '').trim()
+    const limit = Math.max(1, Math.min(200, Number.parseInt(c.req.query('limit') ?? '50', 10) || 50))
+    const offset = Math.max(0, Number.parseInt(c.req.query('offset') ?? '0', 10) || 0)
+
+    const conditions = [eq(cards.status, status)]
+    if (typeFilter) conditions.push(eq(cards.type, typeFilter))
+    if (q.length > 0) {
+      const pattern = `%${q.toLowerCase()}%`
+      const searchClause = or(
+        sql`lower(payload->>'term') LIKE ${pattern}`,
+        sql`lower(payload->>'translation') LIKE ${pattern}`,
+        sql`lower(payload->>'question') LIKE ${pattern}`,
+      )!
+      conditions.push(searchClause)
+    }
+
+    const where = and(...conditions)
+    const [rows, totalRow] = await Promise.all([
+      deps.db
+        .select()
+        .from(cards)
+        .where(where)
+        .orderBy(desc(cards.createdAt))
+        .limit(limit)
+        .offset(offset),
+      deps.db.select({ value: count() }).from(cards).where(where),
+    ])
+    const total = totalRow[0]?.value ?? 0
+    return c.json({ cards: rows.map(toListDto), total })
+  })
+
   app.get('/due', async (c) => {
     const limitRaw = c.req.query('limit') ?? '20'
     const limit = Math.max(1, Math.min(100, Number.parseInt(limitRaw, 10) || 20))
@@ -37,6 +81,18 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
       .limit(limit)
 
     return c.json({ cards: rows.map(toDueDto) })
+  })
+
+  // Archive an active card — soft delete that hides it from /due and from
+  // the default Library filter. Idempotency: only `active → archived` is
+  // permitted; archiving a draft or already-archived card returns 400.
+  app.post('/:id/archive', async (c) => {
+    const id = c.req.param('id')
+    if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
+    const result = await archiveCard(deps.db, id)
+    if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
+    if (result === 'not_active') return c.json({ error: 'not_active' }, 400)
+    return c.json({ status: 'archived' })
   })
 
   app.post('/:id/review', async (c) => {
@@ -127,6 +183,38 @@ export async function applyReview(
 
     return next
   })
+}
+
+export async function archiveCard(
+  db: Db,
+  cardId: string,
+): Promise<'ok' | 'not_found' | 'not_active'> {
+  return await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(cards)
+      .where(eq(cards.id, cardId))
+      .for('update')
+    if (row === undefined) return 'not_found'
+    if (row.status !== 'active') return 'not_active'
+    await tx.update(cards).set({ status: 'archived' }).where(eq(cards.id, cardId))
+    return 'ok'
+  })
+}
+
+function toListDto(row: CardRow): CardListDto {
+  return {
+    id: row.id,
+    type: row.type,
+    status: row.status,
+    payload: row.payload,
+    source: row.source,
+    source_quote: row.sourceQuote,
+    created_at: row.createdAt.toISOString(),
+    due: row.due.toISOString(),
+    reps: row.reps,
+    lapses: row.lapses,
+  }
 }
 
 function toDueDto(row: CardRow): DueCardDto {

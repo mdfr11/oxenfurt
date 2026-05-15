@@ -12,15 +12,19 @@ import {
 import { Spinner } from '@telegram-apps/telegram-ui';
 import {
   RATING,
+  matchAnswer,
   type DueCardDto,
+  type MatchResult,
   type Rating,
   type TheoryPayload,
   type VocabPayload,
 } from '@oxenfurt/shared';
 import { fetchWithAuth } from '../lib/api';
 import { formatInterval, previewIntervals } from '../lib/fsrs';
+import { shouldUseClozeFor, type PracticeMode } from '../lib/practiceMode';
 
 interface PracticeSessionProps {
+  mode: PracticeMode;
   onComplete: (total: number, correct: number) => void;
   onExit: () => void;
 }
@@ -33,7 +37,7 @@ function safeHaptic<T extends keyof typeof hapticFeedback>(method: T, ...args: P
   }
 }
 
-export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
+export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['cards', 'due'],
     queryFn: async () => {
@@ -46,6 +50,10 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isRevealed, setIsRevealed] = useState(false);
   const [sessionStats, setSessionStats] = useState({ total: 0, correct: 0 });
+  // Cloze-only state — reset on each card via the effect below.
+  const [typedAnswer, setTypedAnswer] = useState('');
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Backend session id (UUID). Set once on mount via POST /sessions, then
   // used by finishSession() on completion. Fire-and-forget — if the start
@@ -148,11 +156,51 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
     }
   }, [currentCard])
 
+  // Cloze-mode flag. Only vocab cards have a `term` to type; theory cards
+  // always render in recognition mode regardless of `mode`.
+  const useCloze =
+    currentCard !== undefined &&
+    currentCard.type === 'vocab' &&
+    shouldUseClozeFor(mode, currentCard.id)
+
+  // Reset typed answer + match feedback when the active card changes.
+  // React 19 idiomatic: set state during render when an upstream identity
+  // shifts. The two setState calls below get coalesced into one re-render.
+  const [seenCardId, setSeenCardId] = useState<string | undefined>(undefined)
+  if (currentCard?.id !== seenCardId) {
+    setSeenCardId(currentCard?.id)
+    setTypedAnswer('')
+    setMatchResult(null)
+  }
+
+  // Auto-focus the cloze input — this is a real DOM side-effect, so it
+  // legitimately belongs in useEffect. The state resets above already
+  // happened by the time this runs.
+  useEffect(() => {
+    if (useCloze && !isRevealed && currentCard) {
+      const t = setTimeout(() => inputRef.current?.focus(), 50)
+      return () => clearTimeout(t)
+    }
+    return undefined
+  }, [currentCard?.id, useCloze, isRevealed, currentCard])
+
   const handleReveal = () => {
-    if (!isRevealed) {
+    if (!isRevealed && !useCloze) {
       setIsRevealed(true);
       safeHaptic('impactOccurred', 'light')
     }
+  };
+
+  const handleClozeSubmit = () => {
+    if (isRevealed || !useCloze || !currentCard) return;
+    const vocabPayload = currentCard.payload as VocabPayload;
+    const expected = extractClozeTerm(vocabPayload);
+    const result = matchAnswer(typedAnswer, expected);
+    setMatchResult(result);
+    setIsRevealed(true);
+    if (result.kind === 'exact') safeHaptic('notificationOccurred', 'success')
+    else if (result.kind === 'close') safeHaptic('impactOccurred', 'medium')
+    else safeHaptic('notificationOccurred', 'error')
   };
 
   const handleRate = (rating: Rating) => {
@@ -251,6 +299,10 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
   const vocab = currentCard!.type === 'vocab' ? (currentCard!.payload as VocabPayload) : null;
   const theory = currentCard!.type === 'theory' ? (currentCard!.payload as TheoryPayload) : null;
 
+  // Sentence with the target term replaced by an underline blank — used as
+  // the cloze prompt. Falls back gracefully if the offsets look bogus.
+  const clozePrompt = vocab && useCloze ? buildClozeSentence(vocab) : null;
+
   // Split sentence logic for target term highlighting
   const renderSentenceWithHighlight = (sentence: string, term: string) => {
     if (!term || !sentence.includes(term)) return <p className="text-xl leading-relaxed">{sentence}</p>;
@@ -286,9 +338,11 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
 
       <div className="flex-1 px-4 flex items-center justify-center">
         <motion.div
-          onClick={handleReveal}
-          className="w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center relative border border-app-border shadow-xl cursor-pointer"
-          whileTap={{ scale: 0.98 }}
+          onClick={useCloze ? undefined : handleReveal}
+          className={`w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center relative border border-app-border shadow-xl ${
+            useCloze ? '' : 'cursor-pointer'
+          }`}
+          whileTap={useCloze ? undefined : { scale: 0.98 }}
         >
           <AnimatePresence mode="wait">
             {!isRevealed ? (
@@ -297,9 +351,40 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 1.1 }}
-                className="flex flex-col items-center gap-6"
+                className="flex flex-col items-center gap-6 w-full"
               >
-                {vocab ? (
+                {useCloze && vocab && clozePrompt ? (
+                  <>
+                    <p className="text-lg text-app-text leading-relaxed">
+                      {clozePrompt.before}
+                      <span className="text-app-primary font-bold">{'_'.repeat(Math.max(3, Math.min(12, clozePrompt.targetLength)))}</span>
+                      {clozePrompt.after}
+                    </p>
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={typedAnswer}
+                      onChange={(e) => setTypedAnswer(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleClozeSubmit();
+                        }
+                      }}
+                      placeholder="Введи слово"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="w-full max-w-[240px] text-center text-lg bg-app-bg border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary"
+                    />
+                    <button
+                      onClick={handleClozeSubmit}
+                      className="w-full max-w-[240px] py-3 rounded-xl bg-app-primary text-app-primary-text font-semibold active:scale-95 transition-transform"
+                    >
+                      Готово
+                    </button>
+                  </>
+                ) : vocab ? (
                   <>
                     <h2 className="text-4xl font-bold tracking-tight">
                       {vocab.term}
@@ -313,7 +398,7 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
                     {theory.question}
                   </h2>
                 ) : null}
-                {currentCard!.source && (
+                {currentCard!.source && !useCloze && (
                   <div className="absolute bottom-10 text-[10px] text-app-hint uppercase tracking-[0.2em] font-bold opacity-40">
                     {currentCard!.source}
                   </div>
@@ -324,8 +409,11 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
                 key="back"
                 initial={{ opacity: 0, scale: 1.1 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="flex flex-col items-center gap-6"
+                className="flex flex-col items-center gap-5"
               >
+                {matchResult && useCloze && (
+                  <ClozeFeedback result={matchResult} typedAnswer={typedAnswer} />
+                )}
                 {vocab ? (
                   <>
                     <span className="bg-app-primary/10 text-app-primary px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
@@ -347,7 +435,7 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
             )}
           </AnimatePresence>
 
-          {!isRevealed && (
+          {!isRevealed && !useCloze && (
             <div className="absolute inset-x-0 bottom-4 text-[9px] text-app-hint opacity-30 uppercase font-bold tracking-[0.3em]">
               Tap to reveal
             </div>
@@ -383,4 +471,80 @@ function RatingButton({ label, sub, bg, color, onClick }: { label: string; sub: 
       <span className={`text-[10px] font-medium opacity-60 uppercase ${color}`}>{sub}</span>
     </button>
   );
+}
+
+function ClozeFeedback({ result, typedAnswer }: { result: MatchResult; typedAnswer: string }) {
+  if (result.kind === 'exact') {
+    return (
+      <span className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest">
+        ✓ Точно
+      </span>
+    )
+  }
+  if (result.kind === 'close') {
+    return (
+      <div className="flex flex-col items-center gap-1.5">
+        <span className="bg-amber-500/15 text-amber-600 dark:text-amber-400 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest">
+          ≈ Близко
+        </span>
+        <span className="text-xs text-app-hint">ты написал: {typedAnswer.trim() || '—'}</span>
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <span className="bg-rose-500/15 text-rose-600 dark:text-rose-400 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest">
+        ✗ Не то
+      </span>
+      {typedAnswer.trim() && (
+        <span className="text-xs text-app-hint">ты написал: {typedAnswer.trim()}</span>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Returns the term substring as it appears in `context_sentence`, falling
+ * back to `payload.term` if the offsets are invalid (e.g. legacy cards
+ * ingested with zero offsets). Matching uses this so casual inflections
+ * stored in the sentence pass exact-match.
+ */
+function extractClozeTerm(vocab: VocabPayload): string {
+  const start = vocab.context_term_start
+  const end = vocab.context_term_end
+  if (
+    Number.isFinite(start) &&
+    Number.isFinite(end) &&
+    start >= 0 &&
+    end > start &&
+    end <= vocab.context_sentence.length
+  ) {
+    return vocab.context_sentence.slice(start, end)
+  }
+  return vocab.term
+}
+
+function buildClozeSentence(vocab: VocabPayload): { before: string; after: string; targetLength: number } | null {
+  const start = vocab.context_term_start
+  const end = vocab.context_term_end
+  if (
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start < 0 ||
+    end <= start ||
+    end > vocab.context_sentence.length
+  ) {
+    // Offsets unusable — fall back to "term-shaped blank" pattern, since the
+    // backend may not have populated them precisely.
+    return {
+      before: vocab.context_sentence + ' (',
+      after: ' = ?)',
+      targetLength: vocab.term.length,
+    }
+  }
+  return {
+    before: vocab.context_sentence.slice(0, start),
+    after: vocab.context_sentence.slice(end),
+    targetLength: end - start,
+  }
 }

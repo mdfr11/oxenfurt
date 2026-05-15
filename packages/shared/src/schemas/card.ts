@@ -30,3 +30,21 @@ export interface DueCardDto {
   source_quote: string | null
   fsrs: FsrsCardState
 }
+
+export interface CardListDto {
+  id: string
+  type: 'vocab' | 'theory'
+  status: 'active' | 'archived' | 'draft'
+  payload: VocabPayload | TheoryPayload
+  source: string | null
+  source_quote: string | null
+  created_at: string
+  due: string
+  reps: number
+  lapses: number
+}
+
+export interface CardListResponse {
+  cards: CardListDto[]
+  total: number
+}

@@ -201,3 +201,131 @@ describe.skipIf(noDb)('POST /:id/review', () => {
     expect(body.cards).toHaveLength(0)
   })
 })
+
+describe.skipIf(noDb)('GET / (list)', () => {
+  test('returns 401 without a JWT', async () => {
+    const res = await buildApp().request('/')
+    expect(res.status).toBe(401)
+  })
+
+  test('defaults to active cards, newest-first, with total', async () => {
+    await seedActiveVocab('alpha')
+    await seedActiveVocab('beta')
+    await seedActiveVocab('gamma')
+    const res = await buildApp().request('/', { headers: await authHeader() })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      cards: Array<{ payload: { term: string }; status: string }>
+      total: number
+    }
+    expect(body.total).toBe(3)
+    expect(body.cards).toHaveLength(3)
+    expect(body.cards.every((c) => c.status === 'active')).toBe(true)
+    // Newest-first ordering: gamma was inserted last
+    expect(body.cards[0]!.payload.term).toBe('gamma')
+  })
+
+  test('filters by type=vocab vs type=theory', async () => {
+    await seedActiveVocab('one')
+    await ingestCards(
+      conn!.db,
+      fsrs,
+      {
+        cards: [{ type: 'theory', payload: { question: 'q', answer: 'a' }, source_quote: 'q' }],
+      },
+      NOW,
+    )
+    const vocab = await buildApp().request('/?type=vocab', { headers: await authHeader() })
+    const theory = await buildApp().request('/?type=theory', { headers: await authHeader() })
+    const vocabBody = (await vocab.json()) as { total: number }
+    const theoryBody = (await theory.json()) as { total: number }
+    expect(vocabBody.total).toBe(1)
+    expect(theoryBody.total).toBe(1)
+  })
+
+  test('status=archived filter returns archived cards', async () => {
+    const id = await seedActiveVocab('to-archive')
+    await conn!.db
+      .update(cards)
+      .set({ status: 'archived' })
+      .where(eq(cards.id, id))
+    const archived = await buildApp().request('/?status=archived', { headers: await authHeader() })
+    const active = await buildApp().request('/', { headers: await authHeader() })
+    const archivedBody = (await archived.json()) as { total: number }
+    const activeBody = (await active.json()) as { total: number }
+    expect(archivedBody.total).toBe(1)
+    expect(activeBody.total).toBe(0)
+  })
+
+  test('?q=... filters by term substring, case-insensitive', async () => {
+    await seedActiveVocab('Spool')
+    await seedActiveVocab('Wire')
+    await seedActiveVocab('to latch onto')
+    const res = await buildApp().request('/?q=SPO', { headers: await authHeader() })
+    const body = (await res.json()) as { cards: Array<{ payload: { term: string } }> }
+    expect(body.cards).toHaveLength(1)
+    expect(body.cards[0]!.payload.term).toBe('Spool')
+  })
+
+  test('?limit + ?offset paginate', async () => {
+    for (const t of ['a', 'b', 'c', 'd', 'e']) await seedActiveVocab(t)
+    const page1 = await buildApp().request('/?limit=2&offset=0', { headers: await authHeader() })
+    const page2 = await buildApp().request('/?limit=2&offset=2', { headers: await authHeader() })
+    const body1 = (await page1.json()) as { cards: unknown[]; total: number }
+    const body2 = (await page2.json()) as { cards: unknown[]; total: number }
+    expect(body1.cards).toHaveLength(2)
+    expect(body2.cards).toHaveLength(2)
+    expect(body1.total).toBe(5)
+    expect(body2.total).toBe(5)
+  })
+})
+
+describe.skipIf(noDb)('POST /:id/archive', () => {
+  test('flips an active card to archived', async () => {
+    const id = await seedActiveVocab('archive-test')
+    const res = await buildApp().request(`/${id}/archive`, {
+      method: 'POST',
+      headers: await authHeader(),
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ status: 'archived' })
+
+    const [row] = await conn!.db.select().from(cards).where(eq(cards.id, id))
+    expect(row!.status).toBe('archived')
+
+    // Disappears from /due
+    const due = await buildApp().request('/due', { headers: await authHeader() })
+    const body = (await due.json()) as { cards: unknown[] }
+    expect(body.cards).toHaveLength(0)
+  })
+
+  test('returns 400 when archiving an already-archived card', async () => {
+    const id = await seedActiveVocab('twice')
+    await buildApp().request(`/${id}/archive`, {
+      method: 'POST',
+      headers: await authHeader(),
+    })
+    const res = await buildApp().request(`/${id}/archive`, {
+      method: 'POST',
+      headers: await authHeader(),
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'not_active' })
+  })
+
+  test('returns 404 for unknown id', async () => {
+    const res = await buildApp().request('/00000000-0000-0000-0000-000000000000/archive', {
+      method: 'POST',
+      headers: await authHeader(),
+    })
+    expect(res.status).toBe(404)
+  })
+
+  test('returns 400 for malformed id', async () => {
+    const res = await buildApp().request('/not-a-uuid/archive', {
+      method: 'POST',
+      headers: await authHeader(),
+    })
+    expect(res.status).toBe(400)
+  })
+})
