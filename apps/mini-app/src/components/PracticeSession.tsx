@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Coffee } from 'lucide-react';
+import { Coffee, X } from 'lucide-react';
 import {
   backButton,
   disableVerticalSwipes,
@@ -178,14 +178,12 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     setMatchResult(null)
   }
 
-  // Auto-focus the input when we're in a typing variant.
-  useEffect(() => {
-    if (expectsTypedAnswer && !isRevealed && currentCard) {
-      const t = setTimeout(() => inputRef.current?.focus(), 50)
-      return () => clearTimeout(t)
-    }
-    return undefined
-  }, [currentCard?.id, expectsTypedAnswer, isRevealed, currentCard])
+  // Don't auto-focus the input — the soft keyboard popping up on every
+  // new card is more disruptive than it is helpful, especially in cloze /
+  // listening where the user wants to read or hear the prompt first.
+  // They tap the input themselves when ready.
+  void inputRef // keep the ref reachable for the field, even if we don't focus
+
 
   // Listening variant: pronounce the term on card show.
   useEffect(() => {
@@ -379,10 +377,10 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
           {currentCard!.type === 'theory' && <span className="text-app-primary">📖 Theory</span>}
           <button
             onClick={onExit}
-            className="text-app-hint text-xs normal-case font-medium tracking-normal active:opacity-60 underline underline-offset-4 decoration-app-hint/40"
+            className="w-7 h-7 flex items-center justify-center rounded-full bg-black/5 dark:bg-white/10 text-app-hint active:scale-95 transition-transform"
             aria-label="Завершить сессию"
           >
-            Выйти
+            <X size={16} strokeWidth={2.5} />
           </button>
         </div>
       </div>
@@ -455,9 +453,21 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   </>
                 ) : vocab ? (
                   <>
-                    <h2 className="text-4xl font-bold tracking-tight">
-                      {vocab.term}
-                    </h2>
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-4xl font-bold tracking-tight">
+                        {vocab.term}
+                      </h2>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation() // don't trigger card-level handleReveal
+                          handleReplayAudio()
+                        }}
+                        className="w-10 h-10 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform"
+                        aria-label="Произнести слово"
+                      >
+                        🔊
+                      </button>
+                    </div>
                     <p className="text-xl text-app-text leading-relaxed">
                       "{vocab.context_sentence}"
                     </p>
