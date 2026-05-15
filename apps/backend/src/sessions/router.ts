@@ -93,12 +93,14 @@ export function createSessionsRouter(deps: SessionsRouterDeps): Hono {
  * multi-tenant, add a userId filter to every WHERE.
  */
 export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
-  const dayStart = new Date(when)
-  dayStart.setUTCHours(0, 0, 0, 0)
-  const weekStart = new Date(when.getTime() - 7 * 24 * 3600 * 1000)
-  const monthStart = new Date(when.getTime() - 30 * 24 * 3600 * 1000)
-  const yearStart = new Date(when.getTime() - 365 * 24 * 3600 * 1000)
-  const next24h = new Date(when.getTime() + 24 * 3600 * 1000)
+  // Convert dates to epoch ms for SQL interpolation — postgres-js doesn't
+  // accept raw JS Date objects in parameterized queries.
+  const whenTs = when.getTime()
+  const dayStartTs = new Date(when).setUTCHours(0, 0, 0, 0)
+  const weekStartTs = whenTs - 7 * 24 * 3600 * 1000
+  const monthStartTs = whenTs - 30 * 24 * 3600 * 1000
+  const yearStartTs = whenTs - 365 * 24 * 3600 * 1000
+  const next24hTs = whenTs + 24 * 3600 * 1000
 
   // All five queries can run concurrently — no FK or ordering deps between them.
   const [reviewsAgg, sessionsAgg, forecastAgg, heatmapRows, recentRows] = await Promise.all([
@@ -111,24 +113,24 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
       month_correct: string
     }>(sql`
       SELECT
-        COUNT(*) FILTER (WHERE reviewed_at >= ${dayStart})                                   AS today_count,
-        COUNT(*) FILTER (WHERE reviewed_at >= ${dayStart}  AND rating >= 3)                  AS today_correct,
-        COUNT(*) FILTER (WHERE reviewed_at >= ${weekStart})                                  AS week_count,
-        COUNT(*) FILTER (WHERE reviewed_at >= ${weekStart} AND rating >= 3)                  AS week_correct,
-        COUNT(*) FILTER (WHERE reviewed_at >= ${monthStart})                                 AS month_count,
-        COUNT(*) FILTER (WHERE reviewed_at >= ${monthStart} AND rating >= 3)                 AS month_correct
+        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${dayStartTs / 1000}))                                   AS today_count,
+        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${dayStartTs / 1000})  AND rating >= 3)                  AS today_correct,
+        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${weekStartTs / 1000}))                                  AS week_count,
+        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${weekStartTs / 1000}) AND rating >= 3)                  AS week_correct,
+        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${monthStartTs / 1000}))                                 AS month_count,
+        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${monthStartTs / 1000}) AND rating >= 3)                 AS month_correct
       FROM card_reviews
     `),
     db.execute<{ today_count: string; week_count: string }>(sql`
       SELECT
-        COUNT(*) FILTER (WHERE started_at >= ${dayStart})  AS today_count,
-        COUNT(*) FILTER (WHERE started_at >= ${weekStart}) AS week_count
+        COUNT(*) FILTER (WHERE started_at >= to_timestamp(${dayStartTs / 1000}))  AS today_count,
+        COUNT(*) FILTER (WHERE started_at >= to_timestamp(${weekStartTs / 1000})) AS week_count
       FROM sessions
     `),
     db.execute<{ due_now: string; due_next_24h: string; active_total: string }>(sql`
       SELECT
-        COUNT(*) FILTER (WHERE due <= ${when})                                       AS due_now,
-        COUNT(*) FILTER (WHERE due >  ${when} AND due <= ${next24h})                 AS due_next_24h,
+        COUNT(*) FILTER (WHERE due <= to_timestamp(${whenTs / 1000}))                                       AS due_now,
+        COUNT(*) FILTER (WHERE due >  to_timestamp(${whenTs / 1000}) AND due <= to_timestamp(${next24hTs / 1000}))                 AS due_next_24h,
         COUNT(*)                                                                     AS active_total
       FROM cards
       WHERE status = 'active'
@@ -138,7 +140,7 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
         TO_CHAR(DATE_TRUNC('day', reviewed_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
         COUNT(*)                                                                  AS cnt
       FROM card_reviews
-      WHERE reviewed_at >= ${yearStart}
+      WHERE reviewed_at >= to_timestamp(${yearStartTs / 1000})
       GROUP BY day
       ORDER BY day
     `),
