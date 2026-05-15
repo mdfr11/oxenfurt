@@ -574,6 +574,11 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         }`}
         style={{ paddingBottom: `calc(2.5rem + var(--tg-safe-area-inset-bottom, 0px))` }}
       >
+        {/* Tells the user the rating row is the way forward, not a result of
+            their typed answer. Empirically the most common confusion. */}
+        <p className="text-center text-[10px] text-app-hint uppercase tracking-widest font-bold pb-2 px-3">
+          Как легко вспомнил? · тап = следующая карточка
+        </p>
         <div className="flex gap-2 h-16">
           <RatingButton label="Снова" sub={intervalLabels?.[RATING.Again] ?? '…'} bg="bg-rose-500/10" color="text-rose-600 dark:text-rose-400" onClick={() => handleRate(RATING.Again)} />
           <RatingButton label="Трудно" sub={intervalLabels?.[RATING.Hard] ?? '…'} bg="bg-orange-500/10" color="text-orange-600 dark:text-orange-400" onClick={() => handleRate(RATING.Hard)} />

@@ -7,6 +7,7 @@ import {
   type PracticeMode,
 } from '../lib/practiceMode';
 import { primeSpeech } from '../lib/tts';
+import { primeAudio } from '../lib/audio';
 
 interface HomeProps {
   onStart: (mode: PracticeMode) => void;
@@ -31,6 +32,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
       mainButton.setParams({ text: 'Начать сессию', isVisible: true, isEnabled: true })
       unsubscribe = mainButton.onClick(() => {
         primeSpeech()
+        void primeAudio()
         onStart(mode)
       })
     } catch {
@@ -94,11 +96,14 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
         <button
           className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
           onClick={() => {
-            // Unlock speechSynthesis on Android/iOS WebView — this onClick
-            // is a real user gesture, so the synth will permit a silent
-            // warmup utterance and subsequent .speak() calls during the
-            // session. Required for the "Слух" (listening) mode to work.
+            // Unlock both audio paths from this real user gesture:
+            //   * speechSynthesis — required for TTS in "Слух" / 🔊 button.
+            //   * AudioContext     — required for UI feedback sounds
+            //                         (pop / thud) on Android WebView.
+            // Without this priming, mobile browsers silently drop the first
+            // play because there hasn't been a recent gesture in their model.
             primeSpeech()
+            void primeAudio()
             onStart(mode)
           }}
         >

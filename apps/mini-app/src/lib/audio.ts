@@ -1,21 +1,46 @@
-// A simple Web Audio API synthesizer for UI sounds
-// No external assets required.
+// A simple Web Audio API synthesizer for UI sounds. No external assets.
 
 let audioCtx: AudioContext | null = null;
 
-function getAudioContext() {
+function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   if (!audioCtx) {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (AudioContext) {
-      audioCtx = new AudioContext();
+    // webkitAudioContext: older Safari prefix. Widen the lookup just enough
+    // to avoid an explicit `any`.
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (AudioContextCtor) {
+      audioCtx = new AudioContextCtor();
     }
   }
-  // Resume context if suspended (browser policy requires user interaction)
+  // Mobile autoplay policy: the context starts `suspended` until a user
+  // gesture explicitly resumes it. Fire resume() — fine to not await for
+  // short oscillator schedules that target ctx.currentTime + delay.
   if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume();
+    void audioCtx.resume().catch(() => {})
   }
   return audioCtx;
+}
+
+/**
+ * Call once from a user-gesture handler (e.g. "Начать сессию" onClick) to
+ * unlock the AudioContext. On Android Chrome / WebView the context starts
+ * in `suspended` state and the very first oscillator scheduled from a
+ * non-gesture context (like a setTimeout chain) plays silently. Priming
+ * inside an onClick fixes that for the whole page session.
+ */
+export async function primeAudio(): Promise<void> {
+  const ctx = getAudioContext()
+  if (!ctx) return
+  if (ctx.state === 'suspended') {
+    try {
+      await ctx.resume()
+    } catch {
+      // ignored — first play will retry the resume anyway
+    }
+  }
 }
 
 export function playPopSound() {
