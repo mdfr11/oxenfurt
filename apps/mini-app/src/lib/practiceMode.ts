@@ -1,11 +1,38 @@
-export type PracticeMode = 'recognition' | 'cloze' | 'mixed'
+export type PracticeMode =
+  | 'mixed'
+  | 'recognition'
+  | 'cloze'
+  | 'translation'
+  | 'listening'
+
+/**
+ * Per-card rendering variant. Theory cards always degrade to `recognition`
+ * — there's no term to type or audio to test against.
+ */
+export type ExerciseVariant = 'recognition' | 'cloze' | 'translation' | 'listening'
 
 const STORAGE_KEY = 'oxenfurt_practice_mode'
+
+export const PRACTICE_MODES: ReadonlyArray<PracticeMode> = [
+  'mixed',
+  'recognition',
+  'cloze',
+  'translation',
+  'listening',
+]
 
 export function loadPracticeMode(): PracticeMode {
   try {
     const v = localStorage.getItem(STORAGE_KEY)
-    if (v === 'recognition' || v === 'cloze' || v === 'mixed') return v
+    if (
+      v === 'mixed' ||
+      v === 'recognition' ||
+      v === 'cloze' ||
+      v === 'translation' ||
+      v === 'listening'
+    ) {
+      return v
+    }
   } catch {
     // SSR / restricted webview — ignore.
   }
@@ -20,18 +47,33 @@ export function savePracticeMode(mode: PracticeMode): void {
   }
 }
 
+// Variants that `mixed` picks from. Listening is excluded so that mixed
+// sessions don't surprise the user with sudden audio they didn't opt into;
+// pick `listening` explicitly for ear training.
+const MIXED_POOL: ExerciseVariant[] = ['recognition', 'cloze', 'translation']
+
 /**
- * Stable per-card cloze decision for `mixed` mode — same card id always
- * resolves to the same variant within (and across) sessions. Avoids the
- * surprise of re-rolling the format mid-session.
+ * Stable per-card variant for the given global mode. Same card id always
+ * resolves to the same variant so the format doesn't flip mid-session.
+ *
+ * For theory cards the caller should ignore this and use `recognition`.
  */
-export function shouldUseClozeFor(mode: PracticeMode, cardId: string): boolean {
-  if (mode === 'recognition') return false
-  if (mode === 'cloze') return true
-  // mixed — hash uuid
-  let h = 0
-  for (let i = 0; i < cardId.length; i++) {
-    h = ((h << 5) - h + cardId.charCodeAt(i)) | 0
+export function pickVariantFor(mode: PracticeMode, cardId: string): ExerciseVariant {
+  if (mode === 'mixed') {
+    return MIXED_POOL[hashStr(cardId) % MIXED_POOL.length]!
   }
-  return (h & 1) === 0
+  return mode
+}
+
+function hashStr(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0
+  }
+  return Math.abs(h)
+}
+
+// Kept for backward-compat with anything still importing the old name.
+export function shouldUseClozeFor(mode: PracticeMode, cardId: string): boolean {
+  return pickVariantFor(mode, cardId) === 'cloze'
 }

@@ -61,8 +61,8 @@ export function Home({ onStart, onOpenLibrary, userFirstName }: HomeProps) {
       </div>
 
       <div className="flex flex-col gap-3">
-        {/* Mode picker */}
-        <div className="flex gap-1 bg-app-surface border border-app-border rounded-2xl p-1">
+        {/* Mode picker — two rows on narrow screens, one on wider ones */}
+        <div className="grid grid-cols-3 gap-1 bg-app-surface border border-app-border rounded-2xl p-1">
           <ModeChip active={mode === 'mixed'} onClick={() => selectMode('mixed')}>
             Смешанно
           </ModeChip>
@@ -72,6 +72,13 @@ export function Home({ onStart, onOpenLibrary, userFirstName }: HomeProps) {
           <ModeChip active={mode === 'cloze'} onClick={() => selectMode('cloze')}>
             Письмо
           </ModeChip>
+          <ModeChip active={mode === 'translation'} onClick={() => selectMode('translation')}>
+            Перевод
+          </ModeChip>
+          <ModeChip active={mode === 'listening'} onClick={() => selectMode('listening')}>
+            Слух
+          </ModeChip>
+          <span className="invisible" aria-hidden="true" />
         </div>
 
         <p className="text-[11px] text-app-hint text-center -mt-1 mb-1">
@@ -114,7 +121,9 @@ function ModeChip({ active, onClick, children }: { active: boolean; onClick: () 
 }
 
 function modeHelp(mode: PracticeMode): string {
-  if (mode === 'recognition') return 'Видишь слово — вспоминаешь перевод';
-  if (mode === 'cloze') return 'Видишь предложение с пропуском — пишешь слово';
-  return 'Перемешиваю оба варианта';
+  if (mode === 'recognition') return 'Видишь слово — вспоминаешь перевод'
+  if (mode === 'cloze') return 'Видишь предложение с пропуском — пишешь слово'
+  if (mode === 'translation') return 'Видишь перевод — пишешь английское слово'
+  if (mode === 'listening') return 'Слышишь слово — пишешь что услышал'
+  return 'Перемешиваю варианты (без аудио)'
 }

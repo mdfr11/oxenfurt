@@ -21,7 +21,8 @@ import {
 } from '@oxenfurt/shared';
 import { fetchWithAuth } from '../lib/api';
 import { formatInterval, previewIntervals } from '../lib/fsrs';
-import { shouldUseClozeFor, type PracticeMode } from '../lib/practiceMode';
+import { pickVariantFor, type PracticeMode, type ExerciseVariant } from '../lib/practiceMode';
+import { speak, stopSpeaking } from '../lib/tts';
 
 interface PracticeSessionProps {
   mode: PracticeMode;
@@ -156,16 +157,20 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     }
   }, [currentCard])
 
-  // Cloze-mode flag. Only vocab cards have a `term` to type; theory cards
-  // always render in recognition mode regardless of `mode`.
-  const useCloze =
-    currentCard !== undefined &&
-    currentCard.type === 'vocab' &&
-    shouldUseClozeFor(mode, currentCard.id)
+  // Resolve the exercise variant for the current card. Theory always
+  // degrades to `recognition` — it has no term to type or audio to test on.
+  const variant: ExerciseVariant =
+    currentCard === undefined
+      ? 'recognition'
+      : currentCard.type === 'theory'
+        ? 'recognition'
+        : pickVariantFor(mode, currentCard.id)
+
+  const expectsTypedAnswer = variant === 'cloze' || variant === 'translation' || variant === 'listening'
 
   // Reset typed answer + match feedback when the active card changes.
   // React 19 idiomatic: set state during render when an upstream identity
-  // shifts. The two setState calls below get coalesced into one re-render.
+  // shifts. The setState calls below get coalesced into one re-render.
   const [seenCardId, setSeenCardId] = useState<string | undefined>(undefined)
   if (currentCard?.id !== seenCardId) {
     setSeenCardId(currentCard?.id)
@@ -173,34 +178,60 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     setMatchResult(null)
   }
 
-  // Auto-focus the cloze input — this is a real DOM side-effect, so it
-  // legitimately belongs in useEffect. The state resets above already
-  // happened by the time this runs.
+  // Auto-focus the input when we're in a typing variant.
   useEffect(() => {
-    if (useCloze && !isRevealed && currentCard) {
+    if (expectsTypedAnswer && !isRevealed && currentCard) {
       const t = setTimeout(() => inputRef.current?.focus(), 50)
       return () => clearTimeout(t)
     }
     return undefined
-  }, [currentCard?.id, useCloze, isRevealed, currentCard])
+  }, [currentCard?.id, expectsTypedAnswer, isRevealed, currentCard])
+
+  // Listening variant: pronounce the term on card show.
+  useEffect(() => {
+    if (variant === 'listening' && !isRevealed && currentCard?.type === 'vocab') {
+      const vocab = currentCard.payload as VocabPayload
+      // Small delay so the card animation finishes before audio starts.
+      const t = setTimeout(() => { void speak(vocab.term) }, 250)
+      return () => {
+        clearTimeout(t)
+        stopSpeaking()
+      }
+    }
+    return undefined
+  }, [currentCard?.id, variant, isRevealed, currentCard])
+
+  // Stop any pronunciation when leaving the screen.
+  useEffect(() => () => stopSpeaking(), [])
 
   const handleReveal = () => {
-    if (!isRevealed && !useCloze) {
+    // Recognition variants reveal on tap; typed variants reveal via submit.
+    if (!isRevealed && !expectsTypedAnswer) {
       setIsRevealed(true);
       safeHaptic('impactOccurred', 'light')
     }
   };
 
-  const handleClozeSubmit = () => {
-    if (isRevealed || !useCloze || !currentCard) return;
+  const handleAnswerSubmit = () => {
+    if (isRevealed || !expectsTypedAnswer || !currentCard || currentCard.type !== 'vocab') return;
     const vocabPayload = currentCard.payload as VocabPayload;
-    const expected = extractClozeTerm(vocabPayload);
+    const expected =
+      variant === 'cloze'
+        ? extractClozeTerm(vocabPayload)
+        : vocabPayload.term;
     const result = matchAnswer(typedAnswer, expected);
     setMatchResult(result);
     setIsRevealed(true);
     if (result.kind === 'exact') safeHaptic('notificationOccurred', 'success')
     else if (result.kind === 'close') safeHaptic('impactOccurred', 'medium')
     else safeHaptic('notificationOccurred', 'error')
+  };
+
+  const handleReplayAudio = () => {
+    if (currentCard?.type !== 'vocab') return
+    const vocab = currentCard.payload as VocabPayload
+    void speak(vocab.term)
+    safeHaptic('selectionChanged')
   };
 
   const handleRate = (rating: Rating) => {
@@ -301,7 +332,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   // Sentence with the target term replaced by an underline blank — used as
   // the cloze prompt. Falls back gracefully if the offsets look bogus.
-  const clozePrompt = vocab && useCloze ? buildClozeSentence(vocab) : null;
+  const clozePrompt = vocab && variant === 'cloze' ? buildClozeSentence(vocab) : null;
 
   // Split sentence logic for target term highlighting
   const renderSentenceWithHighlight = (sentence: string, term: string) => {
@@ -338,11 +369,11 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
       <div className="flex-1 px-4 flex items-center justify-center">
         <motion.div
-          onClick={useCloze ? undefined : handleReveal}
+          onClick={expectsTypedAnswer ? undefined : handleReveal}
           className={`w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center relative border border-app-border shadow-xl ${
-            useCloze ? '' : 'cursor-pointer'
+            expectsTypedAnswer ? '' : 'cursor-pointer'
           }`}
-          whileTap={useCloze ? undefined : { scale: 0.98 }}
+          whileTap={expectsTypedAnswer ? undefined : { scale: 0.98 }}
         >
           <AnimatePresence mode="wait">
             {!isRevealed ? (
@@ -353,36 +384,51 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                 exit={{ opacity: 0, scale: 1.1 }}
                 className="flex flex-col items-center gap-6 w-full"
               >
-                {useCloze && vocab && clozePrompt ? (
+                {variant === 'cloze' && vocab && clozePrompt ? (
                   <>
                     <p className="text-lg text-app-text leading-relaxed">
                       {clozePrompt.before}
                       <span className="text-app-primary font-bold">{'_'.repeat(Math.max(3, Math.min(12, clozePrompt.targetLength)))}</span>
                       {clozePrompt.after}
                     </p>
-                    <input
-                      ref={inputRef}
-                      type="text"
+                    <TypedAnswerField
+                      inputRef={inputRef}
                       value={typedAnswer}
-                      onChange={(e) => setTypedAnswer(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleClozeSubmit();
-                        }
-                      }}
+                      onChange={setTypedAnswer}
+                      onSubmit={handleAnswerSubmit}
                       placeholder="Введи слово"
-                      autoCapitalize="off"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      className="w-full max-w-[240px] text-center text-lg bg-app-bg border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary"
                     />
+                  </>
+                ) : variant === 'translation' && vocab ? (
+                  <>
+                    <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Перевод</div>
+                    <h2 className="text-2xl font-bold leading-snug">{vocab.translation}</h2>
+                    <TypedAnswerField
+                      inputRef={inputRef}
+                      value={typedAnswer}
+                      onChange={setTypedAnswer}
+                      onSubmit={handleAnswerSubmit}
+                      placeholder="Type in English"
+                    />
+                  </>
+                ) : variant === 'listening' && vocab ? (
+                  <>
+                    <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Слушай</div>
                     <button
-                      onClick={handleClozeSubmit}
-                      className="w-full max-w-[240px] py-3 rounded-xl bg-app-primary text-app-primary-text font-semibold active:scale-95 transition-transform"
+                      onClick={handleReplayAudio}
+                      className="w-20 h-20 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-3xl active:scale-95 transition-transform"
+                      aria-label="Replay"
                     >
-                      Готово
+                      🔊
                     </button>
+                    <p className="text-[11px] text-app-hint">Тап чтобы повторить</p>
+                    <TypedAnswerField
+                      inputRef={inputRef}
+                      value={typedAnswer}
+                      onChange={setTypedAnswer}
+                      onSubmit={handleAnswerSubmit}
+                      placeholder="Type what you heard"
+                    />
                   </>
                 ) : vocab ? (
                   <>
@@ -398,7 +444,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                     {theory.question}
                   </h2>
                 ) : null}
-                {currentCard!.source && !useCloze && (
+                {currentCard!.source && !expectsTypedAnswer && (
                   <div className="absolute bottom-10 text-[10px] text-app-hint uppercase tracking-[0.2em] font-bold opacity-40">
                     {currentCard!.source}
                   </div>
@@ -411,7 +457,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                 animate={{ opacity: 1, scale: 1 }}
                 className="flex flex-col items-center gap-5"
               >
-                {matchResult && useCloze && (
+                {matchResult && expectsTypedAnswer && (
                   <ClozeFeedback result={matchResult} typedAnswer={typedAnswer} />
                 )}
                 {vocab ? (
@@ -435,7 +481,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
             )}
           </AnimatePresence>
 
-          {!isRevealed && !useCloze && (
+          {!isRevealed && !expectsTypedAnswer && (
             <div className="absolute inset-x-0 bottom-4 text-[9px] text-app-hint opacity-30 uppercase font-bold tracking-[0.3em]">
               Tap to reveal
             </div>
@@ -459,6 +505,48 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       </div>
     </div>
   );
+}
+
+function TypedAnswerField({
+  inputRef,
+  value,
+  onChange,
+  onSubmit,
+  placeholder,
+}: {
+  inputRef: React.RefObject<HTMLInputElement | null>
+  value: string
+  onChange: (v: string) => void
+  onSubmit: () => void
+  placeholder: string
+}) {
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            onSubmit()
+          }
+        }}
+        placeholder={placeholder}
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        className="w-full max-w-[240px] text-center text-lg bg-app-bg border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary"
+      />
+      <button
+        onClick={onSubmit}
+        className="w-full max-w-[240px] py-3 rounded-xl bg-app-primary text-app-primary-text font-semibold active:scale-95 transition-transform"
+      >
+        Готово
+      </button>
+    </>
+  )
 }
 
 function RatingButton({ label, sub, bg, color, onClick }: { label: string; sub: string; bg: string; color: string; onClick: () => void }) {
