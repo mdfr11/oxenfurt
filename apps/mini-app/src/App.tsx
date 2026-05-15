@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRawInitData, useLaunchParams, retrieveLaunchParams } from '@telegram-apps/sdk-react';
 import { Spinner } from '@telegram-apps/telegram-ui';
-import { loginWithTelegram, setToken } from './lib/api';
+import { API_BASE, loginWithTelegram, setToken } from './lib/api';
 import { PracticeSession } from './components/PracticeSession';
 import { Home } from './components/Home';
 import { Summary } from './components/Summary';
@@ -29,8 +29,6 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
     async function auth() {
-      const API_BASE = import.meta.env.VITE_API_URL ?? (typeof window !== 'undefined' ? window.location.origin + '/api' : 'http://localhost:3000');
-
       // Dev path: backend issues a dev token without HMAC validation.
       // Production: real Telegram initData → /auth/session.
       if (import.meta.env.DEV) {

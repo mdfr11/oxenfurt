@@ -1,6 +1,22 @@
-// Empty string is a valid prod value (same-origin via reverse proxy).
-// Only fall back to the dev backend when the env var is *missing*.
-const API_BASE = import.meta.env.VITE_API_URL ?? (typeof window !== 'undefined' ? window.location.origin + '/api' : 'http://localhost:3000');
+// Resolves the API origin once at module load. Three cases:
+//   1. VITE_API_URL is set to a non-empty value → use it verbatim.
+//   2. import.meta.env.DEV → talk to the dev backend on localhost:3000.
+//   3. Prod default → same-origin reverse proxy at `<origin>/api`.
+//
+// The empty-string case is treated as "unset" deliberately — deploy.sh
+// historically passed `VITE_API_URL=''` to mean "auto-detect", and a strict
+// `??` here previously left API_BASE='' which made every fetch resolve
+// against the current page (`/auth/session` instead of `/api/auth/session`)
+// and Caddy's SPA fallback served `index.html` to the data layer.
+export const API_BASE: string = resolveApiBase()
+
+function resolveApiBase(): string {
+  const env = import.meta.env.VITE_API_URL
+  if (typeof env === 'string' && env.length > 0) return env
+  if (import.meta.env.DEV) return 'http://localhost:3000'
+  if (typeof window !== 'undefined') return `${window.location.origin}/api`
+  return ''
+}
 
 const TOKEN_KEY = 'oxenfurt_token';
 
