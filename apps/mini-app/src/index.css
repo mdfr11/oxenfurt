@@ -1,16 +1,25 @@
 @import "tailwindcss";
 
 @theme {
-  --color-tg-bg: var(--tg-theme-bg-color);
-  --color-tg-secondary-bg: var(--tg-theme-secondary-bg-color);
-  --color-tg-text: var(--tg-theme-text-color);
-  --color-tg-hint: var(--tg-theme-hint-color);
-  --color-tg-link: var(--tg-theme-link-color);
-  --color-tg-button: var(--tg-theme-button-color);
-  --color-tg-button-text: var(--tg-theme-button-text-color);
+  --color-app-bg: var(--app-bg);
+  --color-app-surface: var(--app-surface);
+  --color-app-text: var(--app-text);
+  --color-app-hint: var(--app-hint);
+  --color-app-primary: var(--app-primary);
+  --color-app-primary-text: var(--app-primary-text);
+  --color-app-border: var(--app-border);
 }
 
 :root {
+  /* Light Theme Defaults (Independent of Telegram) */
+  --app-bg: #f4f4f5; /* zinc-100 */
+  --app-surface: #ffffff;
+  --app-text: #09090b; /* zinc-950 */
+  --app-hint: #71717a; /* zinc-500 */
+  --app-primary: #4f46e5; /* indigo-600 */
+  --app-primary-text: #ffffff;
+  --app-border: #e4e4e7; /* zinc-200 */
+
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -19,11 +28,35 @@
   --tg-viewport-height: 100vh;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark Theme Defaults */
+    --app-bg: #09090b; /* zinc-950 */
+    --app-surface: #18181b; /* zinc-900 */
+    --app-text: #fafafa; /* zinc-50 */
+    --app-hint: #a1a1aa; /* zinc-400 */
+    --app-primary: #6366f1; /* indigo-500 */
+    --app-primary-text: #ffffff;
+    --app-border: #27272a; /* zinc-800 */
+  }
+}
+
+/* Override if Telegram actually provides dark mode, to sync with app wrapper */
+.tgui-app-root[data-appearance="dark"] {
+    --app-bg: #09090b;
+    --app-surface: #18181b;
+    --app-text: #fafafa;
+    --app-hint: #a1a1aa;
+    --app-primary: #6366f1;
+    --app-primary-text: #ffffff;
+    --app-border: #27272a;
+}
+
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--tg-theme-secondary-bg-color);
-  color: var(--tg-theme-text-color);
+  background-color: var(--app-bg);
+  color: var(--app-text);
   overflow-x: hidden;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -39,10 +72,14 @@ body {
   width: 100%;
   display: flex;
   flex-direction: column;
-  background-color: var(--tg-theme-bg-color);
+  background-color: var(--app-bg);
   position: relative;
 }
 
 .card-shadow {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1);
+}
+
+.tgui-app-root[data-appearance="dark"] .card-shadow {
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.4);
 }

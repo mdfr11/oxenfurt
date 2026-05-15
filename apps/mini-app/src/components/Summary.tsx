@@ -38,29 +38,29 @@ export function Summary({ stats, onFinish, onRepeatHard }: SummaryProps) {
 
   return (
     <div
-      className="flex-1 flex flex-col p-6 justify-between bg-tg-bg"
+      className="flex-1 flex flex-col p-6 justify-between bg-app-bg text-app-text"
       style={{
         paddingTop: `calc(1.5rem + var(--tg-safe-area-inset-top, 0px))`,
         paddingBottom: `calc(2rem + var(--tg-safe-area-inset-bottom, 0px))`,
       }}
     >
       <div className="flex-1 flex flex-col items-center justify-center text-center">
-        <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-lg mb-6">
+        <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 mb-6">
           <CheckCircle2 size={40} />
         </div>
         <h1 className="text-2xl font-bold mb-2">Сессия завершена</h1>
-        <p className="text-tg-hint mb-10">
+        <p className="text-app-hint mb-10">
           Ты повторил {stats.total} {pluralize(stats.total, ['карточку', 'карточки', 'карточек'])}.
         </p>
 
-        <div className="w-full grid grid-cols-2 gap-4 bg-tg-secondary-bg p-6 rounded-2xl">
+        <div className="w-full grid grid-cols-2 gap-4 bg-app-surface border border-app-border p-6 rounded-2xl shadow-sm">
           <div className="flex flex-col">
             <span className="text-2xl font-bold">{accuracy}%</span>
-            <span className="text-[10px] uppercase tracking-wider text-tg-hint font-bold">Точность</span>
+            <span className="text-[10px] uppercase tracking-wider text-app-hint font-bold mt-1">Точность</span>
           </div>
           <div className="flex flex-col">
             <span className="text-2xl font-bold">{wrong}</span>
-            <span className="text-[10px] uppercase tracking-wider text-tg-hint font-bold">Ошибок</span>
+            <span className="text-[10px] uppercase tracking-wider text-app-hint font-bold mt-1">Ошибок</span>
           </div>
         </div>
       </div>
@@ -68,14 +68,14 @@ export function Summary({ stats, onFinish, onRepeatHard }: SummaryProps) {
       <div className="flex flex-col gap-3">
         {wrong > 0 && (
           <button 
-            className="w-full bg-tg-secondary-bg text-tg-text py-4 rounded-xl font-semibold active:scale-95 transition-transform"
+            className="w-full bg-app-surface border border-app-border text-app-text py-4 rounded-2xl font-semibold active:scale-95 transition-transform"
             onClick={onRepeatHard}
           >
             Повторить трудные
           </button>
         )}
         <button 
-          className="w-full bg-tg-button text-tg-button-text py-4 rounded-xl font-semibold active:scale-95 transition-transform shadow-md"
+          className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
           onClick={onFinish}
         >
           Завершить

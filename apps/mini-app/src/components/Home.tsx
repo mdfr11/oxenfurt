@@ -47,18 +47,18 @@ export function Home({ onStart, onReviewDrafts, userFirstName }: HomeProps) {
 
   return (
     <div
-      className="flex-1 flex flex-col p-6 justify-between bg-tg-bg"
+      className="flex-1 flex flex-col p-6 justify-between bg-app-bg text-app-text"
       style={{
         paddingTop: `calc(1.5rem + var(--tg-safe-area-inset-top, 0px))`,
         paddingBottom: `calc(2rem + var(--tg-safe-area-inset-bottom, 0px))`,
       }}
     >
       <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="w-24 h-24 bg-tg-button rounded-[2rem] flex items-center justify-center text-tg-button-text shadow-lg mb-8">
-          <BookOpen size={48} />
+        <div className="w-24 h-24 bg-app-surface border border-app-border rounded-[2rem] flex items-center justify-center text-app-primary shadow-sm mb-8">
+          <BookOpen size={48} strokeWidth={1.5} />
         </div>
         <h1 className="text-3xl font-bold mb-2">Oxenfurt</h1>
-        <p className="text-tg-hint text-center max-w-[280px]">
+        <p className="text-app-hint text-center max-w-[280px]">
           {userFirstName ? `Привет, ${userFirstName}! ` : ''}
           Твои карточки готовы к повторению.
         </p>
@@ -68,18 +68,18 @@ export function Home({ onStart, onReviewDrafts, userFirstName }: HomeProps) {
         {draftCount > 0 && (
           <button
             onClick={onReviewDrafts}
-            className="w-full flex items-center justify-between px-5 py-4 rounded-xl border border-tg-button/30 bg-tg-button/5 active:scale-95 transition-transform"
+            className="w-full flex items-center justify-between px-5 py-4 rounded-2xl border border-app-primary/20 bg-app-primary/5 active:scale-95 transition-transform"
           >
             <span className="flex items-center gap-3 text-left">
-              <FileText className="text-tg-button shrink-0" size={20} />
+              <FileText className="text-app-primary shrink-0" size={20} />
               <span>
                 <span className="font-semibold block">Theory на одобрение</span>
-                <span className="text-xs text-tg-hint">
+                <span className="text-xs text-app-hint">
                   {draftCount} {pluralizeDrafts(draftCount)} ждёт твоего «да»
                 </span>
               </span>
             </span>
-            <span className="bg-tg-button text-tg-button-text text-xs font-bold rounded-full min-w-[1.5rem] h-6 px-2 flex items-center justify-center">
+            <span className="bg-app-primary text-app-primary-text text-xs font-bold rounded-full min-w-[1.5rem] h-6 px-2 flex items-center justify-center">
               {draftCount}
             </span>
           </button>
@@ -87,7 +87,7 @@ export function Home({ onStart, onReviewDrafts, userFirstName }: HomeProps) {
 
         {/* In-webview fallback for dev / non-Telegram environments. */}
         <button
-          className="w-full bg-tg-button text-tg-button-text py-4 rounded-xl font-semibold text-lg active:scale-95 transition-transform shadow-md"
+          className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
           onClick={onStart}
         >
           Начать сессию

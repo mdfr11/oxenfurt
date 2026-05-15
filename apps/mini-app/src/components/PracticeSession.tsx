@@ -188,7 +188,7 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
       <p className="text-xl leading-relaxed">
         {parts.map((part, i) => 
           part.toLowerCase() === term.toLowerCase() 
-            ? <span key={i} className="text-tg-link font-bold underline decoration-2 underline-offset-4">{part}</span>
+            ? <span key={i} className="text-app-primary font-bold underline decoration-2 underline-offset-4">{part}</span>
             : <span key={i}>{part}</span>
         )}
       </p>
@@ -196,25 +196,25 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-tg-bg overflow-hidden">
+    <div className="flex-1 flex flex-col bg-app-bg text-app-text overflow-hidden">
       {/* Progress Bar */}
-      <div className="h-1 w-full bg-black/5">
+      <div className="h-1 w-full bg-black/5 dark:bg-white/5">
         <motion.div
-          className="h-full bg-tg-button"
+          className="h-full bg-app-primary"
           initial={{ width: 0 }}
           animate={{ width: `${progress}%` }}
         />
       </div>
 
-      <div className="p-4 flex justify-between items-center text-[10px] text-tg-hint uppercase tracking-wider font-bold">
+      <div className="p-4 flex justify-between items-center text-[10px] text-app-hint uppercase tracking-wider font-bold">
         <span>Карточка {currentIndex + 1} / {cards.length}</span>
-        {currentCard!.type === 'theory' && <span className="text-tg-link">📖 Theory</span>}
+        {currentCard!.type === 'theory' && <span className="text-app-primary">📖 Theory</span>}
       </div>
 
       <div className="flex-1 px-4 flex items-center justify-center">
         <motion.div
           onClick={handleReveal}
-          className="w-full aspect-[3/4] bg-tg-bg rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center relative border border-black/5 shadow-xl cursor-pointer"
+          className="w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center relative border border-app-border shadow-xl cursor-pointer"
           whileTap={{ scale: 0.98 }}
         >
           <AnimatePresence mode="wait">
@@ -231,7 +231,7 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
                     <h2 className="text-4xl font-bold tracking-tight">
                       {vocab.term}
                     </h2>
-                    <p className="text-xl text-tg-text leading-relaxed">
+                    <p className="text-xl text-app-text leading-relaxed">
                       "{vocab.context_sentence}"
                     </p>
                   </>
@@ -241,7 +241,7 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
                   </h2>
                 ) : null}
                 {currentCard!.source && (
-                  <div className="absolute bottom-10 text-[10px] text-tg-hint uppercase tracking-[0.2em] font-bold opacity-40">
+                  <div className="absolute bottom-10 text-[10px] text-app-hint uppercase tracking-[0.2em] font-bold opacity-40">
                     {currentCard!.source}
                   </div>
                 )}
@@ -255,7 +255,7 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
               >
                 {vocab ? (
                   <>
-                    <span className="bg-tg-button/10 text-tg-button px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
+                    <span className="bg-app-primary/10 text-app-primary px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
                       {vocab.translation}
                     </span>
                     {renderSentenceWithHighlight(vocab.context_sentence, vocab.term)}
@@ -264,7 +264,7 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
                   <>
                     <p className="text-xl">{theory.answer}</p>
                     {currentCard!.source_quote && (
-                      <p className="text-sm text-tg-hint italic">
+                      <p className="text-sm text-app-hint italic">
                         Из урока: «{currentCard!.source_quote}»
                       </p>
                     )}
@@ -275,7 +275,7 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
           </AnimatePresence>
 
           {!isRevealed && (
-            <div className="absolute inset-x-0 bottom-4 text-[9px] text-tg-hint opacity-30 uppercase font-bold tracking-[0.3em]">
+            <div className="absolute inset-x-0 bottom-4 text-[9px] text-app-hint opacity-30 uppercase font-bold tracking-[0.3em]">
               Tap to reveal
             </div>
           )}
@@ -290,24 +290,24 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
         style={{ paddingBottom: `calc(2.5rem + var(--tg-safe-area-inset-bottom, 0px))` }}
       >
         <div className="flex gap-2 h-16">
-          <RatingButton label="Снова" sub={intervalLabels?.[RATING.Again] ?? '…'} color="text-rose-500" onClick={() => handleRate(RATING.Again)} />
-          <RatingButton label="Трудно" sub={intervalLabels?.[RATING.Hard] ?? '…'} color="text-orange-500" onClick={() => handleRate(RATING.Hard)} />
-          <RatingButton label="Хорошо" sub={intervalLabels?.[RATING.Good] ?? '…'} color="text-blue-500" onClick={() => handleRate(RATING.Good)} />
-          <RatingButton label="Легко" sub={intervalLabels?.[RATING.Easy] ?? '…'} color="text-emerald-500" onClick={() => handleRate(RATING.Easy)} />
+          <RatingButton label="Снова" sub={intervalLabels?.[RATING.Again] ?? '…'} bg="bg-rose-500/10" color="text-rose-600 dark:text-rose-400" onClick={() => handleRate(RATING.Again)} />
+          <RatingButton label="Трудно" sub={intervalLabels?.[RATING.Hard] ?? '…'} bg="bg-orange-500/10" color="text-orange-600 dark:text-orange-400" onClick={() => handleRate(RATING.Hard)} />
+          <RatingButton label="Хорошо" sub={intervalLabels?.[RATING.Good] ?? '…'} bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" onClick={() => handleRate(RATING.Good)} />
+          <RatingButton label="Легко" sub={intervalLabels?.[RATING.Easy] ?? '…'} bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" onClick={() => handleRate(RATING.Easy)} />
         </div>
       </div>
     </div>
   );
 }
 
-function RatingButton({ label, sub, color, onClick }: { label: string; sub: string; color: string; onClick: () => void }) {
+function RatingButton({ label, sub, bg, color, onClick }: { label: string; sub: string; bg: string; color: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex-1 flex flex-col items-center justify-center gap-0.5 rounded-2xl border border-black/5 bg-tg-bg active:scale-95 transition-transform"
+      className={`flex-1 flex flex-col items-center justify-center gap-0.5 rounded-2xl active:scale-95 transition-transform ${bg}`}
     >
       <span className={`text-[13px] font-bold ${color}`}>{label}</span>
-      <span className="text-[10px] text-tg-hint font-medium opacity-60 uppercase">{sub}</span>
+      <span className={`text-[10px] font-medium opacity-60 uppercase ${color}`}>{sub}</span>
     </button>
   );
 }
