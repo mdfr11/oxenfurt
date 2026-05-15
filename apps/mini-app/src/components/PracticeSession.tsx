@@ -159,7 +159,7 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
 
   if (isLoading) {
     return (
-      <div className="h-screen flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center">
         <Spinner size="l" />
       </div>
     );
@@ -167,7 +167,7 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
 
   if (error || cards.length === 0) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center p-6 text-center">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
         <h2 className="text-xl font-bold mb-2">Нет карточек на сегодня</h2>
         <p className="text-tg-hint mb-6">Отдыхай или загрузи новый транскрипт!</p>
         <button onClick={onExit} className="text-tg-link font-semibold">Вернуться</button>
@@ -178,8 +178,25 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
   const vocab = currentCard!.type === 'vocab' ? (currentCard!.payload as VocabPayload) : null;
   const theory = currentCard!.type === 'theory' ? (currentCard!.payload as TheoryPayload) : null;
 
+  // Split sentence logic for target term highlighting
+  const renderSentenceWithHighlight = (sentence: string, term: string) => {
+    if (!term || !sentence.includes(term)) return <p className="text-xl leading-relaxed">{sentence}</p>;
+    
+    const parts = sentence.split(new RegExp(`(${term})`, 'gi'));
+    
+    return (
+      <p className="text-xl leading-relaxed">
+        {parts.map((part, i) => 
+          part.toLowerCase() === term.toLowerCase() 
+            ? <span key={i} className="text-tg-link font-bold underline decoration-2 underline-offset-4">{part}</span>
+            : <span key={i}>{part}</span>
+        )}
+      </p>
+    );
+  };
+
   return (
-    <div className="flex flex-col h-screen bg-tg-bg overflow-hidden">
+    <div className="flex-1 flex flex-col bg-tg-bg overflow-hidden">
       {/* Progress Bar */}
       <div className="h-1 w-full bg-black/5">
         <motion.div
@@ -241,9 +258,7 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
                     <span className="bg-tg-button/10 text-tg-button px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
                       {vocab.translation}
                     </span>
-                    <p className="text-xl leading-relaxed">
-                      {vocab.context_sentence}
-                    </p>
+                    {renderSentenceWithHighlight(vocab.context_sentence, vocab.term)}
                   </>
                 ) : theory ? (
                   <>

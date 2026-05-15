@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { Button } from '@telegram-apps/telegram-ui';
 import { mainButton } from '@telegram-apps/sdk-react';
 import { BookOpen } from 'lucide-react';
 
@@ -31,7 +30,7 @@ export function Home({ onStart, userFirstName }: HomeProps) {
 
   return (
     <div
-      className="flex flex-col h-screen p-6 justify-between bg-tg-bg"
+      className="flex-1 flex flex-col p-6 justify-between bg-tg-bg"
       style={{
         paddingTop: `calc(1.5rem + var(--tg-safe-area-inset-top, 0px))`,
         paddingBottom: `calc(2rem + var(--tg-safe-area-inset-bottom, 0px))`,
@@ -49,9 +48,12 @@ export function Home({ onStart, userFirstName }: HomeProps) {
       </div>
 
       {/* In-webview fallback for dev / non-Telegram environments. */}
-      <Button size="l" stretched onClick={onStart}>
+      <button 
+        className="w-full bg-tg-button text-tg-button-text py-4 rounded-xl font-semibold text-lg active:scale-95 transition-transform shadow-md"
+        onClick={onStart}
+      >
         Начать сессию
-      </Button>
+      </button>
     </div>
   );
 }

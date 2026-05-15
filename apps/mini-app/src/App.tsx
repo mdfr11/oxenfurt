@@ -65,43 +65,39 @@ export default function App() {
     }
   }, [initDataRaw]);
 
-  if (screen === 'loading') {
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <Spinner size="l" />
-      </div>
-    );
-  }
-
-  if (screen === 'practice') {
-    return (
-      <PracticeSession
-        onComplete={(total, correct) => {
-          setStats({ total, correct });
-          setScreen('summary');
-        }}
-        onExit={() => setScreen('home')}
-      />
-    );
-  }
-
-  if (screen === 'summary') {
-    return (
-      <Summary
-        stats={stats}
-        onFinish={() => setScreen('home')}
-        onRepeatHard={() => setScreen('practice')}
-      />
-    );
-  }
-
   return (
-    <Home
-      onStart={() => setScreen('practice')}
-      userFirstName={userFirstName}
-    />
+    <div className="app-container">
+      {screen === 'loading' && (
+        <div className="flex-1 flex items-center justify-center">
+          <Spinner size="l" />
+        </div>
+      )}
+      {screen === 'practice' && (
+        <PracticeSession
+          onComplete={(total, correct) => {
+            setStats({ total, correct });
+            setScreen('summary');
+          }}
+          onExit={() => setScreen('home')}
+        />
+      )}
+      {screen === 'summary' && (
+        <Summary
+          stats={stats}
+          onFinish={() => setScreen('home')}
+          onRepeatHard={() => setScreen('practice')}
+        />
+      )}
+      {screen === 'home' && (
+        <Home
+          onStart={() => setScreen('practice')}
+          userFirstName={userFirstName}
+        />
+      )}
+    </div>
   );
 }
+
 
 function safeRetrieveInitData(): string | undefined {
   try {

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Button } from '@telegram-apps/telegram-ui';
-
+import { sendData } from '@telegram-apps/sdk-react';
 import { CheckCircle2 } from 'lucide-react';
 
 interface SummaryProps {
@@ -29,7 +28,7 @@ export function Summary({ stats, onFinish, onRepeatHard }: SummaryProps) {
         accuracy_percent: accuracy,
         finished_at: new Date().toISOString(),
       })
-      payload(payload)
+      sendData(payload)
     } catch {
       // sendData is only available when the Mini App was opened inline (web_app
       // button from a bot). Not available in dev or when opened from a direct
@@ -39,7 +38,7 @@ export function Summary({ stats, onFinish, onRepeatHard }: SummaryProps) {
 
   return (
     <div
-      className="flex flex-col h-screen p-6 justify-between bg-tg-bg"
+      className="flex-1 flex flex-col p-6 justify-between bg-tg-bg"
       style={{
         paddingTop: `calc(1.5rem + var(--tg-safe-area-inset-top, 0px))`,
         paddingBottom: `calc(2rem + var(--tg-safe-area-inset-bottom, 0px))`,
@@ -68,13 +67,19 @@ export function Summary({ stats, onFinish, onRepeatHard }: SummaryProps) {
 
       <div className="flex flex-col gap-3">
         {wrong > 0 && (
-          <Button mode="gray" stretched size="l" onClick={onRepeatHard}>
+          <button 
+            className="w-full bg-tg-secondary-bg text-tg-text py-4 rounded-xl font-semibold active:scale-95 transition-transform"
+            onClick={onRepeatHard}
+          >
             Повторить трудные
-          </Button>
+          </button>
         )}
-        <Button stretched size="l" onClick={onFinish}>
+        <button 
+          className="w-full bg-tg-button text-tg-button-text py-4 rounded-xl font-semibold active:scale-95 transition-transform shadow-md"
+          onClick={onFinish}
+        >
           Завершить
-        </Button>
+        </button>
       </div>
     </div>
   );
