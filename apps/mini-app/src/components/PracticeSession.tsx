@@ -77,16 +77,6 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   const sessionIdRef = useRef<string | null>(null)
   const sessionFinishedRef = useRef(false)
 
-  // Flush any pending review before unmounting
-  useEffect(() => {
-    return () => {
-      if (pendingReview) {
-        clearTimeout(pendingReview.timeoutId);
-        reviewMutation.mutate({ id: pendingReview.id, rating: pendingReview.rating });
-      }
-    };
-  }, [pendingReview]);
-
   useEffect(() => {
     let cancelled = false
     void (async () => {
@@ -165,6 +155,19 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       return res.json();
     },
   });
+
+  // Flush any pending review on unmount — the undo-window timer is in-memory
+  // only, so if the user exits before it fires, we still want the rating
+  // to land on the server.
+  useEffect(() => {
+    return () => {
+      if (pendingReview) {
+        clearTimeout(pendingReview.timeoutId);
+        reviewMutation.mutate({ id: pendingReview.id, rating: pendingReview.rating });
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingReview]);
 
   const cards = data?.cards ?? [];
   const currentCard = cards[currentIndex];
