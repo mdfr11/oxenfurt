@@ -1,9 +1,14 @@
+import { getSettings } from './settings';
+
 // A simple Web Audio API synthesizer for UI sounds. No external assets.
 
 let audioCtx: AudioContext | null = null;
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
+  const { soundEnabled } = getSettings();
+  if (!soundEnabled) return null;
+
   if (!audioCtx) {
     // webkitAudioContext: older Safari prefix. Widen the lookup just enough
     // to avoid an explicit `any`.

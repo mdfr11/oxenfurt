@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { mainButton } from '@telegram-apps/sdk-react';
-import { BookOpen, Library as LibraryIcon, BarChart3 } from 'lucide-react';
+import { BookOpen, Library as LibraryIcon, BarChart3, Settings } from 'lucide-react';
 import {
   loadPracticeMode,
   savePracticeMode,
@@ -8,6 +8,7 @@ import {
 } from '../lib/practiceMode';
 import { primeSpeech } from '../lib/tts';
 import { primeAudio } from '../lib/audio';
+import { SettingsSheet } from './SettingsSheet';
 
 interface HomeProps {
   onStart: (mode: PracticeMode) => void;
@@ -18,6 +19,7 @@ interface HomeProps {
 
 export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: HomeProps) {
   const [mode, setMode] = useState<PracticeMode>(() => loadPracticeMode());
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   function selectMode(next: PracticeMode) {
     setMode(next);
@@ -29,12 +31,16 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
     try {
-      mainButton.setParams({ text: 'Начать сессию', isVisible: true, isEnabled: true })
-      unsubscribe = mainButton.onClick(() => {
-        primeSpeech()
-        void primeAudio()
-        onStart(mode)
-      })
+      if (!isSettingsOpen) {
+        mainButton.setParams({ text: 'Начать сессию', isVisible: true, isEnabled: true })
+        unsubscribe = mainButton.onClick(() => {
+          primeSpeech()
+          void primeAudio()
+          onStart(mode)
+        })
+      } else {
+        mainButton.setParams({ isVisible: false })
+      }
     } catch {
       // SDK not mounted — fine, the in-webview button still works
     }
@@ -46,16 +52,24 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
         // ditto
       }
     }
-  }, [onStart, mode])
+  }, [onStart, mode, isSettingsOpen])
 
   return (
     <div
-      className="flex-1 flex flex-col p-6 justify-between bg-app-bg text-app-text"
+      className="flex-1 flex flex-col p-6 justify-between bg-app-bg text-app-text relative"
       style={{
         paddingTop: `calc(1.5rem + var(--tg-safe-area-inset-top, 0px))`,
         paddingBottom: `calc(2rem + var(--tg-safe-area-inset-bottom, 0px))`,
       }}
     >
+      <button 
+        onClick={() => setIsSettingsOpen(true)}
+        className="absolute top-6 right-6 p-2 text-app-hint active:opacity-60 transition-opacity"
+        aria-label="Настройки"
+      >
+        <Settings size={24} />
+      </button>
+
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="w-24 h-24 bg-app-surface border border-app-border rounded-[2rem] flex items-center justify-center text-app-primary shadow-sm mb-8">
           <BookOpen size={48} strokeWidth={1.5} />
@@ -96,12 +110,6 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
         <button
           className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
           onClick={() => {
-            // Unlock both audio paths from this real user gesture:
-            //   * speechSynthesis — required for TTS in "Слух" / 🔊 button.
-            //   * AudioContext     — required for UI feedback sounds
-            //                         (pop / thud) on Android WebView.
-            // Without this priming, mobile browsers silently drop the first
-            // play because there hasn't been a recent gesture in their model.
             primeSpeech()
             void primeAudio()
             onStart(mode)
@@ -127,6 +135,8 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
           </button>
         </div>
       </div>
+      
+      <SettingsSheet isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }

@@ -72,11 +72,20 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
   app.get('/due', async (c) => {
     const limitRaw = c.req.query('limit') ?? '20'
     const limit = Math.max(1, Math.min(100, Number.parseInt(limitRaw, 10) || 20))
+    // bypass_due=true → return all active cards regardless of FSRS schedule.
+    // The "I want to drill anyway" escape hatch for when the user blew
+    // through the queue but still has appetite. FSRS state updates on
+    // review just the same — early-reviewed cards get rescheduled.
+    const bypassDue = c.req.query('bypass_due') === 'true'
+
+    const condition = bypassDue
+      ? eq(cards.status, 'active')
+      : and(eq(cards.status, 'active'), lte(cards.due, now()))
 
     const rows = await deps.db
       .select()
       .from(cards)
-      .where(and(eq(cards.status, 'active'), lte(cards.due, now())))
+      .where(condition)
       .orderBy(asc(cards.due))
       .limit(limit)
 

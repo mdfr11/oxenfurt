@@ -31,8 +31,12 @@ interface PracticeSessionProps {
   onExit: () => void;
 }
 
+import { getSettings } from '../lib/settings';
+
 function safeHaptic<T extends keyof typeof hapticFeedback>(method: T, ...args: Parameters<typeof hapticFeedback[T]>): void {
   try {
+    const { hapticsEnabled } = getSettings();
+    if (!hapticsEnabled) return;
     (hapticFeedback[method] as (...a: typeof args) => void)(...args)
   } catch {
     // SDK not initialised (dev outside Telegram) — silently ignore
@@ -40,10 +44,16 @@ function safeHaptic<T extends keyof typeof hapticFeedback>(method: T, ...args: P
 }
 
 export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionProps) {
+  // When the FSRS-due queue is empty but the user still wants to drill, they
+  // can opt into bypass mode from the empty state. Ratings still update FSRS
+  // state — early-reviewed cards just get rescheduled normally.
+  const [bypassDue, setBypassDue] = useState(false);
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['cards', 'due'],
+    queryKey: ['cards', 'due', bypassDue],
     queryFn: async () => {
-      const res = await fetchWithAuth('/cards/due');
+      const path = bypassDue ? '/cards/due?bypass_due=true&limit=50' : '/cards/due'
+      const res = await fetchWithAuth(path);
       if (!res.ok) throw new Error('Failed to fetch cards');
       return (await res.json()) as { cards: DueCardDto[] };
     },
@@ -57,12 +67,25 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  // Undo functionality state
+  const [pendingReview, setPendingReview] = useState<{ id: string; rating: Rating; timeoutId: number; previousIndex: number; previousStats: typeof sessionStats } | null>(null);
+
   // Backend session id (UUID). Set once on mount via POST /sessions, then
   // used by finishSession() on completion. Fire-and-forget — if the start
   // request fails, sessionIdRef stays null and the finish call is skipped.
   // The local practice flow doesn't depend on it.
   const sessionIdRef = useRef<string | null>(null)
   const sessionFinishedRef = useRef(false)
+
+  // Flush any pending review before unmounting
+  useEffect(() => {
+    return () => {
+      if (pendingReview) {
+        clearTimeout(pendingReview.timeoutId);
+        reviewMutation.mutate({ id: pendingReview.id, rating: pendingReview.rating });
+      }
+    };
+  }, [pendingReview]);
 
   useEffect(() => {
     let cancelled = false
@@ -269,20 +292,58 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       total: sessionStats.total + 1,
       correct: sessionStats.correct + (isCorrect ? 1 : 0),
     }
+
+    // Flush any existing pending review immediately before queueing the next one
+    if (pendingReview) {
+      clearTimeout(pendingReview.timeoutId);
+      reviewMutation.mutate({ id: pendingReview.id, rating: pendingReview.rating });
+    }
+
+    // Delay the API call by 3.5 seconds to allow undo
+    const timeoutId = window.setTimeout(() => {
+      reviewMutation.mutate({ id: currentCard.id, rating });
+      setPendingReview(null);
+    }, 3500);
+
+    setPendingReview({
+      id: currentCard.id,
+      rating,
+      timeoutId,
+      previousIndex: currentIndex,
+      previousStats: sessionStats,
+    });
+
     setSessionStats(nextStats)
 
-    // Optimistically advance; submit in background.
-    reviewMutation.mutate({ id: currentCard.id, rating });
-
+    // Optimistically advance
     if (currentIndex < cards.length - 1) {
       setIsRevealed(false);
       setCurrentIndex((idx) => idx + 1);
     } else {
+      // If it's the last card, we don't allow undo to keep it simple, flush immediately
+      clearTimeout(timeoutId);
+      setPendingReview(null);
+      reviewMutation.mutate({ id: currentCard.id, rating });
+
       safeHaptic('notificationOccurred', 'success')
       playSuccessChime()
       finishBackendSession(nextStats.total, nextStats.correct)
       onComplete(nextStats.total, nextStats.correct);
     }
+  };
+
+  const handleUndo = () => {
+    if (!pendingReview) return;
+    
+    // Cancel the delayed API call
+    clearTimeout(pendingReview.timeoutId);
+    
+    // Revert state
+    setCurrentIndex(pendingReview.previousIndex);
+    setSessionStats(pendingReview.previousStats);
+    setIsRevealed(true);
+    setPendingReview(null);
+    safeHaptic('selectionChanged');
   };
 
   // Fire-and-forget. Idempotent — backend rejects double-finish with 400 and
@@ -363,16 +424,38 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         <div className="w-20 h-20 bg-app-surface border border-app-border rounded-full flex items-center justify-center text-app-primary shadow-sm mb-6">
           <Coffee size={36} strokeWidth={1.5} />
         </div>
-        <h2 className="text-2xl font-bold mb-2">На сегодня всё</h2>
+        <h2 className="text-2xl font-bold mb-2">
+          {bypassDue ? 'Совсем пусто' : 'На сегодня всё'}
+        </h2>
         <p className="text-app-hint mb-10 max-w-[260px]">
-          Отличная работа! Отдыхай или загрузи новый транскрипт в бот.
+          {bypassDue
+            ? 'Активных карточек нет — загрузи новый транскрипт в бот.'
+            : 'FSRS перенёс остальные карточки на потом. Можно отдохнуть — а можно потренироваться вне расписания.'}
         </p>
-        <button
-          onClick={onExit}
-          className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
-        >
-          Вернуться на главную
-        </button>
+        <div className="flex flex-col gap-3 w-full">
+          {!bypassDue && (
+            <button
+              onClick={() => {
+                setBypassDue(true)
+                setCurrentIndex(0)
+                setIsRevealed(false)
+              }}
+              className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
+            >
+              Тренировать вне расписания
+            </button>
+          )}
+          <button
+            onClick={onExit}
+            className={`w-full py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform ${
+              bypassDue
+                ? 'bg-app-primary text-app-primary-text shadow-lg shadow-app-primary/20'
+                : 'border border-app-border bg-app-surface text-app-text'
+            }`}
+          >
+            На главную
+          </button>
+        </div>
       </div>
     );
   }

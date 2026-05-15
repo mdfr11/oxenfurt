@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRawInitData, useLaunchParams, retrieveLaunchParams } from '@telegram-apps/sdk-react';
 import { Spinner } from '@telegram-apps/telegram-ui';
+import { AnimatePresence, motion } from 'framer-motion';
 import { API_BASE, loginWithTelegram, setToken } from './lib/api';
 import { PracticeSession } from './components/PracticeSession';
 import { Home } from './components/Home';
@@ -15,6 +16,12 @@ interface SessionStats {
   total: number;
   correct: number;
 }
+
+const pageVariants = {
+  initial: { opacity: 0, scale: 0.98 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 1.02 },
+};
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('loading');
@@ -68,46 +75,58 @@ export default function App() {
   }, [initDataRaw]);
 
   return (
-    <div className="app-container">
-      {screen === 'loading' && (
-        <div className="flex-1 flex items-center justify-center">
-          <Spinner size="l" />
-        </div>
-      )}
-      {screen === 'practice' && (
-        <PracticeSession
-          mode={practiceMode}
-          onComplete={(total, correct) => {
-            setStats({ total, correct });
-            setScreen('summary');
-          }}
-          onExit={() => setScreen('home')}
-        />
-      )}
-      {screen === 'summary' && (
-        <Summary
-          stats={stats}
-          onFinish={() => setScreen('home')}
-          onRepeatHard={() => setScreen('practice')}
-        />
-      )}
-      {screen === 'library' && (
-        <Library onExit={() => setScreen('home')} />
-      )}
-      {screen === 'stats' && (
-        <Stats onExit={() => setScreen('home')} />
-      )}
-      {screen === 'home' && (
-        <Home
-          onStart={(mode) => {
-            setPracticeMode(mode);
-            setScreen('practice');
-          }}
-          onOpenLibrary={() => setScreen('library')}
-          onOpenStats={() => setScreen('stats')}
-          userFirstName={userFirstName}
-        />
-      )}
+    <div className="app-container overflow-hidden">
+      <AnimatePresence mode="wait">
+        {screen === 'loading' && (
+          <motion.div key="loading" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex items-center justify-center">
+            <Spinner size="l" />
+          </motion.div>
+        )}
+        {screen === 'practice' && (
+          <motion.div key="practice" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg">
+            <PracticeSession
+              mode={practiceMode}
+              onComplete={(total, correct) => {
+                setStats({ total, correct });
+                setScreen('summary');
+              }}
+              onExit={() => setScreen('home')}
+            />
+          </motion.div>
+        )}
+        {screen === 'summary' && (
+          <motion.div key="summary" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg">
+            <Summary
+              stats={stats}
+              onFinish={() => setScreen('home')}
+              onRepeatHard={() => setScreen('practice')}
+            />
+          </motion.div>
+        )}
+        {screen === 'library' && (
+          <motion.div key="library" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg">
+            <Library onExit={() => setScreen('home')} />
+          </motion.div>
+        )}
+        {screen === 'stats' && (
+          <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg">
+            <Stats onExit={() => setScreen('home')} />
+          </motion.div>
+        )}
+        {screen === 'home' && (
+          <motion.div key="home" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg">
+            <Home
+              onStart={(mode) => {
+                setPracticeMode(mode);
+                setScreen('practice');
+              }}
+              onOpenLibrary={() => setScreen('library')}
+              onOpenStats={() => setScreen('stats')}
+              userFirstName={userFirstName}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
