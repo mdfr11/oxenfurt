@@ -535,14 +535,14 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
           } ${isRevealed ? 'cursor-grab active:cursor-grabbing' : ''}`}
           whileTap={expectsTypedAnswer ? undefined : { scale: 0.98 }}
         >
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {!isRevealed ? (
               <motion.div
                 key="front"
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 1.1 }}
-                className="flex flex-col items-center gap-6 w-full"
+                className="flex flex-col items-center gap-6 w-full h-full justify-center"
               >
                 {variant === 'cloze' && vocab && clozePrompt ? (
                   <>
@@ -585,8 +585,10 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                     >
                       🔊
                     </button>
-                    <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
-                    <p className="text-[11px] text-app-hint">Тап чтобы повторить</p>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
+                    </div>
+                    <p className="text-[11px] text-app-hint mt-2">Тап чтобы повторить</p>
                     <TypedAnswerField
                       inputRef={inputRef}
                       value={typedAnswer}
@@ -626,9 +628,16 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                     {theory.question}
                   </h2>
                 ) : null}
+                
                 {currentCard!.source && !expectsTypedAnswer && (
-                  <div className="absolute bottom-10 text-[10px] text-app-hint uppercase tracking-[0.2em] font-bold opacity-40">
+                  <div className="absolute inset-x-0 bottom-10 text-[10px] text-app-hint uppercase tracking-[0.2em] font-bold opacity-40 pointer-events-none">
                     {currentCard!.source}
+                  </div>
+                )}
+
+                {!expectsTypedAnswer && (
+                  <div className="absolute inset-x-0 bottom-4 text-[9px] text-app-hint opacity-30 uppercase font-bold tracking-[0.3em] pointer-events-none">
+                    Тап чтобы открыть
                   </div>
                 )}
               </motion.div>
@@ -637,7 +646,8 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                 key="back"
                 initial={{ opacity: 0, scale: 1.1 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="flex flex-col items-center gap-5"
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="flex flex-col items-center gap-5 w-full h-full justify-center"
               >
                 {matchResult && expectsTypedAnswer && (
                   <ClozeFeedback result={matchResult} typedAnswer={typedAnswer} />
