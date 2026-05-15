@@ -58,10 +58,21 @@ except 22 / 80 / 443.
 - **VPS on Ubuntu** (22.04 or 24.04 — both fine). ≥ 2 GB RAM; the 8 GB you
   have is comfortable.
 - **A domain** pointed at the VPS via DNS A record (and AAAA if IPv6).
-  Telegram Mini App requires HTTPS; Caddy obtains the cert automatically.
-  - Cheap options: Porkbun / Namecheap / Cloudflare Registrar (~$10/yr).
-  - Free options: `*.duckdns.org` (works with Caddy's HTTP-01 challenge),
-    or Cloudflare Tunnel if you don't want to expose the VPS publicly.
+  Telegram Mini App requires HTTPS — there is no way around the
+  certificate dance; Telegram WebView fetches the app over the public
+  internet from your device. Caddy obtains the cert automatically.
+  - **For personal use, the free path is DuckDNS** (`*.duckdns.org`).
+    Register at <https://www.duckdns.org> via OAuth (no email
+    verification), create a subdomain, point it at the VPS IP. Caddy
+    handles TLS via HTTP-01; BotFather accepts `*.duckdns.org` for Mini
+    Apps. Migration to a paid domain later is a Caddyfile edit + one
+    `@BotFather /setdomain` round-trip.
+  - **For ownership long-term**, a cheap registrar (Porkbun, Namecheap,
+    Cloudflare Registrar) costs ~$10/year. Recommended once the app
+    becomes habit-forming.
+  - Self-signed certs, raw IPs, and Cloudflare Tunnel's ephemeral
+    `*.trycloudflare.com` URLs are all dead-ends for Telegram Mini
+    Apps — don't try.
 - **A Telegram bot.** You already have one — that's `BOT_TOKEN`.
 - **SSH access** as a user with `sudo` (or root).
 
