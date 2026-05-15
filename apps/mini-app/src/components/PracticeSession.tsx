@@ -558,6 +558,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       onSubmit={handleAnswerSubmit}
                       onGiveUp={handleGiveUp}
                       placeholder="Введи пропущенное слово"
+                      matchResult={matchResult}
                     />
                   </>
                 ) : variant === 'translation' && vocab ? (
@@ -571,6 +572,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       onSubmit={handleAnswerSubmit}
                       onGiveUp={handleGiveUp}
                       placeholder="Напиши по-английски"
+                      matchResult={matchResult}
                     />
                   </>
                 ) : variant === 'listening' && vocab ? (
@@ -592,6 +594,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       onSubmit={handleAnswerSubmit}
                       onGiveUp={handleGiveUp}
                       placeholder="Напиши что услышал"
+                      matchResult={matchResult}
                     />
                   </>
                 ) : vocab ? (
@@ -727,6 +730,7 @@ function TypedAnswerField({
   onSubmit,
   onGiveUp,
   placeholder,
+  matchResult,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
   value: string
@@ -734,10 +738,14 @@ function TypedAnswerField({
   onSubmit: () => void
   onGiveUp: () => void
   placeholder: string
+  matchResult: MatchResult | null
 }) {
+  const isError = matchResult && matchResult.kind === 'miss';
+  const isSuccess = matchResult && (matchResult.kind === 'exact' || matchResult.kind === 'close');
+
   return (
     <>
-      <input
+      <motion.input
         ref={inputRef}
         type="text"
         value={value}
@@ -752,7 +760,16 @@ function TypedAnswerField({
         autoCapitalize="off"
         autoCorrect="off"
         spellCheck={false}
-        className="w-full max-w-[240px] text-center text-lg bg-app-bg border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary"
+        animate={
+          isError ? { x: [0, -10, 10, -10, 10, 0] } :
+          isSuccess ? { scale: [1, 1.02, 1] } : {}
+        }
+        transition={{ duration: 0.4 }}
+        className={`w-full max-w-[240px] text-center text-lg bg-app-bg border rounded-xl py-3 px-4 focus:outline-none transition-colors ${
+          isError ? 'border-rose-500 bg-rose-500/5' :
+          isSuccess ? 'border-emerald-500 bg-emerald-500/5' :
+          'border-app-border focus:border-app-primary'
+        }`}
       />
       <button
         onClick={onSubmit}

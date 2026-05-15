@@ -41,25 +41,38 @@ export async function speak(text: string, opts: { rate?: number } = {}): Promise
   // Cancel anything in flight — back-to-back card flips shouldn't stack.
   disposeActive()
 
+  // Try server-side first (consistent voice across devices). Fall back to
+  // the browser's SpeechSynthesis if the proxy fails — desktop typically
+  // has a usable English voice, so the fallback keeps the feature working
+  // there even while the server endpoint is being debugged.
+  const okServer = await trySpeakServer(trimmed, opts)
+  if (okServer) return
+  trySpeakSystem(trimmed, opts)
+}
+
+async function trySpeakServer(text: string, opts: { rate?: number }): Promise<boolean> {
   const token = getToken()
   if (!token) {
-    console.warn('[tts] no JWT, cannot fetch audio')
-    return
+    console.warn('[tts] no JWT, skipping server TTS')
+    return false
   }
-
   let blob: Blob
   try {
-    const res = await fetch(`${API_BASE}/tts?text=${encodeURIComponent(trimmed)}`, {
+    const res = await fetch(`${API_BASE}/tts?text=${encodeURIComponent(text)}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) {
-      console.warn('[tts] backend returned', res.status, await res.text().catch(() => ''))
-      return
+      console.warn('[tts] server returned', res.status)
+      return false
     }
     blob = await res.blob()
   } catch (err) {
-    console.warn('[tts] fetch failed', err)
-    return
+    console.warn('[tts] server fetch failed', err)
+    return false
+  }
+  if (blob.size === 0) {
+    console.warn('[tts] server returned empty body')
+    return false
   }
 
   const url = URL.createObjectURL(blob)
@@ -78,12 +91,30 @@ export async function speak(text: string, opts: { rate?: number } = {}): Promise
 
   try {
     await audio.play()
+    return true
   } catch (err) {
-    // NotAllowedError happens when the play wasn't triggered by a recent
-    // user gesture. Should be rare after primeSpeech() has unlocked, but
-    // log it so we can spot devices where it still bites.
     console.warn('[tts] audio.play() rejected', err)
     if (activeAudio === audio) disposeActive()
+    return false
+  }
+}
+
+function trySpeakSystem(text: string, opts: { rate?: number }): void {
+  if (!('speechSynthesis' in window)) {
+    console.warn('[tts] SpeechSynthesis not available — no fallback')
+    return
+  }
+  try {
+    const sys = window.speechSynthesis
+    sys.cancel()
+    const utt = new SpeechSynthesisUtterance(text)
+    utt.lang = 'en-US'
+    utt.rate = opts.rate ?? 0.95
+    utt.onstart = () => console.info('[tts] fallback: SpeechSynthesis speaking')
+    utt.onerror = (e) => console.warn('[tts] fallback SpeechSynthesis error', e.error)
+    sys.speak(utt)
+  } catch (err) {
+    console.warn('[tts] SpeechSynthesis threw', err)
   }
 }
 

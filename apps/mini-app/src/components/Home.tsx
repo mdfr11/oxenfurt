@@ -229,7 +229,7 @@ function ModeOption({ active, onClick, children }: { active: boolean; onClick: (
       className={`py-3 px-4 text-sm font-semibold text-left transition-colors rounded-xl ${
         active
           ? 'bg-app-primary/10 text-app-primary'
-          : 'text-app-text hover:bg-black/5 dark:hover:bg-white/5'
+          : 'text-app-text active:bg-app-bg'
       }`}
     >
       {children}
