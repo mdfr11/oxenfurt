@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Button } from '@telegram-apps/telegram-ui';
-import { miniApp } from '@telegram-apps/sdk-react';
+
 import { CheckCircle2 } from 'lucide-react';
 
 interface SummaryProps {
@@ -29,7 +29,7 @@ export function Summary({ stats, onFinish, onRepeatHard }: SummaryProps) {
         accuracy_percent: accuracy,
         finished_at: new Date().toISOString(),
       })
-      miniApp.sendData(payload)
+      payload(payload)
     } catch {
       // sendData is only available when the Mini App was opened inline (web_app
       // button from a bot). Not available in dev or when opened from a direct
