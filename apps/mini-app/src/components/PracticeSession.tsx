@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -45,6 +45,30 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isRevealed, setIsRevealed] = useState(false);
   const [sessionStats, setSessionStats] = useState({ total: 0, correct: 0 });
+
+  // Backend session id (UUID). Set once on mount via POST /sessions, then
+  // used by finishSession() on completion. Fire-and-forget — if the start
+  // request fails, sessionIdRef stays null and the finish call is skipped.
+  // The local practice flow doesn't depend on it.
+  const sessionIdRef = useRef<string | null>(null)
+  const sessionFinishedRef = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetchWithAuth('/sessions', { method: 'POST' })
+        if (!res.ok) return
+        const body = (await res.json()) as { id: string }
+        if (!cancelled) sessionIdRef.current = body.id
+      } catch {
+        // Backend unreachable — practice still works locally untracked.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Disable Telegram's vertical-swipe-to-close while a card flow is active —
   // otherwise a rating gesture can collapse the Mini App. Re-enable on unmount.
@@ -153,9 +177,24 @@ export function PracticeSession({ onComplete, onExit }: PracticeSessionProps) {
       setCurrentIndex((idx) => idx + 1);
     } else {
       safeHaptic('notificationOccurred', 'success')
+      finishBackendSession(nextStats.total, nextStats.correct)
       onComplete(nextStats.total, nextStats.correct);
     }
   };
+
+  // Fire-and-forget. Idempotent — backend rejects double-finish with 400 and
+  // sessionFinishedRef prevents us from even sending it twice locally.
+  function finishBackendSession(total: number, correct: number): void {
+    const id = sessionIdRef.current
+    if (id === null || sessionFinishedRef.current) return
+    sessionFinishedRef.current = true
+    void fetchWithAuth(`/sessions/${id}/finish`, {
+      method: 'POST',
+      body: JSON.stringify({ cards_reviewed: total, cards_correct: correct }),
+    }).catch(() => {
+      // Best-effort; do nothing on failure.
+    })
+  }
 
   if (isLoading) {
     return (

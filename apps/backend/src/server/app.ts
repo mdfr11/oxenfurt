@@ -6,6 +6,7 @@ import { signSession } from '../auth/jwt.ts'
 import type { Db } from '../db/client.ts'
 import { createIngestRouter } from '../ingest/cards.ts'
 import { createCardsRouter } from '../cards/router.ts'
+import { createSessionsRouter } from '../sessions/router.ts'
 
 export interface AppDeps {
   botToken: string
@@ -140,6 +141,15 @@ export function createApp(deps: AppDeps): Hono {
       db: deps.db,
       jwtSecret: deps.jwtSecret,
       fsrs,
+      now,
+    }),
+  )
+
+  app.route(
+    '/sessions',
+    createSessionsRouter({
+      db: deps.db,
+      jwtSecret: deps.jwtSecret,
       now,
     }),
   )
