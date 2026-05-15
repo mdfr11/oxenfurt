@@ -85,7 +85,7 @@ export default function App() {
           </motion.div>
         )}
         {screen === 'practice' && (
-          <motion.div key="practice" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-20">
+          <motion.div key="practice" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
             <PracticeSession
               mode={practiceMode}
               onComplete={(total, correct) => {
@@ -97,7 +97,7 @@ export default function App() {
           </motion.div>
         )}
         {screen === 'summary' && (
-          <motion.div key="summary" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-20">
+          <motion.div key="summary" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
             <Summary
               stats={stats}
               onFinish={() => setScreen('home')}
@@ -106,12 +106,12 @@ export default function App() {
           </motion.div>
         )}
         {screen === 'library' && (
-          <motion.div key="library" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-20">
+          <motion.div key="library" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
             <Library onExit={() => setScreen('home')} />
           </motion.div>
         )}
         {screen === 'stats' && (
-          <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-20">
+          <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
             <Stats onExit={() => setScreen('home')} />
           </motion.div>
         )}
