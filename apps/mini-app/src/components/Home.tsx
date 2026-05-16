@@ -116,20 +116,20 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
       }}
     >
       <div className="flex justify-between items-start z-10 relative">
-        <div>
-          <h1 className="text-xl font-bold mb-1 tracking-tight">{getGreeting(userFirstName)}</h1>
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-xl font-bold tracking-tight">{getGreeting(userFirstName)}</h1>
+          <div className="flex items-center gap-2">
              {stats && stats.streak > 0 && (
                <motion.div 
                  animate={due === 0 && reviewed > 0 ? { filter: ['drop-shadow(0 0 2px #f97316)', 'drop-shadow(0 0 8px #f97316)', 'drop-shadow(0 0 2px #f97316)'] } : {}}
                  transition={{ duration: 2, repeat: Infinity }}
-                 className="flex items-center gap-1 text-orange-500 font-bold text-sm"
+                 className="flex items-center gap-1 text-orange-500 font-bold text-xs bg-orange-500/10 px-2 py-0.5 rounded-full border border-orange-500/20 shadow-sm"
                >
-                 <Flame size={16} fill="currentColor" />
+                 <Flame size={14} fill="currentColor" />
                  <span>{stats.streak} {pluralize(stats.streak, ['день', 'дня', 'дней'])}</span>
                </motion.div>
              )}
-             <div className="bg-app-surface text-app-primary px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border border-app-primary/20 shadow-sm flex items-center gap-1.5">
+             <div className="bg-app-primary/10 text-app-primary px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-app-primary/20 shadow-sm flex items-center gap-1.5">
                <GraduationCap size={12} strokeWidth={2.5} />
                {getRank(stats?.learnedCount ?? 0)}
              </div>
@@ -137,25 +137,25 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
         </div>
         <button 
           onClick={() => setIsSettingsOpen(true)}
-          className="p-2 -mr-2 text-app-hint active:opacity-60 transition-opacity bg-app-surface/50 rounded-full"
+          className="p-2 text-app-hint active:opacity-60 transition-opacity bg-app-surface/50 border border-app-border rounded-xl shadow-sm"
           aria-label="Настройки"
         >
           <Settings size={22} />
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center -mt-4 relative z-0">
-        <div className="relative w-48 h-48 flex items-center justify-center mb-6">
+      <div className="flex-1 flex flex-col items-center justify-center relative z-0">
+        <div className="relative w-48 h-48 flex items-center justify-center mb-8">
           {/* Background Ring */}
-          <svg className="absolute inset-0 w-full h-full -rotate-90 drop-shadow-sm">
+          <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 192 192">
             <circle
               cx="96"
               cy="96"
               r={radius}
               stroke="currentColor"
-              strokeWidth="10"
+              strokeWidth="12"
               fill="transparent"
-              className="text-app-surface border border-app-border"
+              className="text-app-primary/5"
             />
             {/* Progress Ring */}
             <circle
@@ -163,52 +163,60 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
               cy="96"
               r={radius}
               stroke="currentColor"
-              strokeWidth="10"
+              strokeWidth="12"
               fill="transparent"
               strokeLinecap="round"
               className="text-app-primary transition-all duration-1000 ease-out"
               style={{ strokeDasharray: circumference, strokeDashoffset }}
             />
           </svg>
-          <div className="flex flex-col items-center text-center mt-1 px-4">
+          <div className="flex flex-col items-center text-center mt-1 px-4 relative">
             {due > 0 ? (
               <>
-                <span className="text-5xl font-black text-app-text tracking-tighter">{due}</span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-1">К повтору</span>
+                <span className="text-5xl font-black text-app-text tracking-tighter leading-none">{due}</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-2">К повтору</span>
               </>
             ) : reviewed > 0 ? (
               <>
-                <span className="text-4xl font-black text-app-primary tracking-tighter">{reviewed}</span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-1">Готово</span>
+                <motion.div
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="flex flex-col items-center"
+                >
+                  <span className="text-4xl font-black text-app-primary tracking-tighter leading-none">{reviewed}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-2">Выполнено</span>
+                </motion.div>
               </>
             ) : (
               <>
-                <span className="text-4xl">☕</span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-1.5">Пусто</span>
+                <span className="text-4xl">📚</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-2">Пусто</span>
               </>
             )}
           </div>
         </div>
 
-        <div className="bg-app-surface px-4 py-1.5 rounded-full border border-app-border shadow-sm">
-          <p className="text-app-hint text-center text-xs font-semibold">
-            {totalForToday === 0
-              ? <>Карточек к повтору сейчас нет</>
-              : due === 0
-                ? <><span className="text-app-text">{reviewed}</span> сегодня — отлично</>
-                : <><span className="text-app-text">{reviewed}</span> из <span className="text-app-text">{totalForToday}</span> сегодня</>
-            }
-          </p>
-        </div>
-
-        {heatmapData && heatmapData.history.length > 0 && (
-          <div className="mt-8 w-full max-w-[280px]">
-             <h2 className="text-[10px] uppercase tracking-[0.15em] text-app-hint font-bold mb-3 text-center opacity-50">
-               Активность
-             </h2>
-             <CompactHeatmap history={heatmapData.history} />
+        <div className="flex flex-col items-center gap-6 w-full max-w-[280px]">
+          <div className="bg-app-surface px-5 py-2 rounded-2xl border border-app-border shadow-sm">
+            <p className="text-app-hint text-center text-xs font-semibold">
+              {totalForToday === 0
+                ? <>Карточек к повтору сейчас нет</>
+                : due === 0
+                  ? <><span className="text-app-primary font-bold">{reviewed}</span> сегодня — отличный результат!</>
+                  : <><span className="text-app-text font-bold">{reviewed}</span> из <span className="text-app-text font-bold">{totalForToday}</span> карточек пройдено</>
+              }
+            </p>
           </div>
-        )}
+
+          {heatmapData && heatmapData.history.length > 0 && (
+            <div className="w-full">
+               <h2 className="text-[10px] uppercase tracking-[0.15em] text-app-hint font-bold mb-3 text-center opacity-40">
+                 История обучения
+               </h2>
+               <CompactHeatmap history={heatmapData.history} />
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4 relative z-10">
