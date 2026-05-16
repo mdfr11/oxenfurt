@@ -10,6 +10,7 @@ import type {
   VocabPayload,
 } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
+import { Markdown } from './Markdown'
 
 interface LibraryProps {
   onExit: () => void
@@ -278,16 +279,20 @@ function CardDetailSheet({
             <>
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Вопрос</div>
-                <h2 className="text-lg font-bold leading-snug">{theory.question}</h2>
+                <Markdown className="text-lg font-bold leading-snug">
+                  {theory.question}
+                </Markdown>
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Ответ</div>
-                <p className="text-sm leading-relaxed">{theory.answer}</p>
+                <Markdown className="text-sm leading-relaxed">{theory.answer}</Markdown>
               </div>
               {card.source_quote && (
                 <div>
                   <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Из урока</div>
-                  <p className="text-xs italic text-app-hint leading-relaxed">«{card.source_quote}»</p>
+                  <Markdown className="text-xs italic text-app-hint leading-relaxed" inline>
+                    {`«${card.source_quote}»`}
+                  </Markdown>
                 </div>
               )}
             </>

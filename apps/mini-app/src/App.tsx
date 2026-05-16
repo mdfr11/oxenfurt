@@ -20,7 +20,7 @@ interface SessionStats {
 const pageVariants = {
   initial: { opacity: 0, scale: 0.98 },
   animate: { opacity: 1, scale: 1 },
-  exit: { opacity: 0, scale: 1.02, pointerEvents: 'none' as any },
+  exit: { opacity: 0, scale: 1.02, pointerEvents: 'none' as const },
 };
 
 export default function App() {

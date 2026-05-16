@@ -79,6 +79,17 @@ Response: `{ created: number, skipped: number }`.
   pointer back to the original tutor utterance. Be generous with vocab too —
   include the original sentence whenever you have it.
 - **Max batch size: 500.** Split larger lessons into chunks of 500.
+- **Theory `question` and `answer` are rendered as Markdown.** Use
+  formatting to make rules scannable:
+    * `**bold**` for keywords ("**Формула**", "**Когда**", "**Маркеры**")
+    * `*italic*` for English example sentences
+    * `` `code` `` for grammatical patterns (`S + V`, `did + V`, `to + base`)
+    * Bullet lists (`- item`) for multi-point rules
+    * Blank line between paragraphs (otherwise the entire answer collapses
+      into one wall of text — this is the single most common quality issue
+      with auto-generated theory content)
+  Vocab `term` / `translation` / `context_sentence` stay plain text — no
+  formatting applied there.
 
 ---
 
@@ -108,8 +119,8 @@ Content-Type: application/json
     {
       "type": "theory",
       "payload": {
-        "question": "When to use 'make' vs 'do'",
-        "answer": "Use 'make' for creating / producing — make coffee, make a decision. Use 'do' for performing / executing — do homework, do the dishes. Fixed collocations like 'make progress' or 'do a favour' just have to be memorised."
+        "question": "When to use **'make'** vs **'do'**",
+        "answer": "**'make'** — for *creating* / *producing*:\n\n- make coffee\n- make a decision\n- make progress\n\n**'do'** — for *performing* / *executing*:\n\n- do homework\n- do the dishes\n- do a favour\n\nFixed collocations like `make progress` or `do a favour` just have to be memorised — there's no rule that derives them."
       },
       "source": "lesson-2026-05-15",
       "source_quote": "You know, this 'make' vs 'do' thing trips up a lot of my students..."
