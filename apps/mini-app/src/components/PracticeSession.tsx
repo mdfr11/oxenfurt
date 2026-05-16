@@ -516,16 +516,29 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       safeHaptic('notificationOccurred', 'success')
       playSuccessChime()
       finishBackendSession(nextStats.total, nextStats.correct)
+      // Mark practice as done BEFORE clearing storage. The save effect
+      // reads this ref to short-circuit after the post-clear setSessionStats
+      // commit; without this line the effect would silently re-save the
+      // queue and Home would keep showing "Незаконченная сессия 9/10"
+      // even though we just finished. Independent of finishBackendSession,
+      // which only sets the ref when a backend session id exists.
+      sessionFinishedRef.current = true
       clearSession();
       onComplete(nextStats.total, nextStats.correct);
     }
   };
 
-  // Persist working state on every meaningful change. Skipped when the
-  // queue is empty (loading or already-finished session) and when the
-  // user has reviewed every card (currentIndex past the end — would be
-  // restored to an unusable state).
+  // Persist working state on every meaningful change. Skipped when:
+  //   - the queue is empty (loading state),
+  //   - the user is past the last card (already-finished),
+  //   - or the session has been explicitly marked finished. The last guard
+  //     is the important one — `handleRate` on the final card calls
+  //     `clearSession()` synchronously, but React commits the
+  //     `setSessionStats` update right after, and the effect would otherwise
+  //     re-save the just-cleared state. The ref flag lets us short-circuit
+  //     before that race fires.
   useEffect(() => {
+    if (sessionFinishedRef.current) return
     if (queue.length === 0 || currentIndex >= queue.length) return
     saveSession({
       mode,
