@@ -9,6 +9,7 @@ import {
   type CardUpdateInput,
   type DueCardDto,
   type FsrsCardState,
+  type PhrasePayload,
   type Rating,
   type TheoryPayload,
   type VocabPayload,
@@ -61,6 +62,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
       const pattern = `%${q.toLowerCase()}%`
       const searchClause = or(
         sql`lower(payload->>'term') LIKE ${pattern}`,
+        sql`lower(payload->>'phrase') LIKE ${pattern}`,
         sql`lower(payload->>'translation') LIKE ${pattern}`,
         sql`lower(payload->>'question') LIKE ${pattern}`,
       )!
@@ -287,7 +289,7 @@ export async function updateCardPayload(
     if (row === undefined) return 'not_found'
     if (row.type !== input.type) return 'type_mismatch'
 
-    let nextPayload: VocabPayload | TheoryPayload
+    let nextPayload: VocabPayload | TheoryPayload | PhrasePayload
     if (input.type === 'vocab') {
       // Recompute term offsets from the (possibly edited) term and sentence.
       // Case-insensitive search so the user can write "Pragmatic" / sentence
@@ -302,6 +304,9 @@ export async function updateCardPayload(
       const context_term_end =
         startIdx >= 0 ? startIdx + term.length : term.length
       nextPayload = { term, translation, context_sentence, context_term_start, context_term_end }
+    } else if (input.type === 'phrase') {
+      // Phrase payload has no derived fields — passthrough.
+      nextPayload = { ...input.payload }
     } else {
       nextPayload = { ...input.payload }
     }

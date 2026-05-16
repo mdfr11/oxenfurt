@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { VocabPayloadSchema, TheoryPayloadSchema } from './card.ts'
+import { VocabPayloadSchema, TheoryPayloadSchema, PhrasePayloadSchema } from './card.ts'
 
 const SourceSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
 const SourceQuoteSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000))
@@ -20,7 +20,15 @@ export const TheoryIngestSchema = v.object({
 })
 export type TheoryIngest = v.InferOutput<typeof TheoryIngestSchema>
 
-export const IngestCardSchema = v.variant('type', [VocabIngestSchema, TheoryIngestSchema])
+export const PhraseIngestSchema = v.object({
+  type: v.literal('phrase'),
+  payload: PhrasePayloadSchema,
+  source: v.optional(SourceSchema),
+  source_quote: v.optional(SourceQuoteSchema),
+})
+export type PhraseIngest = v.InferOutput<typeof PhraseIngestSchema>
+
+export const IngestCardSchema = v.variant('type', [VocabIngestSchema, TheoryIngestSchema, PhraseIngestSchema])
 export type IngestCard = v.InferOutput<typeof IngestCardSchema>
 
 export const IngestBatchSchema = v.object({

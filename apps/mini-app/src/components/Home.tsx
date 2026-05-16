@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { mainButton } from '@telegram-apps/sdk-react';
-import { Library as LibraryIcon, BarChart3, Settings, Flame, ChevronDown } from 'lucide-react';
+import { Library as LibraryIcon, BarChart3, Settings, Flame, ChevronDown, GraduationCap } from 'lucide-react';
 import { fetchWithAuth } from '../lib/api';
 import {
   loadPracticeMode,
@@ -66,7 +66,10 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
   const due = stats?.dueCount ?? 0;
   const reviewed = stats?.reviewedToday ?? 0;
   const totalForToday = due + reviewed;
-  const progressPercent = totalForToday > 0 ? (reviewed / totalForToday) * 100 : 100;
+  // No cards in flight today → arc empty, not full. A full arc with zero
+  // activity reads as "completed!", which is misleading when nothing has
+  // happened in the first place — the user complained about exactly this.
+  const progressPercent = totalForToday > 0 ? (reviewed / totalForToday) * 100 : 0;
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
@@ -126,7 +129,8 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
                  <span>{stats.streak} {pluralize(stats.streak, ['день', 'дня', 'дней'])}</span>
                </motion.div>
              )}
-             <div className="bg-app-primary/10 text-app-primary px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border border-app-primary/20">
+             <div className="bg-app-surface text-app-primary px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border border-app-primary/20 shadow-sm flex items-center gap-1.5">
+               <GraduationCap size={12} strokeWidth={2.5} />
                {getRank(stats?.learnedCount ?? 0)}
              </div>
           </div>
@@ -166,28 +170,36 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
               style={{ strokeDasharray: circumference, strokeDashoffset }}
             />
           </svg>
-          <div className="flex flex-col items-center text-center mt-1">
+          <div className="flex flex-col items-center text-center mt-1 px-4">
             {due > 0 ? (
               <>
                 <span className="text-5xl font-black text-app-text tracking-tighter">{due}</span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-1">Осталось</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-1">К повтору</span>
+              </>
+            ) : reviewed > 0 ? (
+              <>
+                <span className="text-4xl font-black text-app-primary tracking-tighter">{reviewed}</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-1">Готово</span>
               </>
             ) : (
-              <span className="text-3xl font-bold text-app-primary text-center leading-tight">Всё<br/>готово</span>
+              <>
+                <span className="text-4xl">☕</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-1.5">Пусто</span>
+              </>
             )}
           </div>
         </div>
-        
-        {totalForToday > 0 && (
-          <div className="bg-app-surface px-4 py-1.5 rounded-full border border-app-border shadow-sm">
-            <p className="text-app-hint text-center text-xs font-semibold">
-              {due === 0
+
+        <div className="bg-app-surface px-4 py-1.5 rounded-full border border-app-border shadow-sm">
+          <p className="text-app-hint text-center text-xs font-semibold">
+            {totalForToday === 0
+              ? <>Карточек к повтору сейчас нет</>
+              : due === 0
                 ? <><span className="text-app-text">{reviewed}</span> сегодня — отлично</>
                 : <><span className="text-app-text">{reviewed}</span> из <span className="text-app-text">{totalForToday}</span> сегодня</>
-              }
-            </p>
-          </div>
-        )}
+            }
+          </p>
+        </div>
 
         {heatmapData && heatmapData.history.length > 0 && (
           <div className="mt-8 w-full max-w-[280px]">

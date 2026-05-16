@@ -49,6 +49,10 @@ export interface StatsResponse {
   heatmap: HeatmapCell[]
   /** Up to 10 most-recent finished sessions, newest first. */
   recent_sessions: RecentSession[]
+  /** Number of cards with high stability. */
+  learned_count: number
+  /** Current daily review streak. */
+  streak: number
   /** Server "now" — useful for the client to compute boundaries identically. */
   generated_at: string
 }

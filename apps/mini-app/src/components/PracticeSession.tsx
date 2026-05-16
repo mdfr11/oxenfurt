@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
 import { Coffee, X, Info, Mic, MicOff, Pencil } from 'lucide-react';
 import {
   backButton,
@@ -14,6 +14,7 @@ import {
   matchAnswer,
   type DueCardDto,
   type MatchResult,
+  type PhrasePayload,
   type Rating,
   type TheoryPayload,
   type VocabPayload,
@@ -35,19 +36,22 @@ interface PracticeSessionProps {
   onExit: () => void;
 }
 
-function safeHaptic(method: 'impactOccurred' | 'notificationOccurred' | 'selectionChanged', ...args: any[]): void {
+function safeHaptic(method: 'selectionChanged'): void;
+function safeHaptic(method: 'impactOccurred', style: Parameters<typeof hapticFeedback.impactOccurred>[0]): void;
+function safeHaptic(method: 'notificationOccurred', type: Parameters<typeof hapticFeedback.notificationOccurred>[0]): void;
+function safeHaptic(method: string, arg?: any): void {
   try {
     const { hapticsEnabled } = getSettings();
     if (!hapticsEnabled) return;
 
     if (method === 'impactOccurred') {
-      hapticFeedback.impactOccurred(args[0]);
+      hapticFeedback.impactOccurred(arg);
     } else if (method === 'notificationOccurred') {
-      hapticFeedback.notificationOccurred(args[0]);
+      hapticFeedback.notificationOccurred(arg);
     } else if (method === 'selectionChanged') {
       hapticFeedback.selectionChanged();
     }
-  } catch (e) {
+  } catch {
     // SDK not initialised (dev outside Telegram) — silently ignore
   }
 }
@@ -97,6 +101,27 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     previousStats: typeof sessionStats;
     replaySpliceIndex: number | null;
   } | null>(null);
+
+  // Motion values for swipe feedback
+  const dragX = useMotionValue(0);
+  const dragY = useMotionValue(0);
+
+  // useTransform with multiple inputs got stricter typing in framer-motion 11
+  // — the legacy array-input overload no longer matches a plain `[x, y]`
+  // destructure. Use the callback form, which reads .get() from each.
+  const cardBackground = useTransform(() => {
+    const x = dragX.get()
+    const y = dragY.get()
+    const threshold = 50;
+    if (Math.abs(x) > Math.abs(y)) {
+      if (x > threshold) return `rgba(59, 130, 246, ${Math.min(0.15, (x - threshold) / 400)})`; // Good - Blue
+      if (x < -threshold) return `rgba(249, 115, 22, ${Math.min(0.15, (Math.abs(x) - threshold) / 400)})`; // Hard - Orange
+    } else {
+      if (y > threshold) return `rgba(244, 63, 94, ${Math.min(0.15, (y - threshold) / 400)})`; // Again - Rose
+      if (y < -threshold) return `rgba(16, 185, 129, ${Math.min(0.15, (Math.abs(y) - threshold) / 400)})`; // Easy - Emerald
+    }
+    return 'rgba(255, 255, 255, 0)';
+  });
 
   // Working queue. Starts as the filtered `data.cards` and grows whenever
   // the user rates Again — the failed card gets spliced back in a few
@@ -283,21 +308,26 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // Persisted TTS speed preference — toggle via the chip below the 🔊 button.
   const [ttsSpeed, setTtsSpeed] = useState<TtsSpeed>(() => loadTtsSpeed())
 
-  // Listening variant or Auto-pronounce setting: pronounce the term on card show.
-  // Suppressed when produce-mode flips the card — the term is the answer
-  // there, so speaking it on the front would spoil the prompt.
+  // Listening variant or Auto-pronounce setting: pronounce the term/phrase
+  // on card show. Suppressed when produce-mode flips the card — the term is
+  // the answer there, so speaking it on the front would spoil the prompt.
   useEffect(() => {
     const { autoPronounce } = getSettings();
+    const speakable =
+      currentCard?.type === 'vocab'
+        ? (currentCard.payload as VocabPayload).term
+        : currentCard?.type === 'phrase'
+          ? (currentCard.payload as PhrasePayload).phrase
+          : null
     const shouldSpeak =
+      speakable !== null &&
       (variant === 'listening' || autoPronounce) &&
       !isRevealed &&
-      !flipForProduce &&
-      currentCard?.type === 'vocab';
+      !flipForProduce;
 
     if (shouldSpeak) {
-      const vocab = currentCard.payload as VocabPayload
       // Small delay so the card animation finishes before audio starts.
-      const t = setTimeout(() => { void speak(vocab.term, { rate: rateForSpeed(ttsSpeed) }) }, 250)
+      const t = setTimeout(() => { void speak(speakable, { rate: rateForSpeed(ttsSpeed) }) }, 250)
       return () => {
         clearTimeout(t)
         stopSpeaking()
@@ -326,12 +356,23 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   };
 
   const handleAnswerSubmit = () => {
-    if (isRevealed || !expectsTypedAnswer || !currentCard || currentCard.type !== 'vocab') return;
-    const vocabPayload = currentCard.payload as VocabPayload;
-    const expected =
-      variant === 'cloze'
-        ? extractClozeTerm(vocabPayload)
-        : vocabPayload.term;
+    if (isRevealed || !expectsTypedAnswer || !currentCard) return;
+    let expected: string | null = null
+    if (currentCard.type === 'vocab') {
+      const vocabPayload = currentCard.payload as VocabPayload;
+      expected = variant === 'cloze' ? extractClozeTerm(vocabPayload) : vocabPayload.term;
+    } else if (currentCard.type === 'phrase') {
+      const phrasePayload = currentCard.payload as PhrasePayload;
+      if (variant === 'cloze') {
+        // Cloze for phrases: user types only the blanked word. Consistent
+        // with vocab cloze where you type just the missing term.
+        const cloze = buildPhraseCloze(phrasePayload.phrase, currentCard.id);
+        expected = cloze !== null ? cloze.blank : phrasePayload.phrase;
+      } else {
+        expected = phrasePayload.phrase;
+      }
+    }
+    if (expected === null) return;
     const result = matchAnswer(typedAnswer, expected);
     setMatchResult(result);
     setIsRevealed(true);
@@ -341,9 +382,14 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   };
 
   const handleReplayAudio = () => {
-    if (currentCard?.type !== 'vocab') return
-    const vocab = currentCard.payload as VocabPayload
-    void speak(vocab.term, { rate: rateForSpeed(ttsSpeed) })
+    const text =
+      currentCard?.type === 'vocab'
+        ? (currentCard.payload as VocabPayload).term
+        : currentCard?.type === 'phrase'
+          ? (currentCard.payload as PhrasePayload).phrase
+          : null
+    if (text === null) return
+    void speak(text, { rate: rateForSpeed(ttsSpeed) })
     safeHaptic('selectionChanged')
   };
 
@@ -451,7 +497,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   const handleWordTap = async (word: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").trim();
+    const cleanWord = word.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"").trim();
     if (!cleanWord || cleanWord.length < 2) return;
 
     // Show loading state immediately
@@ -468,7 +514,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         const { translation } = await res.json();
         setTranslationTooltip(prev => prev ? { ...prev, translation } : null);
       }
-    } catch (err) {
+    } catch {
       setTranslationTooltip(null);
     }
   };
@@ -596,10 +642,12 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   const vocab = currentCard!.type === 'vocab' ? (currentCard!.payload as VocabPayload) : null;
   const theory = currentCard!.type === 'theory' ? (currentCard!.payload as TheoryPayload) : null;
+  const phrase = currentCard!.type === 'phrase' ? (currentCard!.payload as PhrasePayload) : null;
 
   // Sentence with the target term replaced by an underline blank — used as
   // the cloze prompt. Falls back gracefully if the offsets look bogus.
   const clozePrompt = vocab && variant === 'cloze' ? buildClozeSentence(vocab) : null;
+  const phraseCloze = phrase && variant === 'cloze' ? buildPhraseCloze(phrase.phrase, currentCard!.id) : null;
 
   // Split sentence logic for target term highlighting and contextual translation
   const renderSentenceWithHighlight = (sentence: string, term: string) => {
@@ -621,7 +669,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
               {part.split(/(\s+)/).map((word, wi) => (
                 <span 
                   key={wi} 
-                  className={word.trim().length > 1 ? 'cursor-help active:text-app-primary transition-colors' : ''}
+                  className={word.trim().length > 1 ? 'cursor-help active:text-app-primary transition-colors decoration-app-primary/30 underline underline-offset-4 decoration-dotted' : ''}
                   onClick={(e) => word.trim().length > 1 && handleWordTap(word, e)}
                 >
                   {word}
@@ -659,6 +707,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         <span>Карточка {currentIndex + 1} / {queue.length}</span>
         <div className="flex items-center gap-3">
           {currentCard!.type === 'theory' && <span className="text-app-primary">📖 Theory</span>}
+          {currentCard!.type === 'phrase' && <span className="text-app-primary">💬 Phrase</span>}
           <button
             onClick={handleExit}
             className="w-7 h-7 flex items-center justify-center rounded-full bg-black/5 dark:bg-white/10 text-app-hint active:scale-95 transition-transform"
@@ -673,6 +722,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         <AnimatePresence mode="popLayout">
           <motion.div
             key={currentCard.id}
+            style={{ x: dragX, y: dragY }}
             initial={{ opacity: 0, x: 50, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: -50, scale: 0.9, pointerEvents: 'none' }}
@@ -692,12 +742,21 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                 if (offset.y > threshold) handleRate(RATING.Again);
                 else if (offset.y < -threshold) handleRate(RATING.Easy);
               }
+              // Reset motion values after drag
+              dragX.set(0);
+              dragY.set(0);
             }}
             className={`w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] relative border border-app-border shadow-xl overflow-hidden ${
               expectsTypedAnswer ? '' : 'cursor-pointer'
             } ${isRevealed ? 'cursor-grab active:cursor-grabbing' : ''}`}
             whileTap={expectsTypedAnswer ? undefined : { scale: 0.98 }}
           >
+            {/* Swipe Feedback Overlay */}
+            <motion.div 
+              style={{ backgroundColor: cardBackground }}
+              className="absolute inset-0 pointer-events-none z-10"
+            />
+            
             <AnimatePresence initial={false}>
               {!isRevealed ? (
                 <motion.div
@@ -722,6 +781,67 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         onSubmit={handleAnswerSubmit}
                         onGiveUp={handleGiveUp}
                         placeholder="Введи пропущенное слово"
+                        matchResult={matchResult}
+                      />
+                    </>
+                  ) : variant === 'cloze' && phrase && phraseCloze ? (
+                    <>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Допиши фразу</div>
+                      <p className="text-2xl text-app-text leading-snug font-semibold text-center">
+                        {phraseCloze.before}
+                        {phraseCloze.before && ' '}
+                        <span className="text-app-primary">{'_'.repeat(Math.max(3, Math.min(12, phraseCloze.blank.length)))}</span>
+                        {phraseCloze.after && ' '}
+                        {phraseCloze.after}
+                      </p>
+                      <p className="text-sm text-app-hint italic leading-relaxed text-center">
+                        {phrase.translation}
+                      </p>
+                      <TypedAnswerField
+                        inputRef={inputRef}
+                        value={typedAnswer}
+                        onChange={setTypedAnswer}
+                        onSubmit={handleAnswerSubmit}
+                        onGiveUp={handleGiveUp}
+                        placeholder="Введи пропущенное слово"
+                        matchResult={matchResult}
+                      />
+                    </>
+                  ) : variant === 'translation' && phrase ? (
+                    <>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Скажи фразу</div>
+                      <h2 className="text-xl font-bold leading-snug text-center">{phrase.translation}</h2>
+                      <TypedAnswerField
+                        inputRef={inputRef}
+                        value={typedAnswer}
+                        onChange={setTypedAnswer}
+                        onSubmit={handleAnswerSubmit}
+                        onGiveUp={handleGiveUp}
+                        placeholder="Напиши по-английски"
+                        matchResult={matchResult}
+                      />
+                    </>
+                  ) : variant === 'listening' && phrase ? (
+                    <>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Слушай фразу</div>
+                      <button
+                        onClick={handleReplayAudio}
+                        className="w-20 h-20 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-3xl active:scale-95 transition-transform"
+                        aria-label="Replay"
+                      >
+                        🔊
+                      </button>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
+                      </div>
+                      <p className="text-[11px] text-app-hint mt-2">Тап чтобы повторить</p>
+                      <TypedAnswerField
+                        inputRef={inputRef}
+                        value={typedAnswer}
+                        onChange={setTypedAnswer}
+                        onSubmit={handleAnswerSubmit}
+                        onGiveUp={handleGiveUp}
+                        placeholder="Напиши что услышал"
                         matchResult={matchResult}
                       />
                     </>
@@ -793,6 +913,31 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       <p className="text-xl text-app-text leading-relaxed">
                         "{vocab.context_sentence}"
                       </p>
+                    </>
+                  ) : phrase ? (
+                    <>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Фраза</div>
+                      <div className="flex items-center gap-3 flex-wrap justify-center">
+                        <h2 className="text-2xl font-bold tracking-tight leading-snug text-center">
+                          {phrase.phrase}
+                        </h2>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleReplayAudio()
+                          }}
+                          className="w-9 h-9 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform shrink-0"
+                          aria-label="Произнести фразу"
+                        >
+                          🔊
+                        </button>
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
+                      </div>
+                      {phrase.pattern && (
+                        <p className="text-xs text-app-hint font-mono">{phrase.pattern}</p>
+                      )}
                     </>
                   ) : theory ? (
                     <div className="overflow-y-auto max-h-full w-full px-2 text-center">
@@ -873,6 +1018,31 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         {vocab.translation}
                       </span>
                       {renderSentenceWithHighlight(vocab.context_sentence, vocab.term)}
+                    </>
+                  ) : phrase ? (
+                    <>
+                      <div className="flex items-center gap-2 flex-wrap justify-center">
+                        <h2 className="text-2xl font-bold tracking-tight leading-snug text-center">
+                          {phrase.phrase}
+                        </h2>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleReplayAudio()
+                          }}
+                          className="w-9 h-9 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform shrink-0"
+                          aria-label="Произнести фразу"
+                        >
+                          🔊
+                        </button>
+                      </div>
+                      <span className="bg-app-primary/10 text-app-primary px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
+                        {phrase.translation}
+                      </span>
+                      {phrase.pattern && (
+                        <p className="text-xs text-app-hint font-mono text-center">{phrase.pattern}</p>
+                      )}
+                      {renderSentenceWithHighlight(phrase.context_sentence, phrase.phrase)}
                     </>
                   ) : theory ? (
                     <div className="overflow-y-auto max-h-full w-full px-1">
@@ -1331,5 +1501,32 @@ function buildClozeSentence(vocab: VocabPayload): { before: string; after: strin
     before: vocab.context_sentence.slice(0, start),
     after: vocab.context_sentence.slice(end),
     targetLength: end - start,
+  }
+}
+
+// Phrase cloze: blank one word inside the multi-word phrase. The blank
+// position is deterministic per card so the user sees the same gap across
+// retries (otherwise they'd be hitting a moving target). Skips the first
+// and last word when there are at least 3 — the middle is where the
+// "tricky" content words / prepositions live.
+function buildPhraseCloze(phrase: string, cardId: string): { before: string; blank: string; after: string } | null {
+  const words = phrase.trim().split(/\s+/)
+  if (words.length < 2) return null
+
+  let blankIdx: number
+  if (words.length === 2) {
+    blankIdx = 1
+  } else {
+    // Stable per card via a cheap charCode hash; restrict to inner positions.
+    let hash = 0
+    for (let i = 0; i < cardId.length; i++) hash = (hash * 31 + cardId.charCodeAt(i)) | 0
+    const innerSpan = words.length - 2 // 1..len-2 inclusive
+    blankIdx = 1 + (Math.abs(hash) % innerSpan)
+  }
+
+  return {
+    before: words.slice(0, blankIdx).join(' '),
+    blank: words[blankIdx]!,
+    after: words.slice(blankIdx + 1).join(' '),
   }
 }

@@ -112,7 +112,7 @@ export function Stats({ onExit }: StatsProps) {
                icon={Trophy} 
                label="Кубок Оксенфурта" 
                hint="Выучи первые 100 слов" 
-               unlocked={(data as any).learned_count >= 100} 
+               unlocked={data.learned_count >= 100} 
              />
              <RelicIcon 
                icon={Key} 
@@ -124,7 +124,7 @@ export function Stats({ onExit }: StatsProps) {
                icon={FlaskConical} 
                label="Эликсир Региса" 
                hint="7 дней ударного режима" 
-               unlocked={(data as any).streak >= 7} 
+               unlocked={data.streak >= 7} 
              />
              <RelicIcon 
                icon={Feather} 
@@ -193,7 +193,7 @@ function ForecastCell({ label, value, accent }: { label: string; value: number; 
   )
 }
 
-function RelicIcon({ icon: Icon, label, hint, unlocked }: { icon: any; label: string; hint: string; unlocked: boolean }) {
+function RelicIcon({ icon: Icon, label, hint, unlocked }: { icon: React.ElementType; label: string; hint: string; unlocked: boolean }) {
   const [showTooltip, setShowTooltip] = useState(false);
 
   return (

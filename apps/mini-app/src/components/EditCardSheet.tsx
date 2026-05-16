@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Save } from 'lucide-react'
-import type { DueCardDto, VocabPayload, TheoryPayload } from '@oxenfurt/shared'
+import type { DueCardDto, VocabPayload, TheoryPayload, PhrasePayload } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
 
 interface Props {
@@ -21,24 +21,46 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
   const [contextSentence, setContextSentence] = useState('')
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
+  const [phraseText, setPhraseText] = useState('')
+  const [pattern, setPattern] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Re-seed form fields whenever a new card is opened.
-  useEffect(() => {
-    if (!card) return
+  // Track the current card ID to reset state when it changes
+  const [lastCardId, setLastCardId] = useState<string | null>(null)
+
+  if (card && card.id !== lastCardId) {
+    setLastCardId(card.id)
     setError(null)
     if (card.type === 'vocab') {
       const p = card.payload as VocabPayload
       setTerm(p.term)
       setTranslation(p.translation)
       setContextSentence(p.context_sentence)
+      setQuestion('')
+      setAnswer('')
+      setPhraseText('')
+      setPattern('')
+    } else if (card.type === 'phrase') {
+      const p = card.payload as PhrasePayload
+      setPhraseText(p.phrase)
+      setTranslation(p.translation)
+      setContextSentence(p.context_sentence)
+      setPattern(p.pattern ?? '')
+      setTerm('')
+      setQuestion('')
+      setAnswer('')
     } else {
       const p = card.payload as TheoryPayload
       setQuestion(p.question)
       setAnswer(p.answer)
+      setTerm('')
+      setTranslation('')
+      setContextSentence('')
+      setPhraseText('')
+      setPattern('')
     }
-  }, [card?.id, card])
+  }
 
   const handleSave = async () => {
     if (!card || saving) return
@@ -55,13 +77,23 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                 context_sentence: contextSentence.trim(),
               },
             }
-          : {
-              type: 'theory',
-              payload: {
-                question: question.trim(),
-                answer: answer.trim(),
-              },
-            }
+          : card.type === 'phrase'
+            ? {
+                type: 'phrase',
+                payload: {
+                  phrase: phraseText.trim(),
+                  translation: translation.trim(),
+                  context_sentence: contextSentence.trim(),
+                  ...(pattern.trim() ? { pattern: pattern.trim() } : {}),
+                },
+              }
+            : {
+                type: 'theory',
+                payload: {
+                  question: question.trim(),
+                  answer: answer.trim(),
+                },
+              }
       const res = await fetchWithAuth(`/cards/${card.id}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
@@ -70,7 +102,7 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
         const text = await res.text()
         throw new Error(text || `HTTP ${res.status}`)
       }
-      const data = (await res.json()) as { card: { payload: VocabPayload | TheoryPayload } }
+      const data = (await res.json()) as { card: { payload: VocabPayload | TheoryPayload | PhrasePayload } }
       onSaved({ ...card, payload: data.card.payload })
       onClose()
     } catch (e) {
@@ -141,6 +173,46 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                   <p className="text-[11px] text-app-hint leading-snug">
                     Позиция слова в предложении пересчитается автоматически.
                   </p>
+                </>
+              ) : card.type === 'phrase' ? (
+                <>
+                  <Field label="Фраза">
+                    <textarea
+                      value={phraseText}
+                      onChange={(e) => setPhraseText(e.target.value)}
+                      rows={2}
+                      className="w-full bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary resize-none"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                    />
+                  </Field>
+                  <Field label="Перевод">
+                    <input
+                      type="text"
+                      value={translation}
+                      onChange={(e) => setTranslation(e.target.value)}
+                      className="w-full bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary"
+                    />
+                  </Field>
+                  <Field label="Контекст-предложение">
+                    <textarea
+                      value={contextSentence}
+                      onChange={(e) => setContextSentence(e.target.value)}
+                      rows={3}
+                      className="w-full bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary resize-none"
+                    />
+                  </Field>
+                  <Field label="Шаблон (опционально)">
+                    <input
+                      type="text"
+                      value={pattern}
+                      onChange={(e) => setPattern(e.target.value)}
+                      placeholder="напр. to take {sth} into account"
+                      className="w-full bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 font-mono text-sm focus:outline-none focus:border-app-primary"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                    />
+                  </Field>
                 </>
               ) : (
                 <>

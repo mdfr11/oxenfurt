@@ -31,13 +31,13 @@ On the host where Hermes-english and Oxenfurt share a VPS:
 
 ```typescript
 {
-  cards: Array<VocabIngest | TheoryIngest>   // 1..500 items
+  cards: Array<VocabIngest | TheoryIngest | PhraseIngest>   // 1..500 items
 }
 
 interface VocabIngest {
   type: 'vocab'
   payload: {
-    term: string                  // 1..200 chars, the word / phrase
+    term: string                  // 1..200 chars, a SINGLE word
     translation: string           // 1..500 chars, Russian translation
     context_sentence: string      // 1..2000 chars, the original sentence
     context_term_start: number    // index where the term starts in context_sentence (0-based)
@@ -45,6 +45,20 @@ interface VocabIngest {
   }
   source?: string                  // e.g. 'lesson-2026-05-15'
   source_quote?: string            // optional, exact sentence from transcript
+}
+
+interface PhraseIngest {
+  type: 'phrase'
+  payload: {
+    phrase: string                // 2..300 chars, a MULTI-WORD lexical unit
+                                  // (collocation, idiom, fixed expression)
+    translation: string           // 1..500 chars, Russian translation
+    context_sentence: string      // 1..2000 chars, the original sentence
+    pattern?: string              // optional canonical form with slots,
+                                  // e.g. "to take {sth} into account"
+  }
+  source?: string
+  source_quote?: string
 }
 
 interface TheoryIngest {
@@ -58,6 +72,21 @@ interface TheoryIngest {
 }
 ```
 
+### When to pick `vocab` vs `phrase`
+
+- **`vocab`** — a single word you'd look up in a dictionary as one entry.
+  `pragmatic`, `wreath`, `versatile`, `spool`. Use for one-word items even
+  if the immediate context is a longer expression.
+- **`phrase`** — multi-word lexical unit where the meaning is **not** a
+  simple sum of its parts, or where the structure must be memorised as a
+  whole: collocations (`make a decision`, `pay attention`), idioms (`by no
+  means`, `on the other hand`), fixed expressions (`I'd rather not`),
+  phrasal verbs (`look up to`, `give in`). If you can't replace one word
+  without losing meaning — it's a phrase.
+- When in doubt, prefer `vocab` for short two-word noun phrases that are
+  basically a single concept (`coffee table`) and `phrase` for anything
+  with a preposition or particle.
+
 Response: `{ created: number, skipped: number }`.
 
 ---
@@ -70,6 +99,9 @@ Response: `{ created: number, skipped: number }`.
   bad cards poison the FSRS schedule for weeks.
 - **Vocab dedup is case-insensitive on `term`.** Sending the same term twice
   is safe — the second insert returns `skipped: 1`.
+- **Phrase dedup is case-insensitive and whitespace-collapsed on `phrase`.**
+  `"take into account"` and `"Take  into  account"` collapse to the same
+  key. Re-sending returns `skipped: 1`.
 - **Theory has no dedup.** Each ingest creates a new active card. Duplicate
   questions accumulate; the learner can archive ones they don't want from
   the Mini App browse view (planned).

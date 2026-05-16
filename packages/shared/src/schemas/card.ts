@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { type FsrsCardState } from './fsrs.ts'
 
-export const CardTypeSchema = v.picklist(['vocab', 'theory'])
+export const CardTypeSchema = v.picklist(['vocab', 'theory', 'phrase'])
 export type CardType = v.InferOutput<typeof CardTypeSchema>
 
 export const CardStatusSchema = v.picklist(['draft', 'active', 'archived'])
@@ -22,6 +22,22 @@ export const TheoryPayloadSchema = v.object({
 })
 export type TheoryPayload = v.InferOutput<typeof TheoryPayloadSchema>
 
+// Multi-word lexical units — collocations ("take into account"), idioms
+// ("by no means"), fixed expressions ("on the other hand"). Distinct from
+// vocab so cloze can blank mid-phrase words, translation matching can be
+// word-aware, and the card renderer can lay them out for multiple lines.
+//
+// `pattern` is optional — the canonical form with slot markers, e.g.
+// "to take {sth} into account". When present, used as the prompt for
+// cloze-style practice instead of blanking a random word.
+export const PhrasePayloadSchema = v.object({
+  phrase: v.pipe(v.string(), v.trim(), v.minLength(2), v.maxLength(300)),
+  translation: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+  context_sentence: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
+  pattern: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(300))),
+})
+export type PhrasePayload = v.InferOutput<typeof PhrasePayloadSchema>
+
 // Inline-edit payload schemas. Client sends just the user-editable fields;
 // the server recomputes term offsets from the (possibly edited) term and
 // context_sentence so the cloze renderer stays valid.
@@ -38,16 +54,25 @@ export const TheoryUpdateInputSchema = v.object({
 })
 export type TheoryUpdateInput = v.InferOutput<typeof TheoryUpdateInputSchema>
 
+export const PhraseUpdateInputSchema = v.object({
+  phrase: v.pipe(v.string(), v.trim(), v.minLength(2), v.maxLength(300)),
+  translation: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+  context_sentence: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
+  pattern: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(300))),
+})
+export type PhraseUpdateInput = v.InferOutput<typeof PhraseUpdateInputSchema>
+
 export const CardUpdateInputSchema = v.variant('type', [
   v.object({ type: v.literal('vocab'), payload: VocabUpdateInputSchema }),
   v.object({ type: v.literal('theory'), payload: TheoryUpdateInputSchema }),
+  v.object({ type: v.literal('phrase'), payload: PhraseUpdateInputSchema }),
 ])
 export type CardUpdateInput = v.InferOutput<typeof CardUpdateInputSchema>
 
 export interface DueCardDto {
   id: string
-  type: 'vocab' | 'theory'
-  payload: VocabPayload | TheoryPayload
+  type: CardType
+  payload: VocabPayload | TheoryPayload | PhrasePayload
   source: string | null
   source_quote: string | null
   fsrs: FsrsCardState
@@ -55,9 +80,9 @@ export interface DueCardDto {
 
 export interface CardListDto {
   id: string
-  type: 'vocab' | 'theory'
+  type: CardType
   status: 'active' | 'archived' | 'draft'
-  payload: VocabPayload | TheoryPayload
+  payload: VocabPayload | TheoryPayload | PhrasePayload
   source: string | null
   source_quote: string | null
   created_at: string

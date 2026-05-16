@@ -11,11 +11,12 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core'
-import type { CardStatus, CardType, TheoryPayload, VocabPayload } from '@oxenfurt/shared'
+import type { CardStatus, CardType, PhrasePayload, TheoryPayload, VocabPayload } from '@oxenfurt/shared'
 
 export type CardPayload =
   | ({ type: 'vocab' } & VocabPayload)
   | ({ type: 'theory' } & TheoryPayload)
+  | ({ type: 'phrase' } & PhrasePayload)
 
 export const cards = pgTable(
   'cards',
@@ -23,7 +24,7 @@ export const cards = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     type: text('type').$type<CardType>().notNull(),
     status: text('status').$type<CardStatus>().notNull().default('active'),
-    payload: jsonb('payload').$type<VocabPayload | TheoryPayload>().notNull(),
+    payload: jsonb('payload').$type<VocabPayload | TheoryPayload | PhrasePayload>().notNull(),
     source: text('source'),
     sourceQuote: text('source_quote'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })

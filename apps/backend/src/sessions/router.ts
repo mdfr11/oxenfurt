@@ -103,7 +103,7 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
   const next24hTs = whenTs + 24 * 3600 * 1000
 
   // All five queries can run concurrently — no FK or ordering deps between them.
-  const [reviewsAgg, sessionsAgg, forecastAgg, heatmapRows, recentRows] = await Promise.all([
+  const [reviewsAgg, sessionsAgg, forecastAgg, heatmapRows, recentRows, learnedAgg, streakRows] = await Promise.all([
     db.execute<{
       today_count: string
       today_correct: string
@@ -156,11 +156,47 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
       .where(isNotNull(sessions.finishedAt))
       .orderBy(desc(sessions.startedAt))
       .limit(10),
+    db.execute<{ count: string }>(sql`
+      SELECT COUNT(*) as count 
+      FROM cards 
+      WHERE status = 'active' AND (fsrs->>'stability')::float >= 10
+    `),
+    db.execute<{ review_date: Date }>(sql`
+      SELECT DISTINCT date_trunc('day', reviewed_at) as review_date
+      FROM card_reviews
+      ORDER BY review_date DESC
+    `),
   ])
 
   const r = reviewsAgg[0] ?? defaultReviewRow()
   const s = sessionsAgg[0] ?? { today_count: '0', week_count: '0' }
   const f = forecastAgg[0] ?? { due_now: '0', due_next_24h: '0', active_total: '0' }
+
+  // Streak logic (copied from stats router)
+  const todayStart = new Date(dayStartTs)
+  let streak = 0
+  let expectedDate = new Date(todayStart)
+
+  for (const row of streakRows) {
+    const rowDate = new Date(row.review_date)
+    if (streak === 0 && rowDate.getTime() < expectedDate.getTime()) {
+      const yesterday = new Date(expectedDate)
+      yesterday.setDate(yesterday.getDate() - 1)
+      if (rowDate.getTime() === yesterday.getTime()) {
+        streak++
+        expectedDate = yesterday
+        continue
+      } else {
+        break
+      }
+    }
+    if (rowDate.getTime() === expectedDate.getTime()) {
+      streak++
+      expectedDate.setDate(expectedDate.getDate() - 1)
+    } else {
+      break
+    }
+  }
 
   return {
     reviews: {
@@ -185,6 +221,8 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
       cards_reviewed: row.cardsReviewed,
       cards_correct: row.cardsCorrect,
     })),
+    learned_count: toInt(learnedAgg[0]?.count),
+    streak,
     generated_at: when.toISOString(),
   }
 }

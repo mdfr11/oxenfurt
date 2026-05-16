@@ -6,6 +6,7 @@ import { Archive, ArrowLeft, BookOpen, Search, X } from 'lucide-react'
 import type {
   CardListDto,
   CardListResponse,
+  PhrasePayload,
   TheoryPayload,
   VocabPayload,
 } from '@oxenfurt/shared'
@@ -16,7 +17,7 @@ interface LibraryProps {
   onExit: () => void
 }
 
-type TypeFilter = 'all' | 'vocab' | 'theory'
+type TypeFilter = 'all' | 'vocab' | 'theory' | 'phrase'
 type StatusFilter = 'active' | 'archived'
 
 function safeHaptic<T extends keyof typeof hapticFeedback>(
@@ -166,6 +167,9 @@ export function Library({ onExit }: LibraryProps) {
         </FilterChip>
         <FilterChip active={typeFilter === 'vocab'} onClick={() => setTypeFilter('vocab')}>
           Слова
+        </FilterChip>
+        <FilterChip active={typeFilter === 'phrase'} onClick={() => setTypeFilter('phrase')}>
+          Фразы
         </FilterChip>
         <FilterChip active={typeFilter === 'theory'} onClick={() => setTypeFilter('theory')}>
           Теория
@@ -339,12 +343,22 @@ function SourcePickerSheet({
 }
 
 function CardListItem({ card, onOpen }: { card: CardListDto; onOpen: () => void }) {
-  const title = card.type === 'vocab'
-    ? (card.payload as VocabPayload).term
-    : (card.payload as TheoryPayload).question
-  const subtitle = card.type === 'vocab'
-    ? (card.payload as VocabPayload).translation
-    : (card.payload as TheoryPayload).answer.slice(0, 80)
+  const title =
+    card.type === 'vocab'
+      ? (card.payload as VocabPayload).term
+      : card.type === 'phrase'
+        ? (card.payload as PhrasePayload).phrase
+        : (card.payload as TheoryPayload).question
+  const subtitle =
+    card.type === 'vocab'
+      ? (card.payload as VocabPayload).translation
+      : card.type === 'phrase'
+        ? (card.payload as PhrasePayload).translation
+        : (card.payload as TheoryPayload).answer.slice(0, 80)
+  const icon =
+    card.type === 'theory' ? '📖' : card.type === 'phrase' ? '💬' : '✏️'
+  const iconClass =
+    card.type === 'theory' ? 'text-app-primary' : 'text-app-hint'
 
   return (
     <button
@@ -356,10 +370,8 @@ function CardListItem({ card, onOpen }: { card: CardListDto; onOpen: () => void 
           <div className="font-semibold truncate">{title}</div>
           <div className="text-xs text-app-hint truncate mt-0.5">{subtitle}</div>
         </div>
-        <span className={`text-[9px] uppercase tracking-wider font-bold shrink-0 ${
-          card.type === 'theory' ? 'text-app-primary' : 'text-app-hint'
-        }`}>
-          {card.type === 'theory' ? '📖' : '✏️'}
+        <span className={`text-[9px] uppercase tracking-wider font-bold shrink-0 ${iconClass}`}>
+          {icon}
         </span>
       </div>
       {card.reps > 0 && (
@@ -384,9 +396,9 @@ function CardDetailSheet({
   archiving: boolean
   onJumpToSource: (source: string | null) => void
 }) {
-  const isVocab = card.type === 'vocab'
-  const vocab = isVocab ? (card.payload as VocabPayload) : null
-  const theory = !isVocab ? (card.payload as TheoryPayload) : null
+  const vocab = card.type === 'vocab' ? (card.payload as VocabPayload) : null
+  const phrase = card.type === 'phrase' ? (card.payload as PhrasePayload) : null
+  const theory = card.type === 'theory' ? (card.payload as TheoryPayload) : null
 
   return (
     <div
@@ -412,6 +424,22 @@ function CardDetailSheet({
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Из контекста</div>
                 <p className="text-sm leading-relaxed">«{vocab.context_sentence}»</p>
+              </div>
+            </>
+          )}
+          {phrase && (
+            <>
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Фраза</div>
+                <h2 className="text-xl font-bold leading-snug">{phrase.phrase}</h2>
+                <p className="text-sm text-app-hint mt-1">{phrase.translation}</p>
+                {phrase.pattern && (
+                  <p className="text-xs text-app-hint mt-1.5 font-mono">{phrase.pattern}</p>
+                )}
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Из контекста</div>
+                <p className="text-sm leading-relaxed">«{phrase.context_sentence}»</p>
               </div>
             </>
           )}
