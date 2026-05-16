@@ -21,9 +21,9 @@ export function createTranslateRouter(deps: TranslateRouterDeps): Hono {
     
     try {
       const res = await fetch(url)
-      const data = await res.json()
-      const translation = data.responseData?.translatedText || 'Translation failed'
-      
+      const data = (await res.json()) as { responseData?: { translatedText?: string } }
+      const translation = data.responseData?.translatedText ?? 'Translation failed'
+
       return c.json({ translation })
     } catch (err) {
       console.error('[translate] fetch failed', err)

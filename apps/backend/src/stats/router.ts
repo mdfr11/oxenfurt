@@ -46,15 +46,17 @@ export function createStatsRouter(deps: StatsRouterDeps): Hono {
       )
     const dueCount = dueRes[0]?.count ?? 0
 
-    // 2.5. Learned cards (stability >= 10)
+    // 2.5. Learned cards — stability is a flat column on `cards`, not a
+    // JSON field. The earlier `cards.fsrs->>'stability'` reference was the
+    // bug behind the /stats 500s (Postgres: column "fsrs" does not exist).
     const learnedRes = await deps.db
       .select({ count: count() })
       .from(cards)
       .where(
         and(
           eq(cards.status, 'active'),
-          gte(sql`${cards.fsrs}->>'stability'`, '10')
-        )
+          gte(cards.stability, 10),
+        ),
       )
     const learnedCount = learnedRes[0]?.count ?? 0
 
