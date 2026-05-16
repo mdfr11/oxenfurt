@@ -105,8 +105,7 @@ export async function ingestCards(
       if (result.length > 0) created++
       else skipped++
     } else if (item.type === 'phrase') {
-      // Phrase dedup is case-insensitive and whitespace-collapsed, matching
-      // the index from migration 0001_phrase_dedup.
+      // Phrase dedup is case-insensitive on the phrase text.
       const result = await db.execute<{ id: string }>(sql`
         INSERT INTO cards (
           type, status, payload, source, source_quote,
@@ -120,7 +119,7 @@ export async function ingestCards(
           ${values.elapsedDays}, ${values.scheduledDays}, ${values.learningSteps},
           ${values.reps}, ${values.lapses}, ${values.lastReview === null ? null : values.lastReview.toISOString()}
         )
-        ON CONFLICT ((LOWER(regexp_replace(payload->>'phrase', '\s+', ' ', 'g')))) WHERE type = 'phrase'
+        ON CONFLICT ((LOWER(payload->>'phrase'))) WHERE type = 'phrase'
         DO NOTHING
         RETURNING id
       `)
