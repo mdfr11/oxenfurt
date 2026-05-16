@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { backButton, hapticFeedback } from '@telegram-apps/sdk-react'
 import { Spinner } from '@telegram-apps/telegram-ui'
-import { Archive, ArrowLeft, BookOpen, Search, X } from 'lucide-react'
+import { Archive, ArrowLeft, BookOpen, Search, X, Quote, Type } from 'lucide-react'
 import type {
   CardListDto,
   CardListResponse,
@@ -35,6 +35,7 @@ interface SourceEntry {
   source: string | null
   total: number
   vocab_count: number
+  phrase_count: number
   theory_count: number
   latest: string
 }
@@ -327,10 +328,10 @@ function SourcePickerSheet({
                       {s.total}
                     </span>
                   </div>
-                  <div className="text-xs text-app-hint mt-0.5">
-                    {s.vocab_count > 0 && <span>✏️ {s.vocab_count}</span>}
-                    {s.vocab_count > 0 && s.theory_count > 0 && <span> · </span>}
-                    {s.theory_count > 0 && <span>📖 {s.theory_count}</span>}
+                  <div className="text-xs text-app-hint mt-0.5 flex items-center gap-2">
+                    {s.vocab_count > 0 && <span className="flex items-center gap-1"><Type size={10} /> {s.vocab_count}</span>}
+                    {s.phrase_count > 0 && <span className="flex items-center gap-1"><Quote size={10} /> {s.phrase_count}</span>}
+                    {s.theory_count > 0 && <span className="flex items-center gap-1"><BookOpen size={10} /> {s.theory_count}</span>}
                   </div>
                 </button>
               )
@@ -355,10 +356,9 @@ function CardListItem({ card, onOpen }: { card: CardListDto; onOpen: () => void 
       : card.type === 'phrase'
         ? (card.payload as PhrasePayload).translation
         : (card.payload as TheoryPayload).answer.slice(0, 80)
-  const icon =
-    card.type === 'theory' ? '📖' : card.type === 'phrase' ? '💬' : '✏️'
-  const iconClass =
-    card.type === 'theory' ? 'text-app-primary' : 'text-app-hint'
+  
+  const Icon = card.type === 'theory' ? BookOpen : card.type === 'phrase' ? Quote : Type
+  const iconClass = card.type === 'theory' ? 'text-app-primary' : 'text-app-hint'
 
   return (
     <button
@@ -370,8 +370,8 @@ function CardListItem({ card, onOpen }: { card: CardListDto; onOpen: () => void 
           <div className="font-semibold truncate">{title}</div>
           <div className="text-xs text-app-hint truncate mt-0.5">{subtitle}</div>
         </div>
-        <span className={`text-[9px] uppercase tracking-wider font-bold shrink-0 ${iconClass}`}>
-          {icon}
+        <span className={`shrink-0 mt-0.5 ${iconClass}`}>
+          <Icon size={14} strokeWidth={2.5} />
         </span>
       </div>
       {card.reps > 0 && (
