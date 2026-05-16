@@ -3,11 +3,18 @@ import { useState } from 'react';
 interface AppSettings {
   soundEnabled: boolean;
   hapticsEnabled: boolean;
+  autoPronounce: boolean;
+  // Produce-mode (RU → EN). When on, recognition-variant vocab cards flip:
+  // translation on the front, term on the back. Forces the user to recall
+  // the English form. Shares FSRS state with recognition direction.
+  produceDirection: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   soundEnabled: true,
   hapticsEnabled: true,
+  autoPronounce: false,
+  produceDirection: false,
 };
 
 const SETTINGS_KEY = 'oxenfurt_settings';

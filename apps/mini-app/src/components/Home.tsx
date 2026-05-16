@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { mainButton } from '@telegram-apps/sdk-react';
 import { Library as LibraryIcon, BarChart3, Settings, Flame, ChevronDown } from 'lucide-react';
@@ -42,6 +42,15 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
       const res = await fetchWithAuth('/stats/today');
       if (!res.ok) throw new Error('Failed to fetch stats');
       return (await res.json()) as { reviewedToday: number; dueCount: number; streak: number };
+    },
+  });
+
+  const { data: heatmapData } = useQuery({
+    queryKey: ['stats', 'heatmap'],
+    queryFn: async () => {
+      const res = await fetchWithAuth('/stats/heatmap');
+      if (!res.ok) throw new Error('Failed to fetch heatmap');
+      return (await res.json()) as { history: { date: string; count: number }[] };
     },
   });
 
@@ -160,6 +169,15 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
             </p>
           </div>
         )}
+
+        {heatmapData && heatmapData.history.length > 0 && (
+          <div className="mt-8 w-full max-w-[280px]">
+             <h2 className="text-[10px] uppercase tracking-[0.15em] text-app-hint font-bold mb-3 text-center opacity-50">
+               Активность
+             </h2>
+             <CompactHeatmap history={heatmapData.history} />
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-4 relative z-10">
@@ -273,4 +291,46 @@ function pluralize(n: number, forms: [string, string, string]): string {
   if (mod10 === 1) return forms[0]
   if (mod10 >= 2 && mod10 <= 4) return forms[1]
   return forms[2]
+}
+
+function CompactHeatmap({ history }: { history: { date: string; count: number }[] }) {
+  const counts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const h of history) m.set(h.date, h.count)
+    return m
+  }, [history])
+
+  // Show last 12 weeks (3 months)
+  const WEEKS = 12
+  const totalDays = WEEKS * 7
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  
+  const cells = []
+  for (let i = 0; i < totalDays; i++) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - (totalDays - 1 - i))
+    const iso = d.toISOString().slice(0, 10)
+    cells.push({
+      date: iso,
+      count: counts.get(iso) ?? 0
+    })
+  }
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="grid grid-flow-col gap-1" style={{ gridTemplateRows: 'repeat(7, 6px)' }}>
+        {cells.map(c => (
+           <div 
+             key={c.date} 
+             className={`w-[6px] h-[6px] rounded-[1px] ${
+               c.count === 0 ? 'bg-app-hint/10' : 
+               c.count < 5 ? 'bg-app-primary/30' :
+               c.count < 15 ? 'bg-app-primary/60' : 'bg-app-primary'
+             }`}
+           />
+        ))}
+      </div>
+    </div>
+  )
 }

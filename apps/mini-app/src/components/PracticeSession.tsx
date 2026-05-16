@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
-import { Coffee, X, Info } from 'lucide-react';
+import { Coffee, X, Info, Mic, MicOff } from 'lucide-react';
 import {
   backButton,
   disableVerticalSwipes,
@@ -26,6 +26,7 @@ import { speak, stopSpeaking } from '../lib/tts';
 import { cycleTtsSpeed, labelForSpeed, loadTtsSpeed, rateForSpeed, saveTtsSpeed, type TtsSpeed } from '../lib/audioSettings';
 import { Markdown } from './Markdown';
 import { getSettings } from '../lib/settings';
+import { isSpeechRecognitionSupported, startRecognition, type RecognitionHandle } from '../lib/speechRecognition';
 
 interface PracticeSessionProps {
   mode: PracticeMode;
@@ -84,8 +85,22 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Undo functionality state
-  const [pendingReview, setPendingReview] = useState<{ id: string; rating: Rating; timeoutId: number; previousIndex: number; previousStats: typeof sessionStats } | null>(null);
+  // Undo functionality state. `replaySpliceIndex` is set when a card was
+  // re-queued after an Again rating, so undo can also remove the splice.
+  const [pendingReview, setPendingReview] = useState<{
+    id: string;
+    rating: Rating;
+    timeoutId: number;
+    previousIndex: number;
+    previousStats: typeof sessionStats;
+    replaySpliceIndex: number | null;
+  } | null>(null);
+
+  // Working queue. Starts as the filtered `data.cards` and grows whenever
+  // the user rates Again — the failed card gets spliced back in a few
+  // positions ahead for in-session retry (Anki "learning steps" style).
+  const [queue, setQueue] = useState<DueCardDto[]>([]);
+  const [queueSeed, setQueueSeed] = useState<readonly DueCardDto[] | null>(null);
 
   // Backend session id (UUID). Set once on mount via POST /sessions, then
   // used by finishSession() on completion. Fire-and-forget — if the start
@@ -188,9 +203,29 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingReview]);
 
-  const cards = data?.cards ?? [];
-  const currentCard = cards[currentIndex];
-  const progress = cards.length > 0 ? (currentIndex / cards.length) * 100 : 0;
+  // Typed-answer modes (cloze/translation/listening) have no sensible
+  // rendering for theory cards — they have no `term` to gap-fill, translate,
+  // or pronounce. Filter them out so the session stays coherent with the
+  // user's chosen mode. They remain available in `recognition` and `mixed`.
+  const baseCards = useMemo<DueCardDto[]>(() => {
+    const all = data?.cards ?? [];
+    if (mode === 'cloze' || mode === 'translation' || mode === 'listening') {
+      return all.filter((c) => c.type !== 'theory');
+    }
+    return all;
+  }, [data?.cards, mode]);
+
+  // Re-seed working queue whenever the underlying due list changes
+  // (refetch, mode switch, bypass toggle). React 19 idiomatic — set state
+  // during render, identity-compare against the previous seed.
+  if (queueSeed !== baseCards) {
+    setQueueSeed(baseCards);
+    setQueue(baseCards);
+    if (currentIndex !== 0) setCurrentIndex(0);
+  }
+
+  const currentCard = queue[currentIndex];
+  const progress = queue.length > 0 ? (currentIndex / queue.length) * 100 : 0;
 
   const intervalLabels = useMemo(() => {
     if (!currentCard) return null
@@ -234,9 +269,12 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // Persisted TTS speed preference — toggle via the chip below the 🔊 button.
   const [ttsSpeed, setTtsSpeed] = useState<TtsSpeed>(() => loadTtsSpeed())
 
-  // Listening variant: pronounce the term on card show.
+  // Listening variant or Auto-pronounce setting: pronounce the term on card show.
   useEffect(() => {
-    if (variant === 'listening' && !isRevealed && currentCard?.type === 'vocab') {
+    const { autoPronounce } = getSettings();
+    const shouldSpeak = (variant === 'listening' || autoPronounce) && !isRevealed && currentCard?.type === 'vocab';
+    
+    if (shouldSpeak) {
       const vocab = currentCard.payload as VocabPayload
       // Small delay so the card animation finishes before audio starts.
       const t = setTimeout(() => { void speak(vocab.term, { rate: rateForSpeed(ttsSpeed) }) }, 250)
@@ -315,6 +353,21 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       correct: sessionStats.correct + (isCorrect ? 1 : 0),
     }
 
+    // Auto-replay: on Again, re-queue this card a few positions ahead so the
+    // user sees it again in the same session (Anki learning-steps style).
+    // The FSRS review still fires normally — the server treats each retry
+    // as an independent rating event.
+    let replaySpliceIndex: number | null = null;
+    let workingLength = queue.length;
+    if (rating === RATING.Again) {
+      replaySpliceIndex = Math.min(currentIndex + 4, queue.length);
+      workingLength = queue.length + 1;
+      setQueue((q) => {
+        const pos = Math.min(currentIndex + 4, q.length);
+        return [...q.slice(0, pos), currentCard, ...q.slice(pos)];
+      });
+    }
+
     // Flush any existing pending review immediately before queueing the next one
     if (pendingReview) {
       clearTimeout(pendingReview.timeoutId);
@@ -333,12 +386,13 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       timeoutId,
       previousIndex: currentIndex,
       previousStats: sessionStats,
+      replaySpliceIndex,
     });
 
     setSessionStats(nextStats)
 
     // Optimistically advance
-    if (currentIndex < cards.length - 1) {
+    if (currentIndex < workingLength - 1) {
       setIsRevealed(false);
       setCurrentIndex((idx) => idx + 1);
     } else {
@@ -356,10 +410,17 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   const handleUndo = () => {
     if (!pendingReview) return;
-    
+
     // Cancel the delayed API call
     clearTimeout(pendingReview.timeoutId);
-    
+
+    // If the previous Again spliced the card into the queue, also remove
+    // that splice so the future-position state is consistent with the undo.
+    if (pendingReview.replaySpliceIndex !== null) {
+      const pos = pendingReview.replaySpliceIndex;
+      setQueue((q) => [...q.slice(0, pos), ...q.slice(pos + 1)]);
+    }
+
     // Revert state
     setCurrentIndex(pendingReview.previousIndex);
     setSessionStats(pendingReview.previousStats);
@@ -440,7 +501,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     );
   }
 
-  if (cards.length === 0) {
+  if (queue.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-app-bg text-app-text">
         <div className="w-20 h-20 bg-app-surface border border-app-border rounded-full flex items-center justify-center text-app-primary shadow-sm mb-6">
@@ -491,12 +552,14 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   // Split sentence logic for target term highlighting
   const renderSentenceWithHighlight = (sentence: string, term: string) => {
-    if (!term || !sentence.includes(term)) return <p className="text-xl leading-relaxed">{sentence}</p>;
+    const fontSize = sentence.length > 120 ? 'text-lg' : sentence.length > 70 ? 'text-xl' : 'text-2xl';
+    
+    if (!term || !sentence.includes(term)) return <p className={`${fontSize} leading-relaxed italic font-serif`}>{sentence}</p>;
     
     const parts = sentence.split(new RegExp(`(${term})`, 'gi'));
     
     return (
-      <p className="text-xl leading-relaxed">
+      <p className={`${fontSize} leading-relaxed italic font-serif`}>
         {parts.map((part, i) => 
           part.toLowerCase() === term.toLowerCase() 
             ? <span key={i} className="text-app-primary font-bold underline decoration-2 underline-offset-4">{part}</span>
@@ -518,7 +581,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       </div>
 
       <div className="p-4 flex justify-between items-center text-[10px] text-app-hint uppercase tracking-wider font-bold">
-        <span>Карточка {currentIndex + 1} / {cards.length}</span>
+        <span>Карточка {currentIndex + 1} / {queue.length}</span>
         <div className="flex items-center gap-3">
           {currentCard!.type === 'theory' && <span className="text-app-primary">📖 Theory</span>}
           <button
@@ -657,6 +720,12 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                     </div>
                   ) : null}
                   
+                  {!expectsTypedAnswer && (
+                    <div className="absolute top-4 left-6 pointer-events-none">
+                      <CardStabilityIndicator stability={currentCard!.fsrs.stability} />
+                    </div>
+                  )}
+
                   {currentCard!.source && !expectsTypedAnswer && (
                     <div className="absolute inset-x-0 bottom-10 text-[10px] text-app-hint uppercase tracking-[0.2em] font-bold opacity-40 pointer-events-none text-center">
                       {currentCard!.source}
@@ -863,34 +932,99 @@ function TypedAnswerField({
   const isError = matchResult && matchResult.kind === 'miss';
   const isSuccess = matchResult && (matchResult.kind === 'exact' || matchResult.kind === 'close');
 
+  const [isListening, setIsListening] = useState(false);
+  const [voiceUnavailable, setVoiceUnavailable] = useState(false);
+  const recognitionRef = useRef<RecognitionHandle | null>(null);
+  const speechSupported = isSpeechRecognitionSupported();
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+    };
+  }, []);
+
+  const toggleVoice = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const handle = startRecognition({
+      lang: 'en-US',
+      onInterim: (interim) => onChange(interim),
+      onResult: (transcript) => onChange(transcript),
+      onError: (code) => {
+        // `not-allowed` / `service-not-allowed` = mic permission denied.
+        // `no-speech` is harmless silence — we ignore it. Anything else we
+        // surface by hiding the mic so the user falls back to keyboard.
+        if (code === 'not-allowed' || code === 'service-not-allowed') {
+          setVoiceUnavailable(true);
+        }
+      },
+      onEnd: () => {
+        setIsListening(false);
+        recognitionRef.current = null;
+      },
+    });
+    if (handle === null) {
+      setVoiceUnavailable(true);
+      return;
+    }
+    recognitionRef.current = handle;
+    setIsListening(true);
+  };
+
+  const showMic = speechSupported && !voiceUnavailable;
+
   return (
     <>
-      <motion.input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            onSubmit()
+      <div className="w-full max-w-[240px] relative">
+        <motion.input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              onSubmit()
+            }
+          }}
+          placeholder={placeholder}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          animate={
+            isError ? { x: [0, -10, 10, -10, 10, 0] } :
+            isSuccess ? { scale: [1, 1.02, 1] } : {}
           }
-        }}
-        placeholder={placeholder}
-        autoCapitalize="off"
-        autoCorrect="off"
-        spellCheck={false}
-        animate={
-          isError ? { x: [0, -10, 10, -10, 10, 0] } :
-          isSuccess ? { scale: [1, 1.02, 1] } : {}
-        }
-        transition={{ duration: 0.4 }}
-        className={`w-full max-w-[240px] text-center text-lg bg-app-bg border rounded-xl py-3 px-4 focus:outline-none transition-colors ${
-          isError ? 'border-rose-500 bg-rose-500/5' :
-          isSuccess ? 'border-emerald-500 bg-emerald-500/5' :
-          'border-app-border focus:border-app-primary'
-        }`}
-      />
+          transition={{ duration: 0.4 }}
+          className={`w-full text-center text-lg bg-app-bg border rounded-xl py-3 ${showMic ? 'pl-4 pr-12' : 'px-4'} focus:outline-none transition-colors ${
+            isError ? 'border-rose-500 bg-rose-500/5' :
+            isSuccess ? 'border-emerald-500 bg-emerald-500/5' :
+            isListening ? 'border-app-primary bg-app-primary/5' :
+            'border-app-border focus:border-app-primary'
+          }`}
+        />
+        {showMic && (
+          <motion.button
+            type="button"
+            onClick={toggleVoice}
+            animate={isListening ? { scale: [1, 1.15, 1] } : { scale: 1 }}
+            transition={isListening ? { duration: 1, repeat: Infinity } : { duration: 0.2 }}
+            className={`absolute right-1.5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
+              isListening
+                ? 'bg-rose-500/15 text-rose-500'
+                : 'bg-app-surface text-app-hint active:scale-95'
+            }`}
+            aria-label={isListening ? 'Остановить запись' : 'Сказать голосом'}
+          >
+            {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+          </motion.button>
+        )}
+      </div>
       <button
         onClick={onSubmit}
         className="w-full max-w-[240px] py-3 rounded-xl bg-app-primary text-app-primary-text font-semibold active:scale-95 transition-transform"
@@ -917,6 +1051,26 @@ function SpeedChip({ speed, onCycle }: { speed: TtsSpeed; onCycle: () => void })
       {labelForSpeed(speed)}
     </button>
   )
+}
+
+function CardStabilityIndicator({ stability }: { stability: number }) {
+  // 5 steps of stability
+  let activeDots = 1;
+  if (stability > 90) activeDots = 5;
+  else if (stability > 30) activeDots = 4;
+  else if (stability > 10) activeDots = 3;
+  else if (stability > 2) activeDots = 2;
+
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <div 
+          key={i} 
+          className={`h-1 w-3 rounded-full transition-colors ${i <= activeDots ? 'bg-app-primary/60' : 'bg-app-hint/15'}`}
+        />
+      ))}
+    </div>
+  );
 }
 
 function RatingButton({ label, sub, bg, color, onClick }: { label: string; sub: string; bg: string; color: string; onClick: () => void }) {
