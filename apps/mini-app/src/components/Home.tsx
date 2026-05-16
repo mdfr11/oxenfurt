@@ -226,7 +226,11 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
           <div className="flex flex-col items-center text-center mt-1 px-4 relative">
             {due > 0 ? (
               <>
-                <span className="text-5xl font-black text-app-text tracking-tighter leading-none">{due}</span>
+                <span className={`font-black text-app-text tracking-tighter leading-none ${
+                  due > 999 ? 'text-3xl' : due > 99 ? 'text-4xl' : 'text-5xl'
+                }`}>
+                  {due}
+                </span>
                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-2">К повтору</span>
               </>
             ) : reviewed > 0 ? (
@@ -236,14 +240,18 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
                   animate={{ scale: 1, opacity: 1 }}
                   className="flex flex-col items-center"
                 >
-                  <span className="text-4xl font-black text-app-primary tracking-tighter leading-none">{reviewed}</span>
+                  <span className={`font-black text-app-primary tracking-tighter leading-none ${
+                    reviewed > 999 ? 'text-3xl' : reviewed > 99 ? 'text-4xl' : 'text-5xl'
+                  }`}>
+                    {reviewed}
+                  </span>
                   <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-2">Выполнено</span>
                 </motion.div>
               </>
             ) : (
               <>
                 <span className="text-4xl">📚</span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-2">Пусто</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-2 text-center">Пусто</span>
               </>
             )}
           </div>

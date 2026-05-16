@@ -152,7 +152,7 @@ export function createAgentQuestionsRouter(deps: AgentRouterDeps): Hono {
     const rows = await deps.db.execute<{
       question_id: string
       question: string
-      created_at: Date
+      created_at: Date | string
       card_id: string
       card_type: string
       payload: unknown
@@ -178,11 +178,23 @@ export function createAgentQuestionsRouter(deps: AgentRouterDeps): Hono {
       questions: rows.map((r) => ({
         question_id: r.question_id,
         question: r.question,
-        created_at: r.created_at.toISOString(),
+        // postgres-js usually hands back timestamptz as Date, but some
+        // driver configurations (or compat shims) return it as a string.
+        // Tolerate both rather than blowing up with "toISOString is not a
+        // function" — Hermes can parse either.
+        created_at:
+          r.created_at instanceof Date
+            ? r.created_at.toISOString()
+            : String(r.created_at),
         card: {
           id: r.card_id,
           type: r.card_type,
-          payload: r.payload,
+          // Same tolerance for jsonb: drivers can return parsed object OR
+          // raw JSON string. Hermes wants the object form.
+          payload:
+            typeof r.payload === 'string'
+              ? safeParseJson(r.payload)
+              : r.payload,
           source: r.source,
           source_quote: r.source_quote,
         },
@@ -233,6 +245,14 @@ interface CardQuestionDto {
   created_at: string
   answered_at: string | null
   seen_at: string | null
+}
+
+function safeParseJson(s: string): unknown {
+  try {
+    return JSON.parse(s)
+  } catch {
+    return s
+  }
 }
 
 function rowToDto(row: typeof cardQuestions.$inferSelect): CardQuestionDto {
