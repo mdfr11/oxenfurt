@@ -110,18 +110,25 @@ export function createStatsRouter(deps: StatsRouterDeps): Hono {
     sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180)
     sixMonthsAgo.setHours(0, 0, 0, 0)
 
+    // Pass the cutoff as an ISO string and cast on the SQL side. Embedding a
+    // raw Date in a postgres-js tagged template crashed at runtime with
+    // "The 'string' argument must be of type string ... Received an instance
+    // of Date" — the driver tries to Buffer.from() the parameter through a
+    // path that doesn't accept Date objects.
+    const cutoffIso = sixMonthsAgo.toISOString()
+
     const result = await deps.db.execute<{ date: string; count: number }>(sql`
-      SELECT 
+      SELECT
         to_char(date_trunc('day', reviewed_at), 'YYYY-MM-DD') as date,
         count(*)::int as count
       FROM ${cardReviews}
-      WHERE reviewed_at >= ${sixMonthsAgo}
+      WHERE reviewed_at >= ${cutoffIso}::timestamptz
       GROUP BY date
       ORDER BY date ASC
     `)
 
     return c.json({
-      history: result
+      history: result,
     })
   })
 
