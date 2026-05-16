@@ -33,12 +33,19 @@ interface PracticeSessionProps {
   onExit: () => void;
 }
 
-function safeHaptic<T extends keyof typeof hapticFeedback>(method: T, ...args: Parameters<typeof hapticFeedback[T]>): void {
+function safeHaptic(method: 'impactOccurred' | 'notificationOccurred' | 'selectionChanged', ...args: any[]): void {
   try {
     const { hapticsEnabled } = getSettings();
     if (!hapticsEnabled) return;
-    (hapticFeedback[method] as (...a: typeof args) => void)(...args)
-  } catch {
+
+    if (method === 'impactOccurred') {
+      hapticFeedback.impactOccurred(args[0]);
+    } else if (method === 'notificationOccurred') {
+      hapticFeedback.notificationOccurred(args[0]);
+    } else if (method === 'selectionChanged') {
+      hapticFeedback.selectionChanged();
+    }
+  } catch (e) {
     // SDK not initialised (dev outside Telegram) — silently ignore
   }
 }
@@ -643,8 +650,8 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       </p>
                     </>
                   ) : theory ? (
-                    <div className="overflow-y-auto max-h-full w-full px-2">
-                      <Markdown className="text-xl font-bold text-center leading-snug">
+                    <div className="overflow-y-auto max-h-full w-full px-2 text-center">
+                      <Markdown className="text-xl font-bold leading-snug">
                         {theory.question}
                       </Markdown>
                     </div>
