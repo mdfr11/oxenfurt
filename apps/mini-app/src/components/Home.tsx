@@ -75,10 +75,13 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
   const due = stats?.dueCount ?? 0;
   const reviewed = stats?.reviewedToday ?? 0;
   const totalForToday = due + reviewed;
-  // No cards in flight today → arc empty, not full. A full arc with zero
-  // activity reads as "completed!", which is misleading when nothing has
-  // happened in the first place — the user complained about exactly this.
-  const progressPercent = totalForToday > 0 ? (reviewed / totalForToday) * 100 : 0;
+  
+  // Progress Ring logic:
+  // If we have cards to do today, progress is reviewed / total.
+  // If all cards are done (due === 0 and reviewed > 0), it's 100%.
+  // If it's a fresh day with no activity yet (reviewed === 0), it's 0%.
+  const progressPercent = totalForToday > 0 ? (reviewed / totalForToday) * 100 : (reviewed > 0 ? 100 : 0);
+  
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
@@ -124,23 +127,23 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
         paddingBottom: `calc(2rem + var(--tg-safe-area-inset-bottom, 0px))`,
       }}
     >
-      <div className="flex justify-between items-start z-10 relative">
+      <div className="flex justify-between items-start z-10 relative text-app-text">
         <div className="flex flex-col gap-1.5">
           <h1 className="text-xl font-bold tracking-tight">{getGreeting(userFirstName)}</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
              {stats && stats.streak > 0 && (
                <motion.div 
                  animate={due === 0 && reviewed > 0 ? { filter: ['drop-shadow(0 0 2px #f97316)', 'drop-shadow(0 0 8px #f97316)', 'drop-shadow(0 0 2px #f97316)'] } : {}}
                  transition={{ duration: 2, repeat: Infinity }}
-                 className="flex items-center gap-1 text-orange-500 font-bold text-xs bg-orange-500/10 px-2 py-0.5 rounded-full border border-orange-500/20 shadow-sm"
+                 className="flex items-center gap-1 text-orange-500 font-bold text-[10px] uppercase tracking-wider bg-orange-500/10 px-2 py-1 rounded-full border border-orange-500/20 shadow-sm"
                >
-                 <Flame size={14} fill="currentColor" />
+                 <Flame size={12} fill="currentColor" />
                  <span>{stats.streak} {pluralize(stats.streak, ['день', 'дня', 'дней'])}</span>
                </motion.div>
              )}
-             <div className="bg-app-primary/10 text-app-primary px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-app-primary/20 shadow-sm flex items-center gap-1.5">
+             <div className="bg-app-primary/10 text-app-primary px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border border-app-primary/20 shadow-sm flex items-center gap-1.5">
                <GraduationCap size={12} strokeWidth={2.5} />
-               {getRank(stats?.learnedCount ?? 0)}
+               <span>Ранг: {getRank(stats?.learnedCount ?? 0)}</span>
              </div>
           </div>
         </div>
