@@ -252,11 +252,14 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   // Mirror of pendingReview into a ref so the unmount cleanup below sees
   // the latest value without needing to depend on `pendingReview` (which
-  // would re-fire the cleanup on every rating, double-flushing reviews).
+  // the cleanup on every rating, double-flushing reviews).
   const pendingReviewRef = useRef(pendingReview)
-  pendingReviewRef.current = pendingReview
+  useEffect(() => {
+    pendingReviewRef.current = pendingReview
+  }, [pendingReview])
 
   // Flush any pending review on unmount only — the undo-window timer is
+
   // in-memory only, so if the user exits before it fires, we still want
   // the rating to land on the server. Empty deps + ref guarantees this
   // runs exactly once at teardown.

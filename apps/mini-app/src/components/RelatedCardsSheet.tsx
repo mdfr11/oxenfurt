@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X } from 'lucide-react'
+import { X, BookOpen, Quote, Type } from 'lucide-react'
 import type { CardListDto, PhrasePayload, TheoryPayload, VocabPayload } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
 
@@ -97,8 +97,9 @@ function RelatedRow({ card }: { card: CardListDto }) {
       : card.type === 'phrase'
         ? (card.payload as PhrasePayload).translation
         : (card.payload as TheoryPayload).answer.slice(0, 80)
-  const icon =
-    card.type === 'theory' ? '📖' : card.type === 'phrase' ? '💬' : '✏️'
+  
+  const Icon = card.type === 'theory' ? BookOpen : card.type === 'phrase' ? Quote : Type
+  const iconClass = card.type === 'theory' ? 'text-app-primary' : 'text-app-hint'
 
   return (
     <li className="p-3 rounded-xl bg-app-surface border border-app-border">
@@ -107,7 +108,9 @@ function RelatedRow({ card }: { card: CardListDto }) {
           <div className="font-semibold truncate text-app-text">{title}</div>
           <div className="text-xs text-app-hint truncate mt-0.5">{subtitle}</div>
         </div>
-        <span className="text-[10px] shrink-0">{icon}</span>
+        <span className={`shrink-0 mt-0.5 ${iconClass}`}>
+          <Icon size={12} strokeWidth={2.5} />
+        </span>
       </div>
     </li>
   )
