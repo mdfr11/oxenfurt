@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { backButton } from '@telegram-apps/sdk-react'
 import { Spinner } from '@telegram-apps/telegram-ui'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Scroll, Trophy, Key, FlaskConical, Feather } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import type { HeatmapCell, RecentSession, StatsResponse } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
 
@@ -80,7 +81,7 @@ export function Stats({ onExit }: StatsProps) {
         <h1 className="text-xl font-bold leading-none flex-1">Статистика</h1>
       </div>
 
-      <div className="px-4 flex flex-col gap-4">
+      <div className="px-4 flex flex-col gap-5">
         {/* Top numbers */}
         <div className="grid grid-cols-3 gap-2">
           <StatCard label="Сегодня" count={data.reviews.today.count} sub={todayAcc} />
@@ -89,10 +90,49 @@ export function Stats({ onExit }: StatsProps) {
         </div>
 
         {/* Forecast */}
-        <div className="bg-app-surface border border-app-border rounded-2xl p-4 flex justify-around">
+        <div className="bg-app-surface border border-app-border rounded-2xl p-4 flex justify-around shadow-sm">
           <ForecastCell label="Готовы сейчас" value={data.forecast.due_now} accent />
           <ForecastCell label="В ближайшие 24ч" value={data.forecast.due_next_24h} />
           <ForecastCell label="Всего активных" value={data.forecast.active_total} />
+        </div>
+
+        {/* Relics Section */}
+        <div>
+          <h2 className="text-[11px] uppercase tracking-widest text-app-hint font-bold mb-3 px-1">
+            Реликвии Академии
+          </h2>
+          <div className="grid grid-cols-5 gap-2 px-1">
+             <RelicIcon 
+               icon={Scroll} 
+               label="Свиток Академии" 
+               hint="Заверши первую сессию" 
+               unlocked={data.recent_sessions.length > 0} 
+             />
+             <RelicIcon 
+               icon={Trophy} 
+               label="Кубок Оксенфурта" 
+               hint="Выучи первые 100 слов" 
+               unlocked={(data as any).learned_count >= 100} 
+             />
+             <RelicIcon 
+               icon={Key} 
+               label="Ключ Библиотекаря" 
+               hint="Более 500 повторений" 
+               unlocked={data.heatmap.reduce((acc, c) => acc + c.count, 0) >= 500} 
+             />
+             <RelicIcon 
+               icon={FlaskConical} 
+               label="Эликсир Региса" 
+               hint="7 дней ударного режима" 
+               unlocked={(data as any).streak >= 7} 
+             />
+             <RelicIcon 
+               icon={Feather} 
+               label="Перо Магистра" 
+               hint="Точность >90% за месяц" 
+               unlocked={parseInt(monthAcc) >= 90} 
+             />
+          </div>
         </div>
 
         {/* Heatmap */}
@@ -109,9 +149,9 @@ export function Stats({ onExit }: StatsProps) {
             Последние сессии
           </h2>
           {data.recent_sessions.length === 0 ? (
-            <p className="text-xs text-app-hint px-1">Сессий пока не было</p>
+            <p className="text-xs text-app-hint px-1 italic">Сессий пока не было</p>
           ) : (
-            <ul className="flex flex-col gap-1.5">
+            <ul className="flex flex-col gap-2">
               {data.recent_sessions.map((s) => (
                 <li key={s.id}>
                   <SessionRow session={s} />
@@ -132,7 +172,7 @@ function accuracy({ count, correct }: { count: number; correct: number }): strin
 
 function StatCard({ label, count, sub }: { label: string; count: number; sub: string }) {
   return (
-    <div className="bg-app-surface border border-app-border rounded-2xl p-3 flex flex-col">
+    <div className="bg-app-surface border border-app-border rounded-2xl p-3 flex flex-col shadow-sm">
       <div className="text-[9px] uppercase tracking-wider text-app-hint font-bold">{label}</div>
       <div className="text-2xl font-bold mt-0.5">{count}</div>
       <div className="text-[10px] text-app-hint mt-0.5">точность {sub}</div>
@@ -153,12 +193,57 @@ function ForecastCell({ label, value, accent }: { label: string; value: number; 
   )
 }
 
+function RelicIcon({ icon: Icon, label, hint, unlocked }: { icon: any; label: string; hint: string; unlocked: boolean }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  return (
+    <div className="flex flex-col items-center gap-1 relative">
+      <motion.div 
+        initial={false}
+        animate={unlocked ? { scale: 1, filter: 'grayscale(0)' } : { scale: 0.95, filter: 'grayscale(1)' }}
+        className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-all cursor-pointer ${
+          unlocked 
+            ? 'bg-app-primary/10 border-app-primary/30 text-app-primary shadow-sm' 
+            : 'bg-app-surface border-app-border text-app-hint opacity-40'
+        }`}
+        onClick={() => setShowTooltip(true)}
+      >
+        <Icon size={20} strokeWidth={1.5} />
+      </motion.div>
+      
+      <AnimatePresence>
+        {showTooltip && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTooltip(false)}
+              className="fixed inset-0 z-[60]"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.9 }}
+              className="absolute -top-16 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[10px] px-3 py-2 rounded-xl whitespace-nowrap z-[70] shadow-xl pointer-events-none flex flex-col items-center"
+            >
+              <div className="font-bold">{label}</div>
+              <div className="opacity-70">{hint}</div>
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-zinc-900 rotate-45" />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function SessionRow({ session }: { session: RecentSession }) {
   const acc = session.cards_reviewed > 0
     ? Math.round((session.cards_correct / session.cards_reviewed) * 100)
     : 0
   return (
-    <div className="bg-app-surface border border-app-border rounded-xl px-4 py-2.5 flex items-center justify-between">
+    <div className="bg-app-surface border border-app-border rounded-xl px-4 py-2.5 flex items-center justify-between shadow-sm">
       <div className="text-sm">
         <div className="font-semibold">{formatDate(session.finished_at)}</div>
         <div className="text-[11px] text-app-hint mt-0.5">{formatTime(session.finished_at)}</div>
@@ -234,7 +319,7 @@ function Heatmap({ heatmap, generatedAt }: { heatmap: HeatmapCell[]; generatedAt
   const gridWidth = WEEKS * (CELL_PX + GAP_PX)
 
   return (
-    <div className="bg-app-surface border border-app-border rounded-2xl p-3 overflow-x-auto">
+    <div className="bg-app-surface border border-app-border rounded-2xl p-3 overflow-x-auto shadow-sm">
       <div
         className="grid grid-flow-col"
         style={{
@@ -269,7 +354,7 @@ function Heatmap({ heatmap, generatedAt }: { heatmap: HeatmapCell[]; generatedAt
 
 function heatmapColor(count: number, isFuture: boolean): string {
   if (isFuture) return 'bg-transparent'
-  if (count === 0) return 'bg-app-border'
+  if (count === 0) return 'bg-app-border/40 dark:bg-zinc-800/40'
   if (count <= 5) return 'bg-app-primary/20'
   if (count <= 15) return 'bg-app-primary/40'
   if (count <= 30) return 'bg-app-primary/70'

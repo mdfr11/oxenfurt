@@ -178,10 +178,13 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
           </div>
         </div>
         
-        {reviewed > 0 && (
+        {totalForToday > 0 && (
           <div className="bg-app-surface px-4 py-1.5 rounded-full border border-app-border shadow-sm">
             <p className="text-app-hint text-center text-xs font-semibold">
-              Повторено сегодня: <span className="text-app-text">{reviewed}</span>
+              {due === 0
+                ? <><span className="text-app-text">{reviewed}</span> сегодня — отлично</>
+                : <><span className="text-app-text">{reviewed}</span> из <span className="text-app-text">{totalForToday}</span> сегодня</>
+              }
             </p>
           </div>
         )}

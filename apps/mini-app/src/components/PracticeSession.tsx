@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
-import { Coffee, X, Info, Mic, MicOff } from 'lucide-react';
+import { Coffee, X, Info, Mic, MicOff, Pencil } from 'lucide-react';
 import {
   backButton,
   disableVerticalSwipes,
@@ -27,6 +27,7 @@ import { cycleTtsSpeed, labelForSpeed, loadTtsSpeed, rateForSpeed, saveTtsSpeed,
 import { Markdown } from './Markdown';
 import { getSettings } from '../lib/settings';
 import { isSpeechRecognitionSupported, startRecognition, type RecognitionHandle } from '../lib/speechRecognition';
+import { EditCardSheet } from './EditCardSheet';
 
 interface PracticeSessionProps {
   mode: PracticeMode;
@@ -102,6 +103,8 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // positions ahead for in-session retry (Anki "learning steps" style).
   const [queue, setQueue] = useState<DueCardDto[]>([]);
   const [queueSeed, setQueueSeed] = useState<readonly DueCardDto[] | null>(null);
+
+  const [isEditOpen, setIsEditOpen] = useState(false);
 
   // Backend session id (UUID). Set once on mount via POST /sessions, then
   // used by finishSession() on completion. Fire-and-forget — if the start
@@ -634,12 +637,22 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   return (
     <div className="flex-1 flex flex-col bg-app-bg text-app-text overflow-hidden">
       {/* Progress Bar */}
-      <div className="h-1 w-full bg-black/5 dark:bg-white/5">
+      <div className="h-1 w-full bg-black/5 dark:bg-white/5 relative">
         <motion.div
           className="h-full bg-app-primary"
           initial={{ width: 0 }}
           animate={{ width: `${progress}%` }}
         />
+        {/* Hourglass Timer - subtle 2px line at the top of the card area */}
+        {!isRevealed && !isExiting && (
+           <motion.div 
+             key={`timer-${currentCard.id}`}
+             initial={{ width: 0 }}
+             animate={{ width: '100%' }}
+             transition={{ duration: 15, ease: 'linear' }}
+             className="absolute top-0 left-0 h-[2px] bg-orange-400/40 z-30"
+           />
+        )}
       </div>
 
       <div className="p-4 flex justify-between items-center text-[10px] text-app-hint uppercase tracking-wider font-bold">
@@ -816,6 +829,16 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   transition={{ duration: 0.2 }}
                   className="absolute inset-0 p-8 flex flex-col items-center justify-center gap-5"
                 >
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setIsEditOpen(true)
+                    }}
+                    className="absolute top-4 right-4 w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
+                    aria-label="Редактировать карточку"
+                  >
+                    <Pencil size={14} />
+                  </button>
                   {matchResult && expectsTypedAnswer && (
                     <ClozeFeedback result={matchResult} typedAnswer={typedAnswer} />
                   )}
@@ -937,6 +960,17 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       </div>
       
       <SrsHelpSheet isOpen={isSrsHelpOpen} onClose={() => setIsSrsHelpOpen(false)} />
+
+      <EditCardSheet
+        card={currentCard ?? null}
+        isOpen={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+        onSaved={(updated) => {
+          // Patch the working queue in place so the user sees the edit
+          // immediately on the back they're already looking at.
+          setQueue((q) => q.map((c) => (c.id === updated.id ? updated : c)))
+        }}
+      />
 
       {/* Contextual Translation Tooltip */}
       <AnimatePresence>

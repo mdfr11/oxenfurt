@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { backButton, hapticFeedback } from '@telegram-apps/sdk-react'
 import { Spinner } from '@telegram-apps/telegram-ui'
-import { Archive, ArrowLeft, Search } from 'lucide-react'
+import { Archive, ArrowLeft, BookOpen, Search, X } from 'lucide-react'
 import type {
   CardListDto,
   CardListResponse,
@@ -30,12 +30,25 @@ function safeHaptic<T extends keyof typeof hapticFeedback>(
   }
 }
 
+interface SourceEntry {
+  source: string | null
+  total: number
+  vocab_count: number
+  theory_count: number
+  latest: string
+}
+
 export function Library({ onExit }: LibraryProps) {
   const queryClient = useQueryClient()
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [search, setSearch] = useState('')
   const [openCard, setOpenCard] = useState<CardListDto | null>(null)
+  // Source filter — `null` = no filter, '__none__' = cards without source,
+  // any other string = exact source match. Decoupled from the search input
+  // so the user can combine "all from lesson-X" + "contains 'pragmatic'".
+  const [sourceFilter, setSourceFilter] = useState<string | null>(null)
+  const [isSourcePickerOpen, setIsSourcePickerOpen] = useState(false)
 
   // Debounce search input — wait 250ms after last keystroke before issuing
   // the request, so a 6-letter query doesn't fire 6 round-trips.
@@ -69,9 +82,19 @@ export function Library({ onExit }: LibraryProps) {
     params.set('status', statusFilter)
     if (typeFilter !== 'all') params.set('type', typeFilter)
     if (debouncedSearch.trim()) params.set('q', debouncedSearch.trim())
+    if (sourceFilter !== null) params.set('source', sourceFilter)
     params.set('limit', '100')
     return params.toString()
-  }, [statusFilter, typeFilter, debouncedSearch])
+  }, [statusFilter, typeFilter, debouncedSearch, sourceFilter])
+
+  const { data: sourcesData } = useQuery({
+    queryKey: ['cards', 'sources', statusFilter],
+    queryFn: async () => {
+      const res = await fetchWithAuth(`/cards/sources?status=${statusFilter}`)
+      if (!res.ok) throw new Error('Failed to load sources')
+      return (await res.json()) as { sources: SourceEntry[] }
+    },
+  })
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['cards', 'list', queryParams],
@@ -160,6 +183,31 @@ export function Library({ onExit }: LibraryProps) {
         >
           Архив
         </FilterChip>
+        <div className="w-px bg-app-border self-stretch mx-1" />
+        <button
+          onClick={() => setIsSourcePickerOpen(true)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
+            sourceFilter !== null
+              ? 'bg-app-primary text-app-primary-text'
+              : 'bg-app-surface border border-app-border text-app-text'
+          }`}
+        >
+          <BookOpen size={12} />
+          {sourceFilter === null
+            ? 'По уроку'
+            : sourceFilter === '__none__'
+              ? 'Без источника'
+              : sourceFilter}
+        </button>
+        {sourceFilter !== null && (
+          <button
+            onClick={() => setSourceFilter(null)}
+            className="px-2 rounded-full bg-app-surface border border-app-border text-app-hint active:scale-95"
+            aria-label="Сбросить фильтр уроков"
+          >
+            <X size={12} />
+          </button>
+        )}
       </div>
 
       {/* List */}
@@ -194,8 +242,98 @@ export function Library({ onExit }: LibraryProps) {
           onClose={() => setOpenCard(null)}
           onArchive={() => archive.mutate(openCard.id)}
           archiving={archive.isPending}
+          onJumpToSource={(src) => {
+            setSourceFilter(src ?? '__none__')
+            setOpenCard(null)
+          }}
         />
       )}
+
+      {/* Source picker */}
+      {isSourcePickerOpen && (
+        <SourcePickerSheet
+          sources={sourcesData?.sources ?? []}
+          current={sourceFilter}
+          onPick={(s) => {
+            setSourceFilter(s)
+            setIsSourcePickerOpen(false)
+          }}
+          onClose={() => setIsSourcePickerOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function SourcePickerSheet({
+  sources,
+  current,
+  onPick,
+  onClose,
+}: {
+  sources: SourceEntry[]
+  current: string | null
+  onPick: (source: string | null) => void
+  onClose: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-end"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full bg-app-bg rounded-t-3xl max-h-[75vh] overflow-y-auto"
+        style={{ paddingBottom: `calc(1.5rem + var(--tg-safe-area-inset-bottom, 0px))` }}
+      >
+        <div className="sticky top-0 bg-app-bg flex justify-center py-2">
+          <div className="w-10 h-1 rounded-full bg-app-border" />
+        </div>
+        <div className="px-6 pb-4 flex flex-col gap-2">
+          <h2 className="text-lg font-bold mb-2">Фильтр по уроку</h2>
+          <button
+            onClick={() => onPick(null)}
+            className={`text-left px-4 py-3 rounded-xl border ${
+              current === null ? 'bg-app-primary/10 border-app-primary text-app-primary' : 'bg-app-surface border-app-border text-app-text'
+            } active:scale-[0.98] transition-transform`}
+          >
+            <div className="font-semibold">Все карточки</div>
+            <div className="text-xs text-app-hint mt-0.5">Без ограничения по уроку</div>
+          </button>
+          {sources.length === 0 ? (
+            <p className="text-app-hint text-sm text-center py-6">
+              Пока нет уроков
+            </p>
+          ) : (
+            sources.map((s) => {
+              const key = s.source ?? '__none__'
+              const label = s.source ?? 'Без источника'
+              const isActive = current === key
+              return (
+                <button
+                  key={key}
+                  onClick={() => onPick(key)}
+                  className={`text-left px-4 py-3 rounded-xl border ${
+                    isActive ? 'bg-app-primary/10 border-app-primary text-app-primary' : 'bg-app-surface border-app-border text-app-text'
+                  } active:scale-[0.98] transition-transform`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-semibold truncate">{label}</div>
+                    <span className="text-[10px] uppercase tracking-widest text-app-hint font-bold shrink-0">
+                      {s.total}
+                    </span>
+                  </div>
+                  <div className="text-xs text-app-hint mt-0.5">
+                    {s.vocab_count > 0 && <span>✏️ {s.vocab_count}</span>}
+                    {s.vocab_count > 0 && s.theory_count > 0 && <span> · </span>}
+                    {s.theory_count > 0 && <span>📖 {s.theory_count}</span>}
+                  </div>
+                </button>
+              )
+            })
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -238,11 +376,13 @@ function CardDetailSheet({
   onClose,
   onArchive,
   archiving,
+  onJumpToSource,
 }: {
   card: CardListDto
   onClose: () => void
   onArchive: () => void
   archiving: boolean
+  onJumpToSource: (source: string | null) => void
 }) {
   const isVocab = card.type === 'vocab'
   const vocab = isVocab ? (card.payload as VocabPayload) : null
@@ -302,7 +442,17 @@ function CardDetailSheet({
             <div>Повторений: <span className="font-semibold text-app-text">{card.reps}</span></div>
             <div>Ошибок: <span className="font-semibold text-app-text">{card.lapses}</span></div>
             <div>Следующее повторение: <span className="font-semibold text-app-text">{formatDue(card.due)}</span></div>
-            {card.source && <div>Источник: {card.source}</div>}
+            {card.source && (
+              <div>
+                Источник:{' '}
+                <button
+                  onClick={() => onJumpToSource(card.source)}
+                  className="font-semibold text-app-primary underline underline-offset-2 active:opacity-70"
+                >
+                  {card.source}
+                </button>
+              </div>
+            )}
           </div>
 
           {card.status === 'active' && (
