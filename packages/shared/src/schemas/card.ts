@@ -30,23 +30,8 @@ export type TheoryPayload = v.InferOutput<typeof TheoryPayloadSchema>
 // `pattern` is optional — the canonical form with slot markers, e.g.
 // "to take {sth} into account". When present, used as the prompt for
 // cloze-style practice instead of blanking a random word.
-// A phrase MUST be multi-word — at least one whitespace character between
-// two non-space runs. Single words belong in `vocab`. This is enforced at
-// the schema level because Hermes (and any other ingest source) was happily
-// classifying single words as phrases otherwise.
-const MultiWordPhrase = v.pipe(
-  v.string(),
-  v.trim(),
-  v.minLength(2),
-  v.maxLength(300),
-  v.check(
-    (s) => /\S\s+\S/.test(s),
-    'phrase must contain at least two words separated by whitespace — single words belong in `vocab`',
-  ),
-)
-
 export const PhrasePayloadSchema = v.object({
-  phrase: MultiWordPhrase,
+  phrase: v.pipe(v.string(), v.trim(), v.minLength(2), v.maxLength(300)),
   translation: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
   context_sentence: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
   pattern: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(300))),
@@ -70,7 +55,7 @@ export const TheoryUpdateInputSchema = v.object({
 export type TheoryUpdateInput = v.InferOutput<typeof TheoryUpdateInputSchema>
 
 export const PhraseUpdateInputSchema = v.object({
-  phrase: MultiWordPhrase,
+  phrase: v.pipe(v.string(), v.trim(), v.minLength(2), v.maxLength(300)),
   translation: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
   context_sentence: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
   pattern: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(300))),

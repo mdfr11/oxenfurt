@@ -74,33 +74,16 @@ interface TheoryIngest {
 
 ### When to pick `vocab` vs `phrase`
 
-**The hard rule (enforced by the backend — single-word `phrase` payloads
-return HTTP 400 `invalid_payload`):**
-
-> If the lexical unit has **no whitespace** in it — it MUST be `vocab`.
-> If it has **at least one space** between words — it MAY be `phrase`.
-
-After applying the hard rule, use judgement on the remaining cases:
-
 - **`vocab`** — a single word you'd look up in a dictionary as one entry.
-  `pragmatic`, `wreath`, `versatile`, `spool`. **Always** use vocab for any
-  unit that contains no whitespace — even compounds like `gridlock` or
-  `feedback`.
+  `pragmatic`, `wreath`, `versatile`, `spool`.
 - **`phrase`** — multi-word lexical unit where the meaning is **not** a
   simple sum of its parts, or where the structure must be memorised as a
   whole: collocations (`make a decision`, `pay attention`), idioms (`by no
   means`, `on the other hand`), fixed expressions (`I'd rather not`),
   phrasal verbs (`look up to`, `give in`).
-- For two-word noun phrases that act as one concept (`coffee table`,
-  `traffic jam`): if both words are common enough that a learner knows them
-  individually, prefer `phrase`. If one is exotic, prefer `vocab` on the
-  exotic word.
-- Do NOT split a single word into a phrase by adding context to inflate it.
-  `"to run"` is still a single word — send as `vocab` with `term: "run"`.
-
-**Common misclassification to avoid:** sending a single-word verb or noun
-as `phrase` just because it's used in a phrasal context. `phrase.phrase`
-must literally contain a space character, otherwise it's a schema error.
+- When in doubt, prefer `vocab` for short two-word noun phrases that are
+  basically a single concept (`coffee table`) and `phrase` for anything
+  with a preposition or particle.
 
 Response: `{ created: number, skipped: number }`.
 

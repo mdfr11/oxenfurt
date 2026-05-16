@@ -123,6 +123,162 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
     const rows = await conn!.db.select().from(cards).where(eq(cards.type, 'theory'))
     expect(rows).toHaveLength(2)
   })
+
+  test('inserts a phrase card with status=active', async () => {
+    const summary = await ingestCards(
+      conn!.db,
+      fsrs,
+      {
+        cards: [
+          {
+            type: 'phrase',
+            payload: {
+              phrase: 'take into account',
+              translation: 'учитывать',
+              context_sentence: "We'll take that into account.",
+            },
+            source: 'lesson-2026-05-15',
+          },
+        ],
+      },
+      NOW,
+    )
+    expect(summary).toEqual({ created: 1, skipped: 0 })
+    const rows = await conn!.db.select().from(cards).where(eq(cards.type, 'phrase'))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.status).toBe('active')
+    expect((rows[0]!.payload as { phrase: string }).phrase).toBe('take into account')
+  })
+
+  test('phrase dedup is case-insensitive', async () => {
+    const mk = (phrase: string) => ({
+      type: 'phrase' as const,
+      payload: {
+        phrase,
+        translation: 't',
+        context_sentence: 'x',
+      },
+    })
+    const summary = await ingestCards(
+      conn!.db,
+      fsrs,
+      { cards: [mk('On The Other Hand'), mk('on the other hand'), mk('by no means')] },
+      NOW,
+    )
+    expect(summary).toEqual({ created: 2, skipped: 1 })
+  })
+
+  test('phrase dedup collapses whitespace differences', async () => {
+    const mk = (phrase: string) => ({
+      type: 'phrase' as const,
+      payload: {
+        phrase,
+        translation: 't',
+        context_sentence: 'x',
+      },
+    })
+    const summary = await ingestCards(
+      conn!.db,
+      fsrs,
+      { cards: [mk('take  into   account'), mk('take into account')] },
+      NOW,
+    )
+    expect(summary).toEqual({ created: 1, skipped: 1 })
+  })
+
+  test('phrase dedup persists across separate ingest batches', async () => {
+    const p = {
+      type: 'phrase' as const,
+      payload: {
+        phrase: 'by all means',
+        translation: 'безусловно',
+        context_sentence: 'By all means, go ahead.',
+      },
+    }
+    await ingestCards(conn!.db, fsrs, { cards: [p] }, NOW)
+    const second = await ingestCards(conn!.db, fsrs, { cards: [p] }, NOW)
+    expect(second).toEqual({ created: 0, skipped: 1 })
+  })
+
+  test('vocab and phrase use SEPARATE uniqueness namespaces', async () => {
+    // Same string can be both a vocab term and a phrase — they live in
+    // different dedup spaces. Practically rare but the index is partial.
+    await ingestCards(
+      conn!.db,
+      fsrs,
+      {
+        cards: [
+          {
+            type: 'vocab',
+            payload: {
+              term: 'go',
+              translation: 'идти',
+              context_sentence: 'Go away.',
+              context_term_start: 0,
+              context_term_end: 2,
+            },
+          },
+        ],
+      },
+      NOW,
+    )
+    const result = await ingestCards(
+      conn!.db,
+      fsrs,
+      {
+        cards: [
+          {
+            type: 'phrase',
+            payload: {
+              phrase: 'go away',
+              translation: 'уходи',
+              context_sentence: 'Just go away.',
+            },
+          },
+        ],
+      },
+      NOW,
+    )
+    expect(result).toEqual({ created: 1, skipped: 0 })
+  })
+
+  test('mixed batch — vocab, phrase, theory — all land correctly', async () => {
+    const summary = await ingestCards(
+      conn!.db,
+      fsrs,
+      {
+        cards: [
+          {
+            type: 'vocab',
+            payload: {
+              term: 'pragmatic',
+              translation: 'прагматичный',
+              context_sentence: 'A pragmatic choice.',
+              context_term_start: 2,
+              context_term_end: 11,
+            },
+          },
+          {
+            type: 'phrase',
+            payload: {
+              phrase: 'pay attention',
+              translation: 'обращать внимание',
+              context_sentence: 'Pay attention to detail.',
+            },
+          },
+          {
+            type: 'theory',
+            payload: { question: 'When?', answer: 'Always.' },
+            source_quote: 'always',
+          },
+        ],
+      },
+      NOW,
+    )
+    expect(summary).toEqual({ created: 3, skipped: 0 })
+    const rows = await conn!.db.select().from(cards)
+    expect(rows.map((r) => r.type).sort()).toEqual(['phrase', 'theory', 'vocab'])
+  })
 })
 
 describe.skipIf(noDb)('POST /ingest/cards (HTTP)', () => {

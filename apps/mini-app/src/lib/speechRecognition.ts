@@ -35,7 +35,17 @@ function getCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
 }
 
+// Voice input is disabled across the app. Web Speech Recognition is
+// unreliable in Telegram WebView on Android — the permission dialog fires
+// but the recognition errors out silently with `network` / `no-speech`.
+// The replacement plan is MediaRecorder → Whisper on the backend; until
+// that ships, hiding the mic UI everywhere keeps the experience honest.
+// Flip this back to `true` to re-enable the (broken) Web Speech path for
+// debugging.
+const VOICE_INPUT_ENABLED = false
+
 export function isSpeechRecognitionSupported(): boolean {
+  if (!VOICE_INPUT_ENABLED) return false
   return getCtor() !== null
 }
 

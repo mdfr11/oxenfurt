@@ -41,8 +41,8 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
         : statusRaw === 'draft' ? 'draft'
         : 'active'
     const typeRaw = c.req.query('type')
-    const typeFilter: 'vocab' | 'theory' | undefined =
-      typeRaw === 'vocab' || typeRaw === 'theory' ? typeRaw : undefined
+    const typeFilter: 'vocab' | 'theory' | 'phrase' | undefined =
+      typeRaw === 'vocab' || typeRaw === 'theory' || typeRaw === 'phrase' ? typeRaw : undefined
     const q = (c.req.query('q') ?? '').trim()
     const limit = Math.max(1, Math.min(200, Number.parseInt(c.req.query('limit') ?? '50', 10) || 50))
     const offset = Math.max(0, Number.parseInt(c.req.query('offset') ?? '0', 10) || 0)
@@ -99,6 +99,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
       source: string | null
       total: number
       vocab_count: number
+      phrase_count: number
       theory_count: number
       latest: Date
     }>(sql`
@@ -106,6 +107,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
         source,
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE type = 'vocab')::int AS vocab_count,
+        COUNT(*) FILTER (WHERE type = 'phrase')::int AS phrase_count,
         COUNT(*) FILTER (WHERE type = 'theory')::int AS theory_count,
         MAX(created_at) AS latest
       FROM ${cards}
@@ -119,6 +121,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
         source: r.source,
         total: r.total,
         vocab_count: r.vocab_count,
+        phrase_count: r.phrase_count,
         theory_count: r.theory_count,
         latest: r.latest.toISOString(),
       })),

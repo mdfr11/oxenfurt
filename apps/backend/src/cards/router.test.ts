@@ -27,7 +27,7 @@ async function authHeader(userId = 99): Promise<{ authorization: string }> {
   return { authorization: `Bearer ${token}` }
 }
 
-async function seedActiveVocab(term: string, dueAt: Date = NOW): Promise<string> {
+async function seedActiveVocab(term: string, dueAt: Date = NOW, source?: string): Promise<string> {
   await ingestCards(
     conn!.db,
     fsrs,
@@ -42,6 +42,7 @@ async function seedActiveVocab(term: string, dueAt: Date = NOW): Promise<string>
             context_term_start: 4,
             context_term_end: 4 + term.length,
           },
+          ...(source ? { source } : {}),
         },
       ],
     },
@@ -49,6 +50,49 @@ async function seedActiveVocab(term: string, dueAt: Date = NOW): Promise<string>
   )
   const rows = await conn!.db.select().from(cards)
   return rows.find((r) => (r.payload as { term: string }).term === term)!.id
+}
+
+async function seedActivePhrase(phrase: string, dueAt: Date = NOW, source?: string): Promise<string> {
+  await ingestCards(
+    conn!.db,
+    fsrs,
+    {
+      cards: [
+        {
+          type: 'phrase',
+          payload: {
+            phrase,
+            translation: 'тест',
+            context_sentence: `Try to ${phrase} every day.`,
+          },
+          ...(source ? { source } : {}),
+        },
+      ],
+    },
+    dueAt,
+  )
+  const rows = await conn!.db.select().from(cards)
+  return rows.find((r) => (r.payload as { phrase?: string }).phrase === phrase)!.id
+}
+
+async function seedActiveTheory(question: string, source?: string): Promise<string> {
+  await ingestCards(
+    conn!.db,
+    fsrs,
+    {
+      cards: [
+        {
+          type: 'theory',
+          payload: { question, answer: 'answer body' },
+          source_quote: 'q',
+          ...(source ? { source } : {}),
+        },
+      ],
+    },
+    NOW,
+  )
+  const rows = await conn!.db.select().from(cards)
+  return rows.find((r) => (r.payload as { question?: string }).question === question)!.id
 }
 
 beforeEach(async () => {
@@ -329,5 +373,351 @@ describe.skipIf(noDb)('POST /:id/archive', () => {
       headers: await authHeader(),
     })
     expect(res.status).toBe(400)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// PATCH /:id — inline edit. Verifies the contract from the EditCardSheet:
+//   - vocab: client sends only term/translation/context_sentence; server
+//     recomputes context_term_start/end from the new term + sentence.
+//   - theory: passthrough of question/answer.
+//   - phrase: passthrough of phrase/translation/context/optional pattern.
+//   - type mismatch (vocab payload for a theory card) is rejected.
+// ---------------------------------------------------------------------------
+describe.skipIf(noDb)('PATCH /:id (inline edit)', () => {
+  test('returns 401 without a JWT', async () => {
+    const res = await buildApp().request('/00000000-0000-0000-0000-000000000000', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'vocab', payload: { term: 'x', translation: 'x', context_sentence: 'x' } }),
+    })
+    expect(res.status).toBe(401)
+  })
+
+  test('returns 400 for non-UUID id', async () => {
+    const res = await buildApp().request('/not-a-uuid', {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'vocab', payload: { term: 'a', translation: 'b', context_sentence: 'c' } }),
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid_id' })
+  })
+
+  test('returns 400 for unparseable JSON body', async () => {
+    const id = await seedActiveVocab('foo')
+    const res = await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: '{not-json',
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid_body' })
+  })
+
+  test('returns 400 for schema-invalid payload (empty term)', async () => {
+    const id = await seedActiveVocab('emptyish')
+    const res = await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'vocab', payload: { term: '', translation: 'x', context_sentence: 'x' } }),
+    })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string }
+    expect(body.error).toBe('invalid_payload')
+  })
+
+  test('returns 404 for unknown card id', async () => {
+    const res = await buildApp().request('/00000000-0000-0000-0000-000000000000', {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'vocab', payload: { term: 'x', translation: 'x', context_sentence: 'x' } }),
+    })
+    expect(res.status).toBe(404)
+  })
+
+  test('returns 400 type_mismatch when sending wrong-type payload', async () => {
+    const id = await seedActiveVocab('iam-vocab')
+    const res = await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'theory', payload: { question: 'q', answer: 'a' } }),
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'type_mismatch' })
+  })
+
+  test('vocab: updates fields and recomputes offsets from the new term', async () => {
+    const id = await seedActiveVocab('pragmatic')
+    const res = await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'vocab',
+        payload: {
+          term: 'versatile',
+          translation: 'универсальный',
+          context_sentence: 'She is a versatile musician.',
+        },
+      }),
+    })
+    expect(res.status).toBe(200)
+    const [row] = await conn!.db.select().from(cards).where(eq(cards.id, id))
+    const p = row!.payload as { term: string; translation: string; context_sentence: string; context_term_start: number; context_term_end: number }
+    expect(p.term).toBe('versatile')
+    expect(p.translation).toBe('универсальный')
+    // 'versatile' starts at index 12 in 'She is a versatile musician.'
+    expect(p.context_term_start).toBe(12)
+    expect(p.context_term_end).toBe(12 + 'versatile'.length)
+  })
+
+  test('vocab: offset recompute is case-insensitive', async () => {
+    const id = await seedActiveVocab('original')
+    await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'vocab',
+        payload: { term: 'Pragmatic', translation: 'x', context_sentence: 'A pragmatic choice indeed.' },
+      }),
+    })
+    const [row] = await conn!.db.select().from(cards).where(eq(cards.id, id))
+    const p = row!.payload as { context_term_start: number; context_term_end: number }
+    // 'pragmatic' is at index 2 (after "A ")
+    expect(p.context_term_start).toBe(2)
+    expect(p.context_term_end).toBe(2 + 'Pragmatic'.length)
+  })
+
+  test('vocab: falls back to (0, term.length) when term is not in the sentence', async () => {
+    const id = await seedActiveVocab('searchme')
+    await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'vocab',
+        payload: { term: 'absent', translation: 'отсутствующий', context_sentence: 'No such word here.' },
+      }),
+    })
+    const [row] = await conn!.db.select().from(cards).where(eq(cards.id, id))
+    const p = row!.payload as { context_term_start: number; context_term_end: number }
+    expect(p.context_term_start).toBe(0)
+    expect(p.context_term_end).toBe('absent'.length)
+  })
+
+  test('vocab: does NOT touch FSRS state', async () => {
+    const id = await seedActiveVocab('keepstate')
+    // First put the card through one review so its FSRS state changes.
+    await applyReview(conn!.db, fsrs, id, RATING.Good, NOW)
+    const [before] = await conn!.db.select().from(cards).where(eq(cards.id, id))
+
+    await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'vocab',
+        payload: { term: 'renamed', translation: 'x', context_sentence: 'renamed is now the term' },
+      }),
+    })
+
+    const [after] = await conn!.db.select().from(cards).where(eq(cards.id, id))
+    expect(after!.fsrsState).toBe(before!.fsrsState)
+    expect(after!.stability).toBe(before!.stability)
+    expect(after!.due.getTime()).toBe(before!.due.getTime())
+    expect(after!.reps).toBe(before!.reps)
+  })
+
+  test('theory: updates question and answer', async () => {
+    const id = await seedActiveTheory('Old question')
+    await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'theory',
+        payload: { question: 'New question', answer: 'New **answer**' },
+      }),
+    })
+    const [row] = await conn!.db.select().from(cards).where(eq(cards.id, id))
+    const p = row!.payload as { question: string; answer: string }
+    expect(p.question).toBe('New question')
+    expect(p.answer).toBe('New **answer**')
+  })
+
+  test('phrase: passes through fields without offset recompute', async () => {
+    const id = await seedActivePhrase('take into account')
+    await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'phrase',
+        payload: {
+          phrase: 'pay attention to',
+          translation: 'обращать внимание на',
+          context_sentence: 'Please pay attention to the details.',
+          pattern: 'to pay attention to {sth}',
+        },
+      }),
+    })
+    const [row] = await conn!.db.select().from(cards).where(eq(cards.id, id))
+    const p = row!.payload as { phrase: string; translation: string; pattern?: string }
+    expect(p.phrase).toBe('pay attention to')
+    expect(p.translation).toBe('обращать внимание на')
+    expect(p.pattern).toBe('to pay attention to {sth}')
+    // No offset fields injected for phrase.
+    expect((row!.payload as Record<string, unknown>).context_term_start).toBeUndefined()
+  })
+
+  test('phrase: optional pattern can be omitted', async () => {
+    const id = await seedActivePhrase('on the other hand')
+    const res = await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'phrase',
+        payload: {
+          phrase: 'by the way',
+          translation: 'между прочим',
+          context_sentence: 'By the way, where is he?',
+        },
+      }),
+    })
+    expect(res.status).toBe(200)
+    const [row] = await conn!.db.select().from(cards).where(eq(cards.id, id))
+    const p = row!.payload as { pattern?: string }
+    expect(p.pattern).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// GET /sources — Library "By lesson" picker.
+// ---------------------------------------------------------------------------
+describe.skipIf(noDb)('GET /sources', () => {
+  test('returns 401 without a JWT', async () => {
+    const res = await buildApp().request('/sources')
+    expect(res.status).toBe(401)
+  })
+
+  test('returns an empty list when there are no cards', async () => {
+    const res = await buildApp().request('/sources', { headers: await authHeader() })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ sources: [] })
+  })
+
+  test('groups cards by source with per-type counts', async () => {
+    await seedActiveVocab('alpha', NOW, 'lesson-A')
+    await seedActiveVocab('beta', NOW, 'lesson-A')
+    await seedActivePhrase('on the go', NOW, 'lesson-A')
+    await seedActiveTheory('rule one', 'lesson-B')
+    const res = await buildApp().request('/sources', { headers: await authHeader() })
+    const body = (await res.json()) as {
+      sources: Array<{ source: string | null; total: number; vocab_count: number; theory_count: number }>
+    }
+    const a = body.sources.find((s) => s.source === 'lesson-A')!
+    const b = body.sources.find((s) => s.source === 'lesson-B')!
+    expect(a.total).toBe(3)
+    expect(a.vocab_count).toBe(2)
+    expect(b.total).toBe(1)
+    expect(b.theory_count).toBe(1)
+  })
+
+  test('cards without a source land in the null bucket', async () => {
+    await seedActiveVocab('sourceless')
+    const res = await buildApp().request('/sources', { headers: await authHeader() })
+    const body = (await res.json()) as { sources: Array<{ source: string | null; total: number }> }
+    expect(body.sources).toHaveLength(1)
+    expect(body.sources[0]!.source).toBeNull()
+    expect(body.sources[0]!.total).toBe(1)
+  })
+
+  test('respects ?status filter (archived cards excluded by default)', async () => {
+    const id = await seedActiveVocab('to-archive', NOW, 'lesson-X')
+    await conn!.db.update(cards).set({ status: 'archived' }).where(eq(cards.id, id))
+    const active = await buildApp().request('/sources', { headers: await authHeader() })
+    const archived = await buildApp().request('/sources?status=archived', { headers: await authHeader() })
+    const activeBody = (await active.json()) as { sources: unknown[] }
+    const archivedBody = (await archived.json()) as { sources: Array<{ source: string | null; total: number }> }
+    expect(activeBody.sources).toHaveLength(0)
+    expect(archivedBody.sources).toHaveLength(1)
+    expect(archivedBody.sources[0]!.total).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Extra coverage for GET / — phrase filter, source filter, search across
+// phrase field.
+// ---------------------------------------------------------------------------
+describe.skipIf(noDb)('GET / extras (phrase + source filters)', () => {
+  test('filters by type=phrase', async () => {
+    await seedActiveVocab('plain')
+    await seedActivePhrase('a multi word phrase')
+    const res = await buildApp().request('/?type=phrase', { headers: await authHeader() })
+    const body = (await res.json()) as { cards: Array<{ type: string }>; total: number }
+    expect(body.total).toBe(1)
+    expect(body.cards[0]!.type).toBe('phrase')
+  })
+
+  test('?source= filters to one lesson', async () => {
+    await seedActiveVocab('x', NOW, 'lesson-A')
+    await seedActiveVocab('y', NOW, 'lesson-B')
+    const res = await buildApp().request('/?source=lesson-A', { headers: await authHeader() })
+    const body = (await res.json()) as { cards: Array<{ source: string | null }>; total: number }
+    expect(body.total).toBe(1)
+    expect(body.cards[0]!.source).toBe('lesson-A')
+  })
+
+  test('?source=__none__ filters to cards with no source', async () => {
+    await seedActiveVocab('with-src', NOW, 'lesson-A')
+    await seedActiveVocab('no-src')
+    const res = await buildApp().request('/?source=__none__', { headers: await authHeader() })
+    const body = (await res.json()) as { cards: Array<{ source: string | null }>; total: number }
+    expect(body.total).toBe(1)
+    expect(body.cards[0]!.source).toBeNull()
+  })
+
+  test('search ?q= matches inside phrase field', async () => {
+    await seedActivePhrase('take into account')
+    await seedActivePhrase('pay attention to')
+    const res = await buildApp().request('/?q=account', { headers: await authHeader() })
+    const body = (await res.json()) as { cards: Array<{ payload: { phrase?: string } }>; total: number }
+    expect(body.total).toBe(1)
+    expect(body.cards[0]!.payload.phrase).toBe('take into account')
+  })
+
+  test('combines type=phrase + source filter', async () => {
+    await seedActiveVocab('vocab-A', NOW, 'lesson-A')
+    await seedActivePhrase('phrase from A', NOW, 'lesson-A')
+    await seedActivePhrase('phrase from B', NOW, 'lesson-B')
+    const res = await buildApp().request('/?type=phrase&source=lesson-A', {
+      headers: await authHeader(),
+    })
+    const body = (await res.json()) as { cards: Array<{ payload: { phrase?: string } }>; total: number }
+    expect(body.total).toBe(1)
+    expect(body.cards[0]!.payload.phrase).toBe('phrase from A')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// /due — phrase cards behave like vocab.
+// ---------------------------------------------------------------------------
+describe.skipIf(noDb)('GET /due with phrase cards', () => {
+  test('phrase cards appear in /due alongside vocab', async () => {
+    await seedActiveVocab('single')
+    await seedActivePhrase('multi word here')
+    const res = await buildApp().request('/due', { headers: await authHeader() })
+    const body = (await res.json()) as { cards: Array<{ type: string }> }
+    expect(body.cards.map((c) => c.type).sort()).toEqual(['phrase', 'vocab'])
+  })
+
+  test('phrase cards respect FSRS due date — future-due ones are hidden', async () => {
+    await seedActivePhrase('not due yet', new Date(NOW.getTime() + 24 * 3600 * 1000))
+    const res = await buildApp().request('/due', { headers: await authHeader() })
+    const body = (await res.json()) as { cards: unknown[] }
+    expect(body.cards).toHaveLength(0)
+  })
+
+  test('bypass_due=true exposes phrase cards even when scheduled far ahead', async () => {
+    await seedActivePhrase('much later', new Date(NOW.getTime() + 30 * 24 * 3600 * 1000))
+    const res = await buildApp().request('/due?bypass_due=true', { headers: await authHeader() })
+    const body = (await res.json()) as { cards: unknown[] }
+    expect(body.cards).toHaveLength(1)
   })
 })
