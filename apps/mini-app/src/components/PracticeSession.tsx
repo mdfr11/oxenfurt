@@ -546,7 +546,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                 else if (offset.y < -threshold) handleRate(RATING.Easy);
               }
             }}
-            className={`w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center relative border border-app-border shadow-xl ${
+            className={`w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] relative border border-app-border shadow-xl overflow-hidden ${
               expectsTypedAnswer ? '' : 'cursor-pointer'
             } ${isRevealed ? 'cursor-grab active:cursor-grabbing' : ''}`}
             whileTap={expectsTypedAnswer ? undefined : { scale: 0.98 }}
@@ -559,7 +559,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 1.05 }}
                   transition={{ duration: 0.2 }}
-                  className="flex flex-col items-center gap-6 w-full h-full justify-center"
+                  className="absolute inset-0 p-8 flex flex-col items-center justify-center gap-6"
                 >
                   {variant === 'cloze' && vocab && clozePrompt ? (
                     <>
@@ -647,13 +647,13 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   ) : null}
                   
                   {currentCard!.source && !expectsTypedAnswer && (
-                    <div className="absolute inset-x-0 bottom-10 text-[10px] text-app-hint uppercase tracking-[0.2em] font-bold opacity-40 pointer-events-none">
+                    <div className="absolute inset-x-0 bottom-10 text-[10px] text-app-hint uppercase tracking-[0.2em] font-bold opacity-40 pointer-events-none text-center">
                       {currentCard!.source}
                     </div>
                   )}
 
                   {!expectsTypedAnswer && (
-                    <div className="absolute inset-x-0 bottom-4 text-[9px] text-app-hint opacity-30 uppercase font-bold tracking-[0.3em] pointer-events-none">
+                    <div className="absolute inset-x-0 bottom-4 text-[9px] text-app-hint opacity-30 uppercase font-bold tracking-[0.3em] pointer-events-none text-center">
                       Тап чтобы открыть
                     </div>
                   )}
@@ -665,7 +665,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="flex flex-col items-center gap-5 w-full h-full justify-center"
+                  className="absolute inset-0 p-8 flex flex-col items-center justify-center gap-5"
                 >
                   {matchResult && expectsTypedAnswer && (
                     <ClozeFeedback result={matchResult} typedAnswer={typedAnswer} />
