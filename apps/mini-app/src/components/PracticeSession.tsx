@@ -687,22 +687,12 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   return (
     <div className="flex-1 flex flex-col bg-app-bg text-app-text overflow-hidden">
       {/* Progress Bar */}
-      <div className="h-1 w-full bg-black/5 dark:bg-white/5 relative">
+      <div className="h-1 w-full bg-black/5 dark:bg-white/5">
         <motion.div
           className="h-full bg-app-primary"
           initial={{ width: 0 }}
           animate={{ width: `${progress}%` }}
         />
-        {/* Hourglass Timer - subtle 2px line at the top of the card area */}
-        {!isRevealed && !isExiting && (
-           <motion.div 
-             key={`timer-${currentCard.id}`}
-             initial={{ width: 0 }}
-             animate={{ width: '100%' }}
-             transition={{ duration: 15, ease: 'linear' }}
-             className="absolute top-0 left-0 h-[2px] bg-orange-400/40 z-30"
-           />
-        )}
       </div>
 
       <div className="p-4 flex justify-between items-center text-[10px] text-app-hint uppercase tracking-wider font-bold">
@@ -771,6 +761,17 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
               style={{ backgroundColor: cardBackground }}
               className="absolute inset-0 pointer-events-none z-10"
             />
+
+            {/* Hourglass Timer - subtle line inside the card top */}
+            {!isRevealed && !isExiting && (
+               <motion.div 
+                 key={`timer-${currentCard.id}`}
+                 initial={{ width: 0 }}
+                 animate={{ width: '100%' }}
+                 transition={{ duration: 15, ease: 'linear' }}
+                 className="absolute top-0 left-0 h-1 bg-orange-500/20 z-20"
+               />
+            )}
             
             <AnimatePresence initial={false}>
               {!isRevealed ? (
