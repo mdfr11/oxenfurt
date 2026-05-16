@@ -129,7 +129,11 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // the user rates Again — the failed card gets spliced back in a few
   // positions ahead for in-session retry (Anki "learning steps" style).
   const [queue, setQueue] = useState<DueCardDto[]>([]);
-  const [queueSeed, setQueueSeed] = useState<readonly DueCardDto[] | null>(null);
+  // Re-seed key: a stable fingerprint of the underlying due list. Was
+  // previously the array identity, which changed on every background
+  // refetch (e.g. when the Home stats poll won the race) — that wiped
+  // the user's queue position mid-session.
+  const [queueSeed, setQueueSeed] = useState<string | null>(null);
 
   const [isEditOpen, setIsEditOpen] = useState(false);
 
@@ -221,18 +225,26 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     },
   });
 
-  // Flush any pending review on unmount — the undo-window timer is in-memory
-  // only, so if the user exits before it fires, we still want the rating
-  // to land on the server.
+  // Mirror of pendingReview into a ref so the unmount cleanup below sees
+  // the latest value without needing to depend on `pendingReview` (which
+  // would re-fire the cleanup on every rating, double-flushing reviews).
+  const pendingReviewRef = useRef(pendingReview)
+  pendingReviewRef.current = pendingReview
+
+  // Flush any pending review on unmount only — the undo-window timer is
+  // in-memory only, so if the user exits before it fires, we still want
+  // the rating to land on the server. Empty deps + ref guarantees this
+  // runs exactly once at teardown.
   useEffect(() => {
     return () => {
-      if (pendingReview) {
-        clearTimeout(pendingReview.timeoutId);
-        reviewMutation.mutate({ id: pendingReview.id, rating: pendingReview.rating });
+      const pending = pendingReviewRef.current
+      if (pending) {
+        clearTimeout(pending.timeoutId);
+        reviewMutation.mutate({ id: pending.id, rating: pending.rating });
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingReview]);
+  }, []);
 
   // Typed-answer modes (cloze/translation/listening) have no sensible
   // rendering for theory cards — they have no `term` to gap-fill, translate,
@@ -246,11 +258,14 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     return all;
   }, [data?.cards, mode]);
 
-  // Re-seed working queue whenever the underlying due list changes
-  // (refetch, mode switch, bypass toggle). React 19 idiomatic — set state
-  // during render, identity-compare against the previous seed.
-  if (queueSeed !== baseCards) {
-    setQueueSeed(baseCards);
+  // Re-seed working queue when the *content* of the due list changes —
+  // not just when react-query hands us a new array reference. Background
+  // refetches return identical card ids but a fresh array; without this
+  // fingerprint comparison the user's position would reset on every
+  // refetch tick.
+  const baseSeed = baseCards.map((c) => c.id).join('|');
+  if (queueSeed !== baseSeed) {
+    setQueueSeed(baseSeed);
     setQueue(baseCards);
     if (currentIndex !== 0) setCurrentIndex(0);
   }

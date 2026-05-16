@@ -156,10 +156,13 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
       .where(isNotNull(sessions.finishedAt))
       .orderBy(desc(sessions.startedAt))
       .limit(10),
+    // FSRS state is stored as flat columns on `cards`, not as a JSON column.
+    // The earlier `fsrs->>'stability'` reference 500'd at runtime; the same
+    // bug was fixed once in stats/router.ts and regressed here.
     db.execute<{ count: string }>(sql`
-      SELECT COUNT(*) as count 
-      FROM cards 
-      WHERE status = 'active' AND (fsrs->>'stability')::float >= 10
+      SELECT COUNT(*) as count
+      FROM cards
+      WHERE status = 'active' AND stability >= 10
     `),
     db.execute<{ review_date: Date }>(sql`
       SELECT DISTINCT date_trunc('day', reviewed_at) as review_date

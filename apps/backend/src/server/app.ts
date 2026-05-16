@@ -37,10 +37,11 @@ export function createApp(deps: AppDeps): Hono {
   const now = deps.now ?? (() => new Date())
   const fsrs = deps.fsrs ?? new FsrsService()
 
-  // Print every unhandled error to stderr (journald) before returning the
-  // generic 500 to the client. Without this Hono swallows the stack and a
-  // 500 in production becomes a blind guess; with it the failure is
-  // immediately visible in `journalctl -u oxenfurt-backend`.
+  // Print every unhandled error to stderr (journald) before returning a
+  // generic 500 to the client. The client only gets the opaque code —
+  // raw `err.message` can leak DB constraint text, file paths, or even
+  // fragments of secrets, none of which the API should surface. Operator
+  // debugs via `journalctl -u oxenfurt-backend`.
   app.onError((err, c) => {
     console.error('[oxenfurt-backend] unhandled', {
       method: c.req.method,
@@ -48,7 +49,7 @@ export function createApp(deps: AppDeps): Hono {
       message: err.message,
       stack: err.stack,
     })
-    return c.json({ error: 'internal_error', message: err.message }, 500)
+    return c.json({ error: 'internal_error' }, 500)
   })
 
   // CORS only when explicit allow-list is provided (dev / staging).
