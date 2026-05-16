@@ -27,6 +27,11 @@ const app = createApp({
   db,
   corsAllowedOrigins,
   enableDevAuth: config.ENABLE_DEV_AUTH,
+  llmConfig: {
+    baseUrl: config.LLM_API_BASE_URL,
+    apiKey: config.LLM_API_KEY,
+    model: config.LLM_MODEL,
+  },
 })
 
 Bun.serve({

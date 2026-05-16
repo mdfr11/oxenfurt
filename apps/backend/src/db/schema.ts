@@ -89,3 +89,23 @@ export const sessions = pgTable('sessions', {
 
 export type SessionRow = typeof sessions.$inferSelect
 export type NewSessionRow = typeof sessions.$inferInsert
+
+export type CardQuestionStatus = 'pending' | 'answered' | 'discarded'
+
+export const cardQuestions = pgTable('card_questions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  cardId: uuid('card_id')
+    .notNull()
+    .references(() => cards.id, { onDelete: 'cascade' }),
+  question: text('question').notNull(),
+  status: text('status').$type<CardQuestionStatus>().notNull().default('pending'),
+  response: text('response'),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+    .notNull()
+    .defaultNow(),
+  answeredAt: timestamp('answered_at', { withTimezone: true, mode: 'date' }),
+  seenAt: timestamp('seen_at', { withTimezone: true, mode: 'date' }),
+})
+
+export type CardQuestionRow = typeof cardQuestions.$inferSelect
+export type NewCardQuestionRow = typeof cardQuestions.$inferInsert

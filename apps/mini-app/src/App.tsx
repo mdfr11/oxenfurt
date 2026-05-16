@@ -8,9 +8,10 @@ import { Home } from './components/Home';
 import { Summary } from './components/Summary';
 import { Library } from './components/Library';
 import { Stats } from './components/Stats';
+import { AnswersScreen } from './components/AnswersScreen';
 import { loadPracticeMode, type PracticeMode } from './lib/practiceMode';
 
-type Screen = 'home' | 'practice' | 'summary' | 'loading' | 'library' | 'stats';
+type Screen = 'home' | 'practice' | 'summary' | 'loading' | 'library' | 'stats' | 'answers';
 
 interface SessionStats {
   total: number;
@@ -111,6 +112,11 @@ export default function App() {
             <Stats onExit={() => setScreen('home')} />
           </motion.div>
         )}
+        {screen === 'answers' && (
+          <motion.div key="answers" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
+            <AnswersScreen onExit={() => setScreen('home')} />
+          </motion.div>
+        )}
         {screen === 'home' && (
           <motion.div key="home" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
             <Home
@@ -120,6 +126,7 @@ export default function App() {
               }}
               onOpenLibrary={() => setScreen('library')}
               onOpenStats={() => setScreen('stats')}
+              onOpenAnswers={() => setScreen('answers')}
               userFirstName={userFirstName}
             />
           </motion.div>

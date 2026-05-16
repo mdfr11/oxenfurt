@@ -10,6 +10,8 @@ import {
 } from '../lib/practiceMode';
 import { primeSpeech } from '../lib/tts';
 import { primeAudio } from '../lib/audio';
+import { getSettings, saveSettings } from '../lib/settings';
+import { clearSession, loadSession } from '../lib/sessionPersist';
 import { SettingsSheet } from './SettingsSheet';
 
 import { AnimatePresence, motion } from 'framer-motion';
@@ -18,6 +20,7 @@ interface HomeProps {
   onStart: (mode: PracticeMode) => void;
   onOpenLibrary: () => void;
   onOpenStats: () => void;
+  onOpenAnswers: () => void;
   userFirstName?: string;
 }
 
@@ -40,10 +43,33 @@ function getRank(count: number): string {
   return 'Абитуриент';
 }
 
-export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: HomeProps) {
+export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userFirstName }: HomeProps) {
   const [mode, setMode] = useState<PracticeMode>(() => loadPracticeMode());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isModeSelectOpen, setIsModeSelectOpen] = useState(false);
+  // Soft session-size cap from settings. `null` = no cap, fall back to the
+  // backend's /due default. Persisted in localStorage via lib/settings.
+  const [sessionLimit, setSessionLimitState] = useState<number | null>(() => getSettings().sessionLimit);
+
+  const selectSessionLimit = (limit: number | null) => {
+    setSessionLimitState(limit);
+    saveSettings({ ...getSettings(), sessionLimit: limit });
+  };
+
+  // Resume offer: detect a paused session and surface a dedicated CTA on
+  // Home. Polled with the stats refetch tick to pick up sessions paused
+  // in other tabs / device. Stale on its own — but a stale resume offer
+  // is harmless (PracticeSession's own loadSession() is the truth).
+  const [pausedSession, setPausedSession] = useState(() => loadSession())
+  useEffect(() => {
+    const id = setInterval(() => setPausedSession(loadSession()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const handleDiscardPaused = () => {
+    clearSession()
+    setPausedSession(null)
+  }
 
   // Home stays mounted while the user is in a session — without a polling
   // interval the dueCount/reviewedToday pill goes stale, and the user comes
@@ -71,6 +97,21 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
     },
     refetchOnMount: 'always',
   });
+
+  // Hermes-answered questions badge. Cheap COUNT endpoint, polled with
+  // the same cadence as stats so the user discovers new answers shortly
+  // after they land.
+  const { data: unreadData } = useQuery({
+    queryKey: ['questions', 'count'],
+    queryFn: async () => {
+      const res = await fetchWithAuth('/questions/count');
+      if (!res.ok) throw new Error('Failed to load')
+      return (await res.json()) as { unread: number };
+    },
+    refetchInterval: 60_000,
+    refetchOnMount: 'always',
+  });
+  const unreadCount = unreadData?.unread ?? 0;
 
   const due = stats?.dueCount ?? 0;
   const reviewed = stats?.reviewedToday ?? 0;
@@ -232,25 +273,69 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
       </div>
 
       <div className="flex flex-col gap-4 relative z-10">
+        {unreadCount > 0 && (
+          <button
+            onClick={onOpenAnswers}
+            className="flex items-center gap-2 bg-app-primary/10 border border-app-primary/30 rounded-2xl px-3 py-2 text-sm active:scale-[0.98] transition-transform"
+          >
+            <span className="flex-1 text-app-text text-left">
+              🤖 Hermes ответил на{' '}
+              <span className="font-bold">{unreadCount}</span>{' '}
+              {pluralize(unreadCount, ['вопрос', 'вопроса', 'вопросов'])}
+            </span>
+            <span className="text-[11px] text-app-primary font-semibold">Открыть →</span>
+          </button>
+        )}
+        {pausedSession && (
+          <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-3 py-2 text-sm">
+            <span className="flex-1 text-app-text">
+              ⏸ Незаконченная сессия:{' '}
+              <span className="font-semibold">
+                {pausedSession.currentIndex} / {pausedSession.cards.length}
+              </span>
+            </span>
+            <button
+              onClick={handleDiscardPaused}
+              className="text-[11px] text-app-hint underline underline-offset-2 active:opacity-60"
+            >
+              Сбросить
+            </button>
+          </div>
+        )}
         <div className="relative">
           <button
             className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-bold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
             onClick={() => {
               primeSpeech()
               void primeAudio()
-              onStart(mode)
+              onStart(pausedSession ? pausedSession.mode : mode)
             }}
           >
-            Начать сессию
+            {pausedSession ? 'Продолжить сессию' : 'Начать сессию'}
           </button>
           
-          <div className="mt-4 flex justify-center">
-            <button 
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <button
               onClick={() => setIsModeSelectOpen(!isModeSelectOpen)}
               className="flex items-center gap-1.5 text-xs font-semibold text-app-hint hover:text-app-text transition-colors py-1.5 px-4 rounded-full bg-app-surface border border-app-border shadow-sm active:scale-95"
             >
               Режим: {modeName(mode)} <ChevronDown size={14} className={`transition-transform ${isModeSelectOpen ? 'rotate-180' : ''}`} />
             </button>
+            <div className="flex gap-1.5">
+              {([null, 10, 20, 30] as const).map((n) => (
+                <button
+                  key={n ?? 'all'}
+                  onClick={() => selectSessionLimit(n)}
+                  className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-colors active:scale-95 ${
+                    sessionLimit === n
+                      ? 'bg-app-primary text-app-primary-text border-app-primary'
+                      : 'bg-app-surface text-app-hint border-app-border'
+                  }`}
+                >
+                  {n === null ? 'Все' : n}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Minimalist Dropdown for Mode Selection */}

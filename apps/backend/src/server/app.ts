@@ -10,6 +10,9 @@ import { createSessionsRouter } from '../sessions/router.ts'
 import { createStatsRouter } from '../stats/router.ts'
 import { createTtsRouter } from '../tts/router.ts'
 import { createTranslateRouter } from '../translate/router.ts'
+import { createGradeRouter } from '../grade/router.ts'
+import { createAgentQuestionsRouter, createUserQuestionsRouter } from '../questions/router.ts'
+import { createLlmClient, type LlmClient } from '../llm/client.ts'
 
 export interface AppDeps {
   botToken: string
@@ -30,12 +33,19 @@ export interface AppDeps {
   devAuthTtlSeconds?: number
   /** Override for tests. Defaults to `() => new Date()`. */
   now?: () => Date
+  /** Optional LLM client (OpenAI-compatible). When omitted, falls back to
+   *  env-driven creation via {LLM_API_BASE_URL, LLM_API_KEY, LLM_MODEL};
+   *  if any of those is missing the resulting client is a no-op stub that
+   *  surfaces `llm_not_configured` to API consumers. */
+  llm?: LlmClient
+  llmConfig?: { baseUrl?: string | undefined; apiKey?: string | undefined; model?: string | undefined }
 }
 
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
   const fsrs = deps.fsrs ?? new FsrsService()
+  const llm = deps.llm ?? createLlmClient(deps.llmConfig ?? {})
 
   // Print every unhandled error to stderr (journald) before returning a
   // generic 500 to the client. The client only gets the opaque code —
@@ -185,6 +195,33 @@ export function createApp(deps: AppDeps): Hono {
     '/tts',
     createTtsRouter({
       jwtSecret: deps.jwtSecret,
+      now,
+    }),
+  )
+
+  app.route(
+    '/grade',
+    createGradeRouter({
+      jwtSecret: deps.jwtSecret,
+      llm,
+      now,
+    }),
+  )
+
+  app.route(
+    '/questions',
+    createUserQuestionsRouter({
+      db: deps.db,
+      jwtSecret: deps.jwtSecret,
+      now,
+    }),
+  )
+
+  app.route(
+    '/agent/questions',
+    createAgentQuestionsRouter({
+      db: deps.db,
+      ingestToken: deps.ingestToken,
       now,
     }),
   )

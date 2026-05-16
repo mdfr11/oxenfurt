@@ -9,6 +9,10 @@ interface AppSettings {
   // translation on the front, term on the back. Forces the user to recall
   // the English form. Shares FSRS state with recognition direction.
   produceDirection: boolean;
+  // Soft cap on session size. `null` = no cap (take all due cards from
+  // the backend's default page). Respected by PracticeSession's /due
+  // fetch via the ?limit query parameter.
+  sessionLimit: number | null;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -17,6 +21,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoPronounce: false,
   voiceLocale: 'en-US',
   produceDirection: false,
+  sessionLimit: null,
 };
 
 const SETTINGS_KEY = 'oxenfurt_settings';

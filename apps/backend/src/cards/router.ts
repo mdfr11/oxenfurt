@@ -151,6 +151,34 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
     return c.json({ cards: rows.map(toDueDto) })
   })
 
+  // Related cards from the same `source` (lesson). Used on the back of a
+  // card to give the user a quick view of what else came from the same
+  // lesson — turns isolated atoms into connected sets. Excludes the
+  // anchor card itself; returns active cards only, newest first.
+  app.get('/:id/related', async (c) => {
+    const id = c.req.param('id')
+    if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
+    const [anchor] = await deps.db.select().from(cards).where(eq(cards.id, id))
+    if (anchor === undefined) return c.json({ error: 'not_found' }, 404)
+    if (anchor.source === null) return c.json({ cards: [] })
+
+    const rows = await deps.db
+      .select()
+      .from(cards)
+      .where(
+        and(
+          eq(cards.source, anchor.source),
+          eq(cards.status, 'active'),
+          // exclude self
+          sql`id <> ${id}`,
+        ),
+      )
+      .orderBy(desc(cards.createdAt))
+      .limit(20)
+
+    return c.json({ cards: rows.map(toListDto) })
+  })
+
   // Inline edit. Updates only the human-editable fields of the payload —
   // FSRS state, source, status, etc. all stay untouched. For vocab cards
   // the term offsets are recomputed server-side so the client doesn't have

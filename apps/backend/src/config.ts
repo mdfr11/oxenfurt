@@ -26,6 +26,17 @@ const ConfigSchema = v.object({
   JWT_TTL_SECONDS: StringToInt(60),
   NODE_ENV: v.optional(v.picklist(['development', 'production', 'test'] as const), 'development'),
   ENABLE_DEV_AUTH: BooleanFlag,
+  // Optional LLM provider — uses any OpenAI-compatible /chat/completions
+  // endpoint. Leave all three unset to disable AI features (semantic
+  // grading, future Hermes-side enrichment) without breaking the app.
+  // Examples:
+  //   Anthropic:   LLM_API_BASE_URL=https://api.anthropic.com/v1, LLM_MODEL=claude-haiku-4-5
+  //   Moonshot:    https://api.moonshot.cn/v1,  moonshot-v1-8k
+  //   Together AI: https://api.together.xyz/v1, meta-llama/Llama-3.3-70B
+  //   OpenRouter:  https://openrouter.ai/api/v1, anthropic/claude-haiku-4.5
+  LLM_API_BASE_URL: v.optional(v.string()),
+  LLM_API_KEY: v.optional(v.string()),
+  LLM_MODEL: v.optional(v.string()),
 })
 
 export type Config = v.InferOutput<typeof ConfigSchema>
@@ -42,6 +53,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     JWT_TTL_SECONDS: env.JWT_TTL_SECONDS ?? '900',
     NODE_ENV: env.NODE_ENV,
     ENABLE_DEV_AUTH: env.ENABLE_DEV_AUTH,
+    LLM_API_BASE_URL: env.LLM_API_BASE_URL,
+    LLM_API_KEY: env.LLM_API_KEY,
+    LLM_MODEL: env.LLM_MODEL,
   }
   const config = v.parse(ConfigSchema, raw)
 

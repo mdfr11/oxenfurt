@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
-import { Coffee, X, Info, Mic, MicOff, Pencil, Type, Quote, BookOpen } from 'lucide-react';
+import { Coffee, X, Info, Mic, MicOff, Pencil, Type, Quote, BookOpen, Layers, HelpCircle } from 'lucide-react';
 import {
   backButton,
   disableVerticalSwipes,
@@ -28,7 +28,10 @@ import { cycleTtsSpeed, labelForSpeed, loadTtsSpeed, rateForSpeed, saveTtsSpeed,
 import { Markdown } from './Markdown';
 import { getSettings } from '../lib/settings';
 import { isSpeechRecognitionSupported, startRecognition, type RecognitionHandle } from '../lib/speechRecognition';
+import { clearSession, loadSession, saveSession } from '../lib/sessionPersist';
 import { EditCardSheet } from './EditCardSheet';
+import { RelatedCardsSheet } from './RelatedCardsSheet';
+import { QuestionSheet } from './QuestionSheet';
 
 interface PracticeSessionProps {
   mode: PracticeMode;
@@ -74,19 +77,36 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // state — early-reviewed cards just get rescheduled normally.
   const [bypassDue, setBypassDue] = useState(false);
 
+  // Soft cap from settings — null = no override, let backend default kick in.
+  const sessionLimit = useMemo(() => getSettings().sessionLimit, [])
+
+  // Resume in-flight session if we left one. Reading once is fine: we only
+  // care about the snapshot taken when the screen mounted; later writes go
+  // back into localStorage via saveSession below.
+  const resumed = useMemo(() => loadSession(mode), [mode])
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['cards', 'due', bypassDue],
+    queryKey: ['cards', 'due', bypassDue, sessionLimit],
+    // Skip the fetch entirely on resume — we already have the queue.
+    enabled: resumed === null,
     queryFn: async () => {
-      const path = bypassDue ? '/cards/due?bypass_due=true&limit=50' : '/cards/due'
+      const params = new URLSearchParams()
+      if (bypassDue) {
+        params.set('bypass_due', 'true')
+        params.set('limit', '50')
+      }
+      if (sessionLimit !== null) params.set('limit', String(sessionLimit))
+      const qs = params.toString()
+      const path = qs ? `/cards/due?${qs}` : '/cards/due'
       const res = await fetchWithAuth(path);
       if (!res.ok) throw new Error('Failed to fetch cards');
       return (await res.json()) as { cards: DueCardDto[] };
     },
   });
 
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(() => resumed?.currentIndex ?? 0);
   const [isRevealed, setIsRevealed] = useState(false);
-  const [sessionStats, setSessionStats] = useState({ total: 0, correct: 0 });
+  const [sessionStats, setSessionStats] = useState(() => resumed?.stats ?? { total: 0, correct: 0 });
   // Cloze-only state — reset on each card via the effect below.
   const [typedAnswer, setTypedAnswer] = useState('');
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
@@ -125,17 +145,22 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     return 'rgba(255, 255, 255, 0)';
   });
 
-  // Working queue. Starts as the filtered `data.cards` and grows whenever
-  // the user rates Again — the failed card gets spliced back in a few
-  // positions ahead for in-session retry (Anki "learning steps" style).
-  const [queue, setQueue] = useState<DueCardDto[]>([]);
+  // Working queue. Starts as the filtered `data.cards` (or the resumed
+  // session's snapshot) and grows whenever the user rates Again — the
+  // failed card gets spliced back in a few positions ahead for in-session
+  // retry (Anki "learning steps" style).
+  const [queue, setQueue] = useState<DueCardDto[]>(() => resumed?.cards ?? []);
   // Re-seed key: a stable fingerprint of the underlying due list. Was
   // previously the array identity, which changed on every background
   // refetch (e.g. when the Home stats poll won the race) — that wiped
   // the user's queue position mid-session.
-  const [queueSeed, setQueueSeed] = useState<string | null>(null);
+  const [queueSeed, setQueueSeed] = useState<string | null>(() =>
+    resumed ? resumed.cards.map((c) => c.id).join('|') : null,
+  );
 
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isRelatedOpen, setIsRelatedOpen] = useState(false);
+  const [isQuestionOpen, setIsQuestionOpen] = useState(false);
 
   // Backend session id (UUID). Set once on mount via POST /sessions, then
   // used by finishSession() on completion. Fire-and-forget — if the start
@@ -262,9 +287,10 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // not just when react-query hands us a new array reference. Background
   // refetches return identical card ids but a fresh array; without this
   // fingerprint comparison the user's position would reset on every
-  // refetch tick.
+  // refetch tick. Skip entirely if we resumed a saved session — the query
+  // is disabled in that branch and `baseCards` would be empty.
   const baseSeed = baseCards.map((c) => c.id).join('|');
-  if (queueSeed !== baseSeed) {
+  if (resumed === null && baseCards.length > 0 && queueSeed !== baseSeed) {
     setQueueSeed(baseSeed);
     setQueue(baseCards);
     if (currentIndex !== 0) setCurrentIndex(0);
@@ -487,9 +513,25 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       safeHaptic('notificationOccurred', 'success')
       playSuccessChime()
       finishBackendSession(nextStats.total, nextStats.correct)
+      clearSession();
       onComplete(nextStats.total, nextStats.correct);
     }
   };
+
+  // Persist working state on every meaningful change. Skipped when the
+  // queue is empty (loading or already-finished session) and when the
+  // user has reviewed every card (currentIndex past the end — would be
+  // restored to an unusable state).
+  useEffect(() => {
+    if (queue.length === 0 || currentIndex >= queue.length) return
+    saveSession({
+      mode,
+      cards: queue,
+      currentIndex,
+      stats: sessionStats,
+      savedAt: Date.now(),
+    })
+  }, [mode, queue, currentIndex, sessionStats])
 
   const handleUndo = () => {
     if (!pendingReview) return;
@@ -1005,18 +1047,57 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   transition={{ duration: 0.2 }}
                   className="absolute inset-0 p-8 flex flex-col items-center justify-center gap-5"
                 >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setIsEditOpen(true)
-                    }}
-                    className="absolute top-4 right-4 w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
-                    aria-label="Редактировать карточку"
-                  >
-                    <Pencil size={14} />
-                  </button>
+                  <div className="absolute top-4 right-4 flex flex-col gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setIsEditOpen(true)
+                      }}
+                      className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
+                      aria-label="Редактировать карточку"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    {currentCard!.source && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setIsRelatedOpen(true)
+                        }}
+                        className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
+                        aria-label="Карточки из того же урока"
+                      >
+                        <Layers size={14} />
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setIsQuestionOpen(true)
+                      }}
+                      className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
+                      aria-label="Задать вопрос Hermes"
+                    >
+                      <HelpCircle size={14} />
+                    </button>
+                  </div>
                   {matchResult && expectsTypedAnswer && (
-                    <ClozeFeedback result={matchResult} typedAnswer={typedAnswer} />
+                    <ClozeFeedback
+                      result={matchResult}
+                      typedAnswer={typedAnswer}
+                      expected={
+                        vocab
+                          ? variant === 'cloze'
+                            ? extractClozeTerm(vocab)
+                            : vocab.term
+                          : phrase
+                            ? variant === 'cloze'
+                              ? (buildPhraseCloze(phrase.phrase, currentCard!.id)?.blank ?? phrase.phrase)
+                              : phrase.phrase
+                            : undefined
+                      }
+                      hint={vocab?.translation ?? phrase?.translation}
+                    />
                   )}
                   {vocab && flipForProduce ? (
                     <>
@@ -1171,6 +1252,19 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
           // immediately on the back they're already looking at.
           setQueue((q) => q.map((c) => (c.id === updated.id ? updated : c)))
         }}
+      />
+
+      <RelatedCardsSheet
+        cardId={currentCard?.id ?? null}
+        source={currentCard?.source ?? null}
+        isOpen={isRelatedOpen}
+        onClose={() => setIsRelatedOpen(false)}
+      />
+
+      <QuestionSheet
+        cardId={currentCard?.id ?? null}
+        isOpen={isQuestionOpen}
+        onClose={() => setIsQuestionOpen(false)}
       />
 
       {/* Contextual Translation Tooltip */}
@@ -1459,7 +1553,17 @@ function RatingButton({ label, sub, bg, color, onClick }: { label: string; sub: 
   );
 }
 
-function ClozeFeedback({ result, typedAnswer }: { result: MatchResult; typedAnswer: string }) {
+function ClozeFeedback({
+  result,
+  typedAnswer,
+  expected,
+  hint,
+}: {
+  result: MatchResult
+  typedAnswer: string
+  expected?: string
+  hint?: string
+}) {
   if (result.kind === 'exact') {
     return (
       <span className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest">
@@ -1485,6 +1589,88 @@ function ClozeFeedback({ result, typedAnswer }: { result: MatchResult; typedAnsw
       {typedAnswer.trim() && (
         <span className="text-xs text-app-hint">ты написал: {typedAnswer.trim()}</span>
       )}
+      {expected !== undefined && typedAnswer.trim() && (
+        <SemanticGradeButton userAnswer={typedAnswer.trim()} expected={expected} hint={hint} />
+      )}
+    </div>
+  )
+}
+
+// Opt-in second opinion. The character-level fuzzy match is fast but blind
+// to synonyms / paraphrase ("I want to leave" vs "I want to go away"). When
+// the user thinks they were robbed, this button asks the configured LLM
+// for a semantic verdict. Cheap (~$0.0002 per click on Haiku-class models)
+// because it only fires on demand and only on miss.
+function SemanticGradeButton({
+  userAnswer,
+  expected,
+  hint,
+}: {
+  userAnswer: string
+  expected: string
+  hint?: string
+}) {
+  const [state, setState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'loading' }
+    | { kind: 'done'; verdict: 'correct' | 'close' | 'wrong'; reason: string }
+    | { kind: 'error'; message: string }
+  >({ kind: 'idle' })
+
+  const check = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setState({ kind: 'loading' })
+    try {
+      const res = await fetchWithAuth('/grade', {
+        method: 'POST',
+        body: JSON.stringify({ user_answer: userAnswer, expected, hint }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        if (body.error === 'llm_not_configured') {
+          setState({ kind: 'error', message: 'AI-проверка не настроена на сервере' })
+        } else {
+          setState({ kind: 'error', message: 'Не получилось проверить' })
+        }
+        return
+      }
+      const data = (await res.json()) as { verdict: 'correct' | 'close' | 'wrong'; reason: string }
+      setState({ kind: 'done', ...data })
+    } catch {
+      setState({ kind: 'error', message: 'Сеть подвела' })
+    }
+  }
+
+  if (state.kind === 'idle') {
+    return (
+      <button
+        onClick={check}
+        className="text-[11px] text-app-primary underline underline-offset-2 active:opacity-60"
+      >
+        🤖 Проверить смыслом
+      </button>
+    )
+  }
+  if (state.kind === 'loading') {
+    return <span className="text-[11px] text-app-hint">Думаю…</span>
+  }
+  if (state.kind === 'error') {
+    return <span className="text-[11px] text-app-hint">{state.message}</span>
+  }
+  const colorClass =
+    state.verdict === 'correct'
+      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+      : state.verdict === 'close'
+        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+        : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+  const verdictLabel =
+    state.verdict === 'correct' ? 'AI: верно' : state.verdict === 'close' ? 'AI: близко' : 'AI: мимо'
+  return (
+    <div className="flex flex-col items-center gap-1 max-w-[260px]">
+      <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest ${colorClass}`}>
+        {verdictLabel}
+      </span>
+      <span className="text-[11px] text-app-hint text-center leading-snug">{state.reason}</span>
     </div>
   )
 }
