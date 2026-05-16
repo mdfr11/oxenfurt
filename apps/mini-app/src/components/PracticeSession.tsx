@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
-import { Coffee, X } from 'lucide-react';
+import { Coffee, X, Info } from 'lucide-react';
 import {
   backButton,
   disableVerticalSwipes,
@@ -24,14 +24,14 @@ import { playPopSound, playSuccessChime, playThudSound } from '../lib/audio';
 import { pickVariantFor, type PracticeMode, type ExerciseVariant } from '../lib/practiceMode';
 import { speak, stopSpeaking } from '../lib/tts';
 import { cycleTtsSpeed, labelForSpeed, loadTtsSpeed, rateForSpeed, saveTtsSpeed, type TtsSpeed } from '../lib/audioSettings';
+import { Markdown } from './Markdown';
+import { getSettings } from '../lib/settings';
 
 interface PracticeSessionProps {
   mode: PracticeMode;
   onComplete: (total: number, correct: number) => void;
   onExit: () => void;
 }
-
-import { getSettings } from '../lib/settings';
 
 function safeHaptic<T extends keyof typeof hapticFeedback>(method: T, ...args: Parameters<typeof hapticFeedback[T]>): void {
   try {
@@ -44,18 +44,20 @@ function safeHaptic<T extends keyof typeof hapticFeedback>(method: T, ...args: P
 }
 
 export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionProps) {
-  // When the FSRS-due queue is empty but the user still wants to drill, they
-  // can opt into bypass mode from the empty state. Ratings still update FSRS
-  // state — early-reviewed cards just get rescheduled normally.
-  const [bypassDue, setBypassDue] = useState(false);
-
   // Prevent double-exit or lingering handlers during transition
   const [isExiting, setIsExiting] = useState(false);
+  const [isSrsHelpOpen, setIsSrsHelpOpen] = useState(false);
+
   const handleExit = useMemo(() => () => {
     if (isExiting) return;
     setIsExiting(true);
     onExit();
   }, [isExiting, onExit]);
+
+  // When the FSRS-due queue is empty but the user still wants to drill, they
+  // can opt into bypass mode from the empty state. Ratings still update FSRS
+  // state — early-reviewed cards just get rescheduled normally.
+  const [bypassDue, setBypassDue] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['cards', 'due', bypassDue],
@@ -641,9 +643,11 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       </p>
                     </>
                   ) : theory ? (
-                    <h2 className="text-2xl font-bold">
-                      {theory.question}
-                    </h2>
+                    <div className="overflow-y-auto max-h-full w-full px-2">
+                      <Markdown className="text-xl font-bold text-center leading-snug">
+                        {theory.question}
+                      </Markdown>
+                    </div>
                   ) : null}
                   
                   {currentCard!.source && !expectsTypedAnswer && (
@@ -678,14 +682,24 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       {renderSentenceWithHighlight(vocab.context_sentence, vocab.term)}
                     </>
                   ) : theory ? (
-                    <>
-                      <p className="text-xl">{theory.answer}</p>
+                    <div className="overflow-y-auto max-h-full w-full px-1">
+                      <Markdown className="text-base leading-relaxed text-left">
+                        {theory.answer}
+                      </Markdown>
                       {currentCard!.source_quote && (
-                        <p className="text-sm text-app-hint italic">
-                          Из урока: «{currentCard!.source_quote}»
-                        </p>
+                        <div className="mt-4 pt-3 border-t border-app-border">
+                          <p className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">
+                            Из урока
+                          </p>
+                          <Markdown
+                            className="text-sm text-app-hint italic leading-relaxed"
+                            inline
+                          >
+                            {`«${currentCard!.source_quote}»`}
+                          </Markdown>
+                        </div>
                       )}
-                    </>
+                    </div>
                   ) : null}
                 </motion.div>
               )}
@@ -703,9 +717,18 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       >
         {/* Tells the user the rating row is the way forward, not a result of
             their typed answer. Empirically the most common confusion. */}
-        <p className="text-center text-[10px] text-app-hint uppercase tracking-widest font-bold pb-2 px-3">
-          Как легко вспомнил? · тап = следующая карточка
-        </p>
+        <div className="flex items-center justify-center gap-1.5 pb-2 px-3">
+          <p className="text-[10px] text-app-hint uppercase tracking-widest font-bold">
+            Как легко вспомнил? · тап = далее
+          </p>
+          <button 
+            onClick={() => setIsSrsHelpOpen(true)}
+            className="text-app-hint active:text-app-primary transition-colors"
+            aria-label="Что значат числа?"
+          >
+            <Info size={14} />
+          </button>
+        </div>
         <div className="flex gap-2 h-16 relative">
           <RatingButton label="Снова" sub={intervalLabels?.[RATING.Again] ?? '…'} bg="bg-rose-500/10" color="text-rose-600 dark:text-rose-400" onClick={() => handleRate(RATING.Again)} />
           <RatingButton label="Трудно" sub={intervalLabels?.[RATING.Hard] ?? '…'} bg="bg-orange-500/10" color="text-orange-600 dark:text-orange-400" onClick={() => handleRate(RATING.Hard)} />
@@ -742,7 +765,74 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
           </AnimatePresence>
         </div>
       </div>
+      
+      <SrsHelpSheet isOpen={isSrsHelpOpen} onClose={() => setIsSrsHelpOpen(false)} />
     </div>
+  );
+}
+
+function SrsHelpSheet({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/40 z-50"
+          />
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
+            className="fixed bottom-0 inset-x-0 bg-app-bg rounded-t-3xl p-6 z-[60] shadow-[0_-10px_40px_rgba(0,0,0,0.1)] flex flex-col max-w-[500px] mx-auto text-app-text"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Info size={20} className="text-app-primary" /> Оценки и интервалы
+              </h2>
+              <button onClick={onClose} className="p-2 -mr-2 text-app-hint active:scale-95 transition-transform">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-sm leading-relaxed">
+              <p>
+                Числа под кнопками (например, <span className="font-bold text-app-primary">10м</span> или <span className="font-bold text-app-primary">4д</span>) — это время, через которое карточка появится снова.
+              </p>
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-3 bg-app-surface border border-app-border p-4 rounded-2xl">
+                <span className="font-bold text-rose-600 dark:text-rose-400">Снова</span>
+                <span>Ты не вспомнил слово. Оно вернется очень скоро, чтобы закрепить его в памяти.</span>
+                
+                <span className="font-bold text-orange-600 dark:text-orange-400">Трудно</span>
+                <span>Вспомнил с большим трудом. Интервал увеличится лишь немного.</span>
+                
+                <span className="font-bold text-blue-600 dark:text-blue-400">Хорошо</span>
+                <span>Вспомнил после небольшой паузы. Идеальный баланс для обучения.</span>
+                
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">Легко</span>
+                <span>Вспомнил мгновенно. Слово отправится в долгий ящик — интервал вырастет максимально.</span>
+              </div>
+              <p className="text-app-hint text-xs italic mt-2">
+                Алгоритм FSRS подбирает эти интервалы индивидуально для каждой карточки, чтобы ты тратил минимум времени на повторение.
+              </p>
+            </div>
+            
+            <button 
+              onClick={onClose}
+              className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-bold mt-6 active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
+            >
+              Понятно
+            </button>
+
+            <div style={{ height: 'calc(1rem + var(--tg-safe-area-inset-bottom, 0px))' }}></div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }
 
