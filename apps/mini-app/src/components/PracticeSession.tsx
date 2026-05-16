@@ -83,6 +83,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // Cloze-only state — reset on each card via the effect below.
   const [typedAnswer, setTypedAnswer] = useState('');
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [translationTooltip, setTranslationTooltip] = useState<{ text: string; translation: string | null; x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Undo functionality state. `replaySpliceIndex` is set when a card was
@@ -249,6 +250,16 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   const expectsTypedAnswer = variant === 'cloze' || variant === 'translation' || variant === 'listening'
 
+  // Produce-direction flip. Only applies to vocab cards in the recognition
+  // variant — there we swap front (term + audio) with back (translation).
+  // The other variants already test production in their own way (translation
+  // mode is already RU → EN typed; cloze fills the gap; listening is sound-
+  // first regardless of direction). Read once per session — toggling mid-
+  // practice is rare and not worth subscribing for.
+  const produceMode = useMemo(() => getSettings().produceDirection, [])
+  const flipForProduce =
+    produceMode && variant === 'recognition' && currentCard?.type === 'vocab'
+
   // Reset typed answer + match feedback when the active card changes.
   // React 19 idiomatic: set state during render when an upstream identity
   // shifts. The setState calls below get coalesced into one re-render.
@@ -270,10 +281,16 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   const [ttsSpeed, setTtsSpeed] = useState<TtsSpeed>(() => loadTtsSpeed())
 
   // Listening variant or Auto-pronounce setting: pronounce the term on card show.
+  // Suppressed when produce-mode flips the card — the term is the answer
+  // there, so speaking it on the front would spoil the prompt.
   useEffect(() => {
     const { autoPronounce } = getSettings();
-    const shouldSpeak = (variant === 'listening' || autoPronounce) && !isRevealed && currentCard?.type === 'vocab';
-    
+    const shouldSpeak =
+      (variant === 'listening' || autoPronounce) &&
+      !isRevealed &&
+      !flipForProduce &&
+      currentCard?.type === 'vocab';
+
     if (shouldSpeak) {
       const vocab = currentCard.payload as VocabPayload
       // Small delay so the card animation finishes before audio starts.
@@ -284,7 +301,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       }
     }
     return undefined
-  }, [currentCard?.id, variant, isRevealed, currentCard, ttsSpeed])
+  }, [currentCard?.id, variant, isRevealed, currentCard, ttsSpeed, flipForProduce])
 
   // Stop any pronunciation when leaving the screen.
   useEffect(() => () => stopSpeaking(), [])
@@ -410,10 +427,10 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   const handleUndo = () => {
     if (!pendingReview) return;
-
+    
     // Cancel the delayed API call
     clearTimeout(pendingReview.timeoutId);
-
+    
     // If the previous Again spliced the card into the queue, also remove
     // that splice so the future-position state is consistent with the undo.
     if (pendingReview.replaySpliceIndex !== null) {
@@ -429,6 +446,37 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     safeHaptic('selectionChanged');
   };
 
+  const handleWordTap = async (word: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").trim();
+    if (!cleanWord || cleanWord.length < 2) return;
+
+    // Show loading state immediately
+    setTranslationTooltip({
+      text: cleanWord,
+      translation: null,
+      x: e.clientX,
+      y: e.clientY
+    });
+
+    try {
+      const res = await fetchWithAuth(`/translate?text=${encodeURIComponent(cleanWord)}`);
+      if (res.ok) {
+        const { translation } = await res.json();
+        setTranslationTooltip(prev => prev ? { ...prev, translation } : null);
+      }
+    } catch (err) {
+      setTranslationTooltip(null);
+    }
+  };
+
+  useEffect(() => {
+    const hideTooltip = () => setTranslationTooltip(null);
+    if (translationTooltip) {
+      window.addEventListener('click', hideTooltip);
+      return () => window.removeEventListener('click', hideTooltip);
+    }
+  }, [translationTooltip]);
   // Fire-and-forget. Idempotent — backend rejects double-finish with 400 and
   // sessionFinishedRef prevents us from even sending it twice locally.
   function finishBackendSession(total: number, correct: number): void {
@@ -550,21 +598,35 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // the cloze prompt. Falls back gracefully if the offsets look bogus.
   const clozePrompt = vocab && variant === 'cloze' ? buildClozeSentence(vocab) : null;
 
-  // Split sentence logic for target term highlighting
+  // Split sentence logic for target term highlighting and contextual translation
   const renderSentenceWithHighlight = (sentence: string, term: string) => {
     const fontSize = sentence.length > 120 ? 'text-lg' : sentence.length > 70 ? 'text-xl' : 'text-2xl';
     
-    if (!term || !sentence.includes(term)) return <p className={`${fontSize} leading-relaxed italic font-serif`}>{sentence}</p>;
-    
+    // First, split by the main term to preserve its highlighting
     const parts = sentence.split(new RegExp(`(${term})`, 'gi'));
     
     return (
       <p className={`${fontSize} leading-relaxed italic font-serif`}>
-        {parts.map((part, i) => 
-          part.toLowerCase() === term.toLowerCase() 
-            ? <span key={i} className="text-app-primary font-bold underline decoration-2 underline-offset-4">{part}</span>
-            : <span key={i}>{part}</span>
-        )}
+        {parts.map((part, i) => {
+          if (part.toLowerCase() === term.toLowerCase()) {
+            return <span key={i} className="text-app-primary font-bold underline decoration-2 underline-offset-4">{part}</span>;
+          }
+          
+          // Split non-term parts into words for tap-to-translate
+          return (
+            <span key={i}>
+              {part.split(/(\s+)/).map((word, wi) => (
+                <span 
+                  key={wi} 
+                  className={word.trim().length > 1 ? 'cursor-help active:text-app-primary transition-colors' : ''}
+                  onClick={(e) => word.trim().length > 1 && handleWordTap(word, e)}
+                >
+                  {word}
+                </span>
+              ))}
+            </span>
+          );
+        })}
       </p>
     );
   };
@@ -688,6 +750,13 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         matchResult={matchResult}
                       />
                     </>
+                  ) : vocab && flipForProduce ? (
+                    <>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Скажи по-английски</div>
+                      <h2 className="text-3xl font-bold tracking-tight text-app-text leading-snug text-center">
+                        {vocab.translation}
+                      </h2>
+                    </>
                   ) : vocab ? (
                     <>
                       <div className="flex items-center gap-3">
@@ -750,7 +819,32 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   {matchResult && expectsTypedAnswer && (
                     <ClozeFeedback result={matchResult} typedAnswer={typedAnswer} />
                   )}
-                  {vocab ? (
+                  {vocab && flipForProduce ? (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-4xl font-bold tracking-tight">
+                          {vocab.term}
+                        </h2>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleReplayAudio()
+                          }}
+                          className="w-10 h-10 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform"
+                          aria-label="Произнести слово"
+                        >
+                          🔊
+                        </button>
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
+                      </div>
+                      <span className="bg-app-primary/10 text-app-primary px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
+                        {vocab.translation}
+                      </span>
+                      {renderSentenceWithHighlight(vocab.context_sentence, vocab.term)}
+                    </>
+                  ) : vocab ? (
                     <>
                       <span className="bg-app-primary/10 text-app-primary px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
                         {vocab.translation}
@@ -843,6 +937,29 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       </div>
       
       <SrsHelpSheet isOpen={isSrsHelpOpen} onClose={() => setIsSrsHelpOpen(false)} />
+
+      {/* Contextual Translation Tooltip */}
+      <AnimatePresence>
+        {translationTooltip && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            className="fixed z-[100] px-4 py-2 bg-zinc-900 text-white rounded-xl shadow-xl border border-white/10 flex flex-col items-center text-center gap-0.5"
+            style={{ 
+              left: Math.max(16, Math.min(window.innerWidth - 150, translationTooltip.x - 75)),
+              top: translationTooltip.y - 80 
+            }}
+          >
+            <div className="text-[10px] uppercase font-bold text-white/50 tracking-widest">{translationTooltip.text}</div>
+            <div className="text-sm font-semibold">
+              {translationTooltip.translation || '...'}
+            </div>
+            {/* Tooltip arrow */}
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-zinc-900 rotate-45 border-r border-b border-white/10" />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -934,6 +1051,7 @@ function TypedAnswerField({
 
   const [isListening, setIsListening] = useState(false);
   const [voiceUnavailable, setVoiceUnavailable] = useState(false);
+  const [voiceHint, setVoiceHint] = useState<string | null>(null);
   const recognitionRef = useRef<RecognitionHandle | null>(null);
   const speechSupported = isSpeechRecognitionSupported();
 
@@ -951,16 +1069,31 @@ function TypedAnswerField({
       recognitionRef.current?.stop();
       return;
     }
+    setVoiceHint(null);
     const handle = startRecognition({
       lang: 'en-US',
       onInterim: (interim) => onChange(interim),
-      onResult: (transcript) => onChange(transcript),
+      onResult: (transcript) => {
+        onChange(transcript);
+        setVoiceHint(null);
+      },
       onError: (code) => {
-        // `not-allowed` / `service-not-allowed` = mic permission denied.
-        // `no-speech` is harmless silence — we ignore it. Anything else we
-        // surface by hiding the mic so the user falls back to keyboard.
+        // Map raw codes to user-readable hints. `not-allowed` / `service-
+        // not-allowed` mean mic permission denied at OS or browser level —
+        // hide the mic since retrying won't help. Others are transient
+        // (network, no-speech, no-audio, no-match) — show a hint and let
+        // the user try again.
         if (code === 'not-allowed' || code === 'service-not-allowed') {
           setVoiceUnavailable(true);
+          setVoiceHint('Микрофон запрещён. Проверь разрешения Telegram → Микрофон в настройках телефона.');
+        } else if (code === 'network') {
+          setVoiceHint('Нет связи с сервисом распознавания. Проверь интернет.');
+        } else if (code === 'no-audio') {
+          setVoiceHint('Микрофон не передал звук. В Telegram WebView это бывает — попробуй открыть приложение через 🌐 в браузере.');
+        } else if (code === 'no-speech' || code === 'no-match') {
+          setVoiceHint('Ничего не услышал. Говори ближе к микрофону.');
+        } else {
+          setVoiceHint('Не получилось: ' + code);
         }
       },
       onEnd: () => {
@@ -970,6 +1103,7 @@ function TypedAnswerField({
     });
     if (handle === null) {
       setVoiceUnavailable(true);
+      setVoiceHint('Голосовой ввод недоступен в этом браузере.');
       return;
     }
     recognitionRef.current = handle;
@@ -1025,6 +1159,11 @@ function TypedAnswerField({
           </motion.button>
         )}
       </div>
+      {voiceHint && (
+        <p className="w-full max-w-[280px] text-[11px] text-app-hint text-center leading-snug -mt-2">
+          {voiceHint}
+        </p>
+      )}
       <button
         onClick={onSubmit}
         className="w-full max-w-[240px] py-3 rounded-xl bg-app-primary text-app-primary-text font-semibold active:scale-95 transition-transform"

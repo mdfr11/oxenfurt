@@ -22,6 +22,7 @@
  */
 
 import { API_BASE, getToken } from './api'
+import { getSettings } from './settings'
 
 // --- Dedicated AudioContext just for TTS playback ---
 //
@@ -79,7 +80,9 @@ export async function speak(text: string, opts: { rate?: number } = {}): Promise
 
   disposeActive()
 
-  const buf = await fetchTtsBuffer(trimmed)
+  const { voiceLocale } = getSettings()
+
+  const buf = await fetchTtsBuffer(trimmed, voiceLocale)
   if (buf !== null) {
     // Path 1: Web Audio decode + play. The canonical mobile-friendly path.
     if (await tryPlayWebAudio(buf, opts)) return
@@ -89,17 +92,17 @@ export async function speak(text: string, opts: { rate?: number } = {}): Promise
   }
 
   // Path 3: ultimate fallback — system synthesizer.
-  trySpeakSystem(trimmed, opts)
+  trySpeakSystem(trimmed, voiceLocale, opts)
 }
 
-async function fetchTtsBuffer(text: string): Promise<ArrayBuffer | null> {
+async function fetchTtsBuffer(text: string, lang: string): Promise<ArrayBuffer | null> {
   const token = getToken()
   if (!token) {
     console.warn('[tts] no JWT, skipping server TTS')
     return null
   }
   try {
-    const res = await fetch(`${API_BASE}/tts?text=${encodeURIComponent(text)}`, {
+    const res = await fetch(`${API_BASE}/tts?text=${encodeURIComponent(text)}&lang=${lang}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) {
@@ -188,7 +191,7 @@ async function tryPlayHtmlAudio(buffer: ArrayBuffer, opts: { rate?: number }): P
   }
 }
 
-function trySpeakSystem(text: string, opts: { rate?: number }): void {
+function trySpeakSystem(text: string, lang: string, opts: { rate?: number }): void {
   if (!('speechSynthesis' in window)) {
     console.warn('[tts] SpeechSynthesis not available — no further fallback')
     return
@@ -197,7 +200,7 @@ function trySpeakSystem(text: string, opts: { rate?: number }): void {
     const sys = window.speechSynthesis
     sys.cancel()
     const utt = new SpeechSynthesisUtterance(text)
-    utt.lang = 'en-US'
+    utt.lang = lang
     utt.rate = opts.rate ?? 0.95
     utt.onstart = () => console.info('[tts] fallback: SpeechSynthesis speaking')
     utt.onerror = (e) => console.warn('[tts] fallback SpeechSynthesis error', e.error)

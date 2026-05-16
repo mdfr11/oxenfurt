@@ -1,4 +1,4 @@
-import { Settings, Volume2, Vibrate, X, Play, Headphones } from 'lucide-react';
+import { Settings, Volume2, Vibrate, X, Play, Headphones, ArrowLeftRight, Languages } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings } from '../lib/settings';
 import { hapticFeedback } from '@telegram-apps/sdk';
@@ -119,6 +119,57 @@ export function SettingsSheet({ isOpen, onClose }: { isOpen: boolean; onClose: (
                     className="w-10 h-6 rounded-full bg-app-border appearance-none relative checked:bg-app-primary cursor-pointer transition-colors before:content-[''] before:absolute before:w-4 before:h-4 before:bg-white before:rounded-full before:top-1 before:left-1 checked:before:translate-x-4 before:transition-transform"
                   />
                 </label>
+                </div>
+
+                <div className="flex flex-col gap-2 p-4 bg-app-surface border border-app-border rounded-2xl active:scale-[0.98] transition-transform text-app-text">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-app-primary/10 text-app-primary flex items-center justify-center">
+                      <ArrowLeftRight size={16} />
+                    </div>
+                    <div>
+                      <div className="font-semibold">Продукция (RU → EN)</div>
+                      <div className="text-xs text-app-hint">В «Узнавании» показывает RU, ты вспоминаешь EN</div>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.produceDirection}
+                    onChange={(e) => updateSettings({ produceDirection: e.target.checked })}
+                    className="w-10 h-6 rounded-full bg-app-border appearance-none relative checked:bg-app-primary cursor-pointer transition-colors before:content-[''] before:absolute before:w-4 before:h-4 before:bg-white before:rounded-full before:top-1 before:left-1 checked:before:translate-x-4 before:transition-transform"
+                  />
+                </label>
+                </div>
+
+                <div className="flex flex-col gap-3 p-4 bg-app-surface border border-app-border rounded-2xl text-app-text">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-app-primary/10 text-app-primary flex items-center justify-center">
+                      <Languages size={16} />
+                    </div>
+                    <div className="font-semibold text-sm">Акцент (Озвучка)</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-app-bg rounded-xl border border-app-border">
+                    <button
+                      onClick={() => updateSettings({ voiceLocale: 'en-US' })}
+                      className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                        settings.voiceLocale === 'en-US'
+                          ? 'bg-app-primary text-app-primary-text shadow-sm'
+                          : 'text-app-hint active:bg-app-surface'
+                      }`}
+                    >
+                      USA
+                    </button>
+                    <button
+                      onClick={() => updateSettings({ voiceLocale: 'en-GB' })}
+                      className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                        settings.voiceLocale === 'en-GB'
+                          ? 'bg-app-primary text-app-primary-text shadow-sm'
+                          : 'text-app-hint active:bg-app-surface'
+                      }`}
+                    >
+                      UK
+                    </button>
+                  </div>
                 </div>
                 </div>
             {/* Safe area padding for bottom of screen */}

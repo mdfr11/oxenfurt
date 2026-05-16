@@ -17,6 +17,11 @@ interface SpeechRecognitionInstance {
   onresult: ((e: SpeechResultEvent) => void) | null
   onerror: ((e: SpeechErrorEvent) => void) | null
   onend: (() => void) | null
+  onstart: (() => void) | null
+  onspeechstart: (() => void) | null
+  onspeechend: (() => void) | null
+  onaudiostart: (() => void) | null
+  onaudioend: (() => void) | null
 }
 
 type SpeechRecognitionCtor = new () => SpeechRecognitionInstance
@@ -57,10 +62,18 @@ export interface RecognitionOptions {
  * recognition also self-terminates after the user pauses speaking.
  *
  * Returns null if the browser has no Speech Recognition API.
+ *
+ * Logs all lifecycle events to console with `[speech]` prefix — Telegram
+ * WebView on Android often fails silently (the permission dialog appears
+ * but the recognition immediately errors with `network` or `no-speech`),
+ * and the DevTools log is the only way to tell what happened.
  */
 export function startRecognition(opts: RecognitionOptions): RecognitionHandle | null {
   const Ctor = getCtor()
-  if (Ctor === null) return null
+  if (Ctor === null) {
+    console.warn('[speech] no SpeechRecognition constructor on window')
+    return null
+  }
 
   const rec = new Ctor()
   rec.lang = opts.lang
@@ -69,15 +82,21 @@ export function startRecognition(opts: RecognitionOptions): RecognitionHandle | 
   rec.maxAlternatives = 1
 
   let finalTranscript = ''
+  let sawAnyResult = false
+  let sawAudio = false
+
+  rec.onstart = () => console.info('[speech] start lang=' + rec.lang)
+  rec.onaudiostart = () => { sawAudio = true; console.info('[speech] audio start') }
+  rec.onaudioend = () => console.info('[speech] audio end, sawAudio=' + sawAudio)
+  rec.onspeechstart = () => console.info('[speech] speech detected')
+  rec.onspeechend = () => console.info('[speech] speech ended')
 
   rec.onresult = (event) => {
+    sawAnyResult = true
     let interim = ''
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const alt = event.results[i]?.[0]
       if (alt === undefined) continue
-      // The Web Speech spec marks finals via `isFinal` — but our minimal type
-      // doesn't model that, and in single-shot mode the last result is final
-      // anyway. Concatenate everything we get and treat it as the answer.
       const text = alt.transcript
       if (i < event.results.length - 1) {
         finalTranscript += text
@@ -85,25 +104,34 @@ export function startRecognition(opts: RecognitionOptions): RecognitionHandle | 
         interim = text
       }
     }
+    console.info('[speech] result interim="' + interim + '" final="' + finalTranscript + '"')
     if (interim !== '' && opts.onInterim) opts.onInterim(interim)
     finalTranscript = (finalTranscript + interim).trim()
   }
 
   rec.onerror = (e) => {
+    console.warn('[speech] error: ' + e.error)
     if (opts.onError) opts.onError(e.error)
   }
 
   rec.onend = () => {
+    console.info('[speech] end, transcript="' + finalTranscript + '" sawResult=' + sawAnyResult + ' sawAudio=' + sawAudio)
     if (finalTranscript !== '') opts.onResult(finalTranscript)
+    else if (!sawAnyResult && opts.onError) {
+      // Recognition stopped without ever producing a result. This is the
+      // common Telegram-WebView-on-Android failure mode — give the caller
+      // a synthetic error so the UI can show "не услышал, попробуй ещё".
+      opts.onError(sawAudio ? 'no-match' : 'no-audio')
+    }
     if (opts.onEnd) opts.onEnd()
   }
 
   try {
     rec.start()
   } catch (e) {
-    // `InvalidStateError` if a previous recognition is still active. Surface
-    // it through onError so the caller can recover.
-    if (opts.onError) opts.onError(e instanceof Error ? e.name : 'start_failed')
+    const code = e instanceof Error ? e.name : 'start_failed'
+    console.warn('[speech] start threw: ' + code)
+    if (opts.onError) opts.onError(code)
     if (opts.onEnd) opts.onEnd()
     return null
   }

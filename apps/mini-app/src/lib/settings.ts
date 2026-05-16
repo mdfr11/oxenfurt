@@ -4,6 +4,7 @@ interface AppSettings {
   soundEnabled: boolean;
   hapticsEnabled: boolean;
   autoPronounce: boolean;
+  voiceLocale: 'en-US' | 'en-GB';
   // Produce-mode (RU → EN). When on, recognition-variant vocab cards flip:
   // translation on the front, term on the back. Forces the user to recall
   // the English form. Shares FSRS state with recognition direction.
@@ -14,6 +15,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   soundEnabled: true,
   hapticsEnabled: true,
   autoPronounce: false,
+  voiceLocale: 'en-US',
   produceDirection: false,
 };
 

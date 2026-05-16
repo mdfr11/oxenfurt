@@ -31,6 +31,15 @@ function getGreeting(name?: string) {
   return name ? `${timeGreeting}, ${name}!` : `${timeGreeting}!`;
 }
 
+function getRank(count: number): string {
+  if (count >= 2000) return 'Ректор Академии';
+  if (count >= 1000) return 'Доктор наук';
+  if (count >= 500) return 'Магистр';
+  if (count >= 200) return 'Бакалавр';
+  if (count >= 50) return 'Студент';
+  return 'Абитуриент';
+}
+
 export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: HomeProps) {
   const [mode, setMode] = useState<PracticeMode>(() => loadPracticeMode());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -41,7 +50,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
     queryFn: async () => {
       const res = await fetchWithAuth('/stats/today');
       if (!res.ok) throw new Error('Failed to fetch stats');
-      return (await res.json()) as { reviewedToday: number; dueCount: number; streak: number };
+      return (await res.json()) as { reviewedToday: number; dueCount: number; streak: number; learnedCount: number };
     },
   });
 
@@ -106,14 +115,21 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
       <div className="flex justify-between items-start z-10 relative">
         <div>
           <h1 className="text-xl font-bold mb-1 tracking-tight">{getGreeting(userFirstName)}</h1>
-          {stats && stats.streak > 0 ? (
-            <div className="flex items-center gap-1.5 text-orange-500 font-semibold text-sm">
-              <Flame size={16} fill="currentColor" className="drop-shadow-sm" />
-              <span>{stats.streak} {pluralize(stats.streak, ['день', 'дня', 'дней'])} подряд</span>
-            </div>
-          ) : (
-             <div className="text-app-hint text-sm">Карточки готовы к повторению</div>
-          )}
+          <div className="flex items-center gap-3">
+             {stats && stats.streak > 0 && (
+               <motion.div 
+                 animate={due === 0 && reviewed > 0 ? { filter: ['drop-shadow(0 0 2px #f97316)', 'drop-shadow(0 0 8px #f97316)', 'drop-shadow(0 0 2px #f97316)'] } : {}}
+                 transition={{ duration: 2, repeat: Infinity }}
+                 className="flex items-center gap-1 text-orange-500 font-bold text-sm"
+               >
+                 <Flame size={16} fill="currentColor" />
+                 <span>{stats.streak} {pluralize(stats.streak, ['день', 'дня', 'дней'])}</span>
+               </motion.div>
+             )}
+             <div className="bg-app-primary/10 text-app-primary px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border border-app-primary/20">
+               {getRank(stats?.learnedCount ?? 0)}
+             </div>
+          </div>
         </div>
         <button 
           onClick={() => setIsSettingsOpen(true)}
