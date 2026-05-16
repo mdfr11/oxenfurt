@@ -13,6 +13,11 @@ interface AppSettings {
   // the backend's default page). Respected by PracticeSession's /due
   // fetch via the ?limit query parameter.
   sessionLimit: number | null;
+  // Show the "🤖 Проверить смыслом" button under miss feedback in
+  // typed-answer modes. Off-by-default keeps the UI clean for people
+  // who'd rather not lean on an LLM (or haven't configured one on the
+  // backend at all — the button would just 503 anyway).
+  aiGradingEnabled: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -22,6 +27,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   voiceLocale: 'en-US',
   produceDirection: false,
   sessionLimit: null,
+  aiGradingEnabled: false,
 };
 
 const SETTINGS_KEY = 'oxenfurt_settings';

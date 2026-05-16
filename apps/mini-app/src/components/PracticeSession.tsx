@@ -1592,7 +1592,7 @@ function ClozeFeedback({
       {typedAnswer.trim() && (
         <span className="text-xs text-app-hint">ты написал: {typedAnswer.trim()}</span>
       )}
-      {expected !== undefined && typedAnswer.trim() && (
+      {expected !== undefined && typedAnswer.trim() && getSettings().aiGradingEnabled && (
         <SemanticGradeButton userAnswer={typedAnswer.trim()} expected={expected} hint={hint} />
       )}
     </div>
