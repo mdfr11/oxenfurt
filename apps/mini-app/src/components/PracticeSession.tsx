@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
-import { Coffee, X, Info, Mic, MicOff, Pencil } from 'lucide-react';
+import { Coffee, X, Info, Mic, MicOff, Pencil, Type, Quote, BookOpen } from 'lucide-react';
 import {
   backButton,
   disableVerticalSwipes,
@@ -708,8 +708,21 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       <div className="p-4 flex justify-between items-center text-[10px] text-app-hint uppercase tracking-wider font-bold">
         <span>Карточка {currentIndex + 1} / {queue.length}</span>
         <div className="flex items-center gap-3">
-          {currentCard!.type === 'theory' && <span className="text-app-primary">📖 Theory</span>}
-          {currentCard!.type === 'phrase' && <span className="text-app-primary">💬 Phrase</span>}
+          {currentCard!.type === 'vocab' && (
+            <span className="text-app-primary flex items-center gap-1">
+              <Type size={12} strokeWidth={2.5} /> Word
+            </span>
+          )}
+          {currentCard!.type === 'phrase' && (
+            <span className="text-app-primary flex items-center gap-1">
+              <Quote size={12} strokeWidth={2.5} /> Phrase
+            </span>
+          )}
+          {currentCard!.type === 'theory' && (
+            <span className="text-app-primary flex items-center gap-1">
+              <BookOpen size={12} strokeWidth={2.5} /> Theory
+            </span>
+          )}
           <button
             onClick={handleExit}
             className="w-7 h-7 flex items-center justify-center rounded-full bg-black/5 dark:bg-white/10 text-app-hint active:scale-95 transition-transform"

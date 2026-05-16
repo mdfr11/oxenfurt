@@ -45,6 +45,12 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isModeSelectOpen, setIsModeSelectOpen] = useState(false);
 
+  // Home stays mounted while the user is in a session — without a polling
+  // interval the dueCount/reviewedToday pill goes stale, and the user comes
+  // back to "Карточек к повтору нет" even after Hermes just ingested new
+  // ones. 30 s is invisible during use, cheap on the backend (one short
+  // count query), and avoids the trap of relying on focus events that
+  // Telegram WebView doesn't reliably fire.
   const { data: stats } = useQuery({
     queryKey: ['stats', 'today'],
     queryFn: async () => {
@@ -52,6 +58,8 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
       if (!res.ok) throw new Error('Failed to fetch stats');
       return (await res.json()) as { reviewedToday: number; dueCount: number; streak: number; learnedCount: number };
     },
+    refetchInterval: 30_000,
+    refetchOnMount: 'always',
   });
 
   const { data: heatmapData } = useQuery({
@@ -61,6 +69,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, userFirstName }: Hom
       if (!res.ok) throw new Error('Failed to fetch heatmap');
       return (await res.json()) as { history: { date: string; count: number }[] };
     },
+    refetchOnMount: 'always',
   });
 
   const due = stats?.dueCount ?? 0;
