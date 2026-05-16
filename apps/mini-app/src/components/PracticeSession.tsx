@@ -39,15 +39,17 @@ interface PracticeSessionProps {
 function safeHaptic(method: 'selectionChanged'): void;
 function safeHaptic(method: 'impactOccurred', style: Parameters<typeof hapticFeedback.impactOccurred>[0]): void;
 function safeHaptic(method: 'notificationOccurred', type: Parameters<typeof hapticFeedback.notificationOccurred>[0]): void;
-function safeHaptic(method: string, arg?: any): void {
+function safeHaptic(method: string, arg?: unknown): void {
   try {
     const { hapticsEnabled } = getSettings();
     if (!hapticsEnabled) return;
 
     if (method === 'impactOccurred') {
-      hapticFeedback.impactOccurred(arg);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      hapticFeedback.impactOccurred(arg as any);
     } else if (method === 'notificationOccurred') {
-      hapticFeedback.notificationOccurred(arg);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      hapticFeedback.notificationOccurred(arg as any);
     } else if (method === 'selectionChanged') {
       hapticFeedback.selectionChanged();
     }
