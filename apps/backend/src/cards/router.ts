@@ -2,12 +2,16 @@ import { Hono } from 'hono'
 import { and, asc, count, desc, eq, lte, or, sql } from 'drizzle-orm'
 import * as v from 'valibot'
 import {
+  CardUpdateInputSchema,
   FsrsService,
   RatingSchema,
   type CardListDto,
+  type CardUpdateInput,
   type DueCardDto,
   type FsrsCardState,
   type Rating,
+  type TheoryPayload,
+  type VocabPayload,
 } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { cardReviews, cards, type CardRow } from '../db/schema.ts'
@@ -42,8 +46,17 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
     const limit = Math.max(1, Math.min(200, Number.parseInt(c.req.query('limit') ?? '50', 10) || 50))
     const offset = Math.max(0, Number.parseInt(c.req.query('offset') ?? '0', 10) || 0)
 
+    // `source` filter for the Library's "By lesson" drill-down. The literal
+    // value `__none__` is a sentinel for the "no source" bucket (Postgres
+    // doesn't make NULL filterable via query string).
+    const sourceRaw = c.req.query('source')
     const conditions = [eq(cards.status, status)]
     if (typeFilter) conditions.push(eq(cards.type, typeFilter))
+    if (sourceRaw === '__none__') {
+      conditions.push(sql`source IS NULL`)
+    } else if (typeof sourceRaw === 'string' && sourceRaw.length > 0) {
+      conditions.push(eq(cards.source, sourceRaw))
+    }
     if (q.length > 0) {
       const pattern = `%${q.toLowerCase()}%`
       const searchClause = or(
@@ -69,6 +82,47 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
     return c.json({ cards: rows.map(toListDto), total })
   })
 
+  // Distinct list of sources with per-source card counts, for the Library's
+  // "By lesson" view. Sorted newest first (max card created_at per source).
+  // Cards with no source land in a synthetic "Без источника" bucket so the
+  // user can still find them.
+  app.get('/sources', async (c) => {
+    const statusRaw = c.req.query('status') ?? 'active'
+    const status: 'active' | 'archived' | 'draft' =
+      statusRaw === 'archived' ? 'archived'
+        : statusRaw === 'draft' ? 'draft'
+        : 'active'
+
+    const rows = await deps.db.execute<{
+      source: string | null
+      total: number
+      vocab_count: number
+      theory_count: number
+      latest: Date
+    }>(sql`
+      SELECT
+        source,
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE type = 'vocab')::int AS vocab_count,
+        COUNT(*) FILTER (WHERE type = 'theory')::int AS theory_count,
+        MAX(created_at) AS latest
+      FROM ${cards}
+      WHERE status = ${status}
+      GROUP BY source
+      ORDER BY latest DESC NULLS LAST
+    `)
+
+    return c.json({
+      sources: rows.map((r) => ({
+        source: r.source,
+        total: r.total,
+        vocab_count: r.vocab_count,
+        theory_count: r.theory_count,
+        latest: r.latest.toISOString(),
+      })),
+    })
+  })
+
   app.get('/due', async (c) => {
     const limitRaw = c.req.query('limit') ?? '20'
     const limit = Math.max(1, Math.min(100, Number.parseInt(limitRaw, 10) || 20))
@@ -90,6 +144,31 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
       .limit(limit)
 
     return c.json({ cards: rows.map(toDueDto) })
+  })
+
+  // Inline edit. Updates only the human-editable fields of the payload —
+  // FSRS state, source, status, etc. all stay untouched. For vocab cards
+  // the term offsets are recomputed server-side so the client doesn't have
+  // to track them when the user edits the term or context.
+  app.patch('/:id', async (c) => {
+    const id = c.req.param('id')
+    if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return c.json({ error: 'invalid_body' }, 400)
+    }
+    const parsed = v.safeParse(CardUpdateInputSchema, body)
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_payload', issues: parsed.issues }, 400)
+    }
+
+    const result = await updateCardPayload(deps.db, id, parsed.output)
+    if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
+    if (result === 'type_mismatch') return c.json({ error: 'type_mismatch' }, 400)
+    return c.json({ card: toListDto(result) })
   })
 
   // Archive an active card — soft delete that hides it from /due and from
@@ -191,6 +270,48 @@ export async function applyReview(
     })
 
     return next
+  })
+}
+
+export async function updateCardPayload(
+  db: Db,
+  cardId: string,
+  input: CardUpdateInput,
+): Promise<CardRow | 'not_found' | 'type_mismatch'> {
+  return await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(cards)
+      .where(eq(cards.id, cardId))
+      .for('update')
+    if (row === undefined) return 'not_found'
+    if (row.type !== input.type) return 'type_mismatch'
+
+    let nextPayload: VocabPayload | TheoryPayload
+    if (input.type === 'vocab') {
+      // Recompute term offsets from the (possibly edited) term and sentence.
+      // Case-insensitive search so the user can write "Pragmatic" / sentence
+      // "...a pragmatic approach..." and it still matches. If the term isn't
+      // a substring of the sentence, fall back to (0, term.length) — cloze
+      // gracefully degrades, the user still sees the answer on reveal.
+      const { term, translation, context_sentence } = input.payload
+      const lowerSentence = context_sentence.toLowerCase()
+      const lowerTerm = term.toLowerCase()
+      const startIdx = lowerSentence.indexOf(lowerTerm)
+      const context_term_start = startIdx >= 0 ? startIdx : 0
+      const context_term_end =
+        startIdx >= 0 ? startIdx + term.length : term.length
+      nextPayload = { term, translation, context_sentence, context_term_start, context_term_end }
+    } else {
+      nextPayload = { ...input.payload }
+    }
+
+    const [updated] = await tx
+      .update(cards)
+      .set({ payload: nextPayload })
+      .where(eq(cards.id, cardId))
+      .returning()
+    return updated ?? 'not_found'
   })
 }
 

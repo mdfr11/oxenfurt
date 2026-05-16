@@ -9,6 +9,7 @@ import { createCardsRouter } from '../cards/router.ts'
 import { createSessionsRouter } from '../sessions/router.ts'
 import { createStatsRouter } from '../stats/router.ts'
 import { createTtsRouter } from '../tts/router.ts'
+import { createTranslateRouter } from '../translate/router.ts'
 
 export interface AppDeps {
   botToken: string
@@ -182,6 +183,14 @@ export function createApp(deps: AppDeps): Hono {
   app.route(
     '/tts',
     createTtsRouter({
+      jwtSecret: deps.jwtSecret,
+      now,
+    }),
+  )
+
+  app.route(
+    '/translate',
+    createTranslateRouter({
       jwtSecret: deps.jwtSecret,
       now,
     }),

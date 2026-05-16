@@ -22,6 +22,28 @@ export const TheoryPayloadSchema = v.object({
 })
 export type TheoryPayload = v.InferOutput<typeof TheoryPayloadSchema>
 
+// Inline-edit payload schemas. Client sends just the user-editable fields;
+// the server recomputes term offsets from the (possibly edited) term and
+// context_sentence so the cloze renderer stays valid.
+export const VocabUpdateInputSchema = v.object({
+  term: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  translation: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+  context_sentence: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
+})
+export type VocabUpdateInput = v.InferOutput<typeof VocabUpdateInputSchema>
+
+export const TheoryUpdateInputSchema = v.object({
+  question: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+  answer: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
+})
+export type TheoryUpdateInput = v.InferOutput<typeof TheoryUpdateInputSchema>
+
+export const CardUpdateInputSchema = v.variant('type', [
+  v.object({ type: v.literal('vocab'), payload: VocabUpdateInputSchema }),
+  v.object({ type: v.literal('theory'), payload: TheoryUpdateInputSchema }),
+])
+export type CardUpdateInput = v.InferOutput<typeof CardUpdateInputSchema>
+
 export interface DueCardDto {
   id: string
   type: 'vocab' | 'theory'

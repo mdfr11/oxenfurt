@@ -46,6 +46,18 @@ export function createStatsRouter(deps: StatsRouterDeps): Hono {
       )
     const dueCount = dueRes[0]?.count ?? 0
 
+    // 2.5. Learned cards (stability >= 10)
+    const learnedRes = await deps.db
+      .select({ count: count() })
+      .from(cards)
+      .where(
+        and(
+          eq(cards.status, 'active'),
+          gte(sql`${cards.fsrs}->>'stability'`, '10')
+        )
+      )
+    const learnedCount = learnedRes[0]?.count ?? 0
+
     // 3. Streak calculation
     // This is a naive streak calculation: we fetch distinct review dates (in local time)
     // and count backwards.
@@ -86,7 +98,28 @@ export function createStatsRouter(deps: StatsRouterDeps): Hono {
     return c.json({
       reviewedToday,
       dueCount,
+      learnedCount,
       streak,
+    })
+  })
+
+  app.get('/heatmap', async (c) => {
+    const sixMonthsAgo = new Date(now())
+    sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180)
+    sixMonthsAgo.setHours(0, 0, 0, 0)
+
+    const result = await deps.db.execute<{ date: string; count: number }>(sql`
+      SELECT 
+        to_char(date_trunc('day', reviewed_at), 'YYYY-MM-DD') as date,
+        count(*)::int as count
+      FROM ${cardReviews}
+      WHERE reviewed_at >= ${sixMonthsAgo}
+      GROUP BY date
+      ORDER BY date ASC
+    `)
+
+    return c.json({
+      history: result
     })
   })
 
