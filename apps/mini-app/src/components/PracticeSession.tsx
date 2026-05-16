@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
-import { Coffee, X, Info, Mic, MicOff, Pencil, Type, Quote, BookOpen, Layers, HelpCircle } from 'lucide-react';
+import { Coffee, X, Info, Mic, MicOff, Pencil, Type, Quote, BookOpen, Sparkles, Layers, HelpCircle } from 'lucide-react';
 import {
   backButton,
   disableVerticalSwipes,
@@ -775,7 +775,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
           )}
           <button
             onClick={handleExit}
-            className="w-7 h-7 flex items-center justify-center rounded-full bg-black/5 dark:bg-white/10 text-app-hint active:scale-95 transition-transform"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-app-surface border border-app-border text-app-hint shadow-sm active:scale-95 transition-transform"
             aria-label="Завершить сессию"
           >
             <X size={16} strokeWidth={2.5} />
@@ -1317,10 +1317,10 @@ function SrsHelpSheet({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
           >
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold flex items-center gap-2">
-                <Info size={20} className="text-app-primary" /> Оценки и интервалы
+                <Sparkles size={20} className="text-amber-500" fill="currentColor" /> Оценки и интервалы
               </h2>
-              <button onClick={onClose} className="p-2 -mr-2 text-app-hint active:scale-95 transition-transform">
-                <X size={20} />
+              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-app-surface border border-app-border text-app-hint shadow-sm active:scale-95 transition-transform">
+                <X size={18} />
               </button>
             </div>
 
@@ -1648,14 +1648,28 @@ function SemanticGradeButton({
     return (
       <button
         onClick={check}
-        className="text-[11px] text-app-primary underline underline-offset-2 active:opacity-60"
+        className="flex items-center gap-1.5 text-[11px] text-app-primary font-bold active:opacity-60 transition-opacity mt-1"
       >
-        🤖 Проверить смыслом
+        <div className="w-5 h-5 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center">
+          <Sparkles size={10} fill="currentColor" />
+        </div>
+        <span>Проверить смыслом</span>
       </button>
     )
   }
   if (state.kind === 'loading') {
-    return <span className="text-[11px] text-app-hint">Думаю…</span>
+    return (
+      <div className="flex items-center gap-2 mt-1">
+        <motion.div 
+          animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          className="text-amber-500"
+        >
+          <Sparkles size={14} fill="currentColor" />
+        </motion.div>
+        <span className="text-[11px] text-app-hint italic font-medium text-center">Регис думает…</span>
+      </div>
+    )
   }
   if (state.kind === 'error') {
     return <span className="text-[11px] text-app-hint">{state.message}</span>

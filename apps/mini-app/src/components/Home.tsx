@@ -182,9 +182,9 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
                  <span>{stats.streak} {pluralize(stats.streak, ['день', 'дня', 'дней'])}</span>
                </motion.div>
              )}
-             <div className="bg-app-primary/10 text-app-primary px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border border-app-primary/20 shadow-sm flex items-center gap-1.5">
-               <GraduationCap size={12} strokeWidth={2.5} />
-               <span>Ранг: {getRank(stats?.learnedCount ?? 0)}</span>
+             <div className="bg-app-surface text-app-primary px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-app-primary/30 shadow-sm flex items-center gap-1.5 active:scale-95 transition-transform cursor-default">
+               <GraduationCap size={12} strokeWidth={2.5} className="opacity-80" />
+               <span>{getRank(stats?.learnedCount ?? 0)}</span>
              </div>
           </div>
         </div>

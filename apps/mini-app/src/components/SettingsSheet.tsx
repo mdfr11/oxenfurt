@@ -41,10 +41,10 @@ export function SettingsSheet({ isOpen, onClose }: { isOpen: boolean; onClose: (
           >
             <div className="flex justify-between items-center mb-6 text-app-text">
               <h2 className="text-xl font-bold flex items-center gap-2">
-                <Settings size={20} /> Настройки
+                <Settings size={20} className="text-app-primary" /> Настройки
               </h2>
-              <button onClick={onClose} className="p-2 -mr-2 text-app-hint active:scale-95 transition-transform">
-                <X size={20} />
+              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-app-surface border border-app-border text-app-hint shadow-sm active:scale-95 transition-transform" aria-label="Закрыть">
+                <X size={18} strokeWidth={2.5} />
               </button>
             </div>
 
@@ -144,12 +144,12 @@ export function SettingsSheet({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 <div className="flex flex-col gap-2 p-4 bg-app-surface border border-app-border rounded-2xl active:scale-[0.98] transition-transform text-app-text">
                   <label className="flex items-center justify-between cursor-pointer">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-app-primary/10 text-app-primary flex items-center justify-center">
-                        <Sparkles size={16} />
+                      <div className="w-8 h-8 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                        <Sparkles size={16} fill="currentColor" className="opacity-80" />
                       </div>
                       <div>
                         <div className="font-semibold">AI-проверка ответов</div>
-                        <div className="text-xs text-app-hint">Кнопка «Проверить смыслом» под промахом</div>
+                        <div className="text-xs text-app-hint">Кнопка «Проверить смыслом»</div>
                       </div>
                     </div>
                     <input
@@ -159,7 +159,7 @@ export function SettingsSheet({ isOpen, onClose }: { isOpen: boolean; onClose: (
                       className="w-10 h-6 rounded-full bg-app-border appearance-none relative checked:bg-app-primary cursor-pointer transition-colors before:content-[''] before:absolute before:w-4 before:h-4 before:bg-white before:rounded-full before:top-1 before:left-1 checked:before:translate-x-4 before:transition-transform"
                     />
                   </label>
-                  <div className="mt-1 text-[11px] text-app-hint leading-relaxed">
+                  <div className="mt-1 text-[10px] text-app-hint leading-relaxed opacity-70 italic">
                     Если LLM не настроен на сервере — кнопка всё равно ничего не покажет.
                   </div>
                 </div>
