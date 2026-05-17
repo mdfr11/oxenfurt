@@ -95,7 +95,7 @@ export function AnswersScreen({ onExit }: Props) {
           <ArrowLeft size={18} />
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold leading-none">Ответы Hermes</h1>
+          <h1 className="text-xl font-bold leading-none">Ответы агента</h1>
           <p className="text-xs text-app-hint mt-1">{items.length} непрочитанных</p>
         </div>
       </div>
@@ -108,7 +108,7 @@ export function AnswersScreen({ onExit }: Props) {
             <MessageCircle size={32} className="mx-auto mb-3 opacity-40" />
             <p>Новых ответов пока нет</p>
             <p className="mt-2 text-[11px] opacity-70">
-              Hermes отвечает после своей обработки. Загляни позже.
+              Агент отвечает после своей обработки. Загляни позже.
             </p>
           </div>
         ) : (

@@ -59,7 +59,7 @@ export function QuestionSheet({ cardId, isOpen, onClose }: Props) {
               <div>
                 <h2 className="text-lg font-bold leading-tight">❓ Что непонятно?</h2>
                 <p className="text-[11px] text-app-hint mt-0.5">
-                  Hermes разберёт после сессии и пришлёт ответ
+                  Агент разберёт после сессии и пришлёт ответ
                 </p>
               </div>
               <button

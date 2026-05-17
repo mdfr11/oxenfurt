@@ -5,16 +5,15 @@ import { Library as LibraryIcon, BarChart3, Settings, Flame, ChevronDown, Gradua
 import { fetchWithAuth } from '../lib/api';
 import {
   loadPracticeMode,
-  savePracticeMode,
   type PracticeMode,
 } from '../lib/practiceMode';
 import { primeSpeech } from '../lib/tts';
 import { primeAudio } from '../lib/audio';
-import { getSettings, saveSettings } from '../lib/settings';
-import { clearSession, loadSession } from '../lib/sessionPersist';
+import { getSettings } from '../lib/settings';
+import { clearSession, loadSession, subscribeToSession } from '../lib/sessionPersist';
 import { SettingsSheet } from './SettingsSheet';
 
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 interface HomeProps {
   onStart: (mode: PracticeMode) => void;
@@ -46,24 +45,22 @@ function getRank(count: number): string {
 export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userFirstName }: HomeProps) {
   const [mode, setMode] = useState<PracticeMode>(() => loadPracticeMode());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isModeSelectOpen, setIsModeSelectOpen] = useState(false);
-  // Soft session-size cap from settings. `null` = no cap, fall back to the
-  // backend's /due default. Persisted in localStorage via lib/settings.
-  const [sessionLimit, setSessionLimitState] = useState<number | null>(() => getSettings().sessionLimit);
+  const settings = getSettings();
 
-  const selectSessionLimit = (limit: number | null) => {
-    setSessionLimitState(limit);
-    saveSettings({ ...getSettings(), sessionLimit: limit });
-  };
-
-  // Resume offer: detect a paused session and surface a dedicated CTA on
-  // Home. Polled with the stats refetch tick to pick up sessions paused
-  // in other tabs / device. Stale on its own — but a stale resume offer
-  // is harmless (PracticeSession's own loadSession() is the truth).
+  // Resume offer: detect a paused session. Home stays mounted across
+  // screen changes, so we subscribe to the sessionPersist pub-sub —
+  // PracticeSession's clearSession()/saveSession() fires `notify()` and
+  // we update immediately. The 30 s poll is a belt-and-braces tick for
+  // sessions paused in another tab / device.
   const [pausedSession, setPausedSession] = useState(() => loadSession())
   useEffect(() => {
-    const id = setInterval(() => setPausedSession(loadSession()), 30_000)
-    return () => clearInterval(id)
+    const refresh = () => setPausedSession(loadSession())
+    const unsubscribe = subscribeToSession(refresh)
+    const id = setInterval(refresh, 30_000)
+    return () => {
+      unsubscribe()
+      clearInterval(id)
+    }
   }, [])
 
   const handleDiscardPaused = () => {
@@ -71,12 +68,6 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
     setPausedSession(null)
   }
 
-  // Home stays mounted while the user is in a session — without a polling
-  // interval the dueCount/reviewedToday pill goes stale, and the user comes
-  // back to "Карточек к повтору нет" even after Hermes just ingested new
-  // ones. 30 s is invisible during use, cheap on the backend (one short
-  // count query), and avoids the trap of relying on focus events that
-  // Telegram WebView doesn't reliably fire.
   const { data: stats } = useQuery({
     queryKey: ['stats', 'today'],
     queryFn: async () => {
@@ -98,9 +89,6 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
     refetchOnMount: 'always',
   });
 
-  // Hermes-answered questions badge. Cheap COUNT endpoint, polled with
-  // the same cadence as stats so the user discovers new answers shortly
-  // after they land.
   const { data: unreadData } = useQuery({
     queryKey: ['questions', 'count'],
     queryFn: async () => {
@@ -117,38 +105,28 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
   const reviewed = stats?.reviewedToday ?? 0;
   const totalForToday = due + reviewed;
   
-  // Progress Ring logic:
-  // If we have cards to do today, progress is reviewed / total.
-  // If all cards are done (due === 0 and reviewed > 0), it's 100%.
-  // If it's a fresh day with no activity yet (reviewed === 0), it's 0%.
   const progressPercent = totalForToday > 0 ? (reviewed / totalForToday) * 100 : (reviewed > 0 ? 100 : 0);
   
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
 
-  function selectMode(next: PracticeMode) {
-    setMode(next);
-    savePracticeMode(next);
-    setIsModeSelectOpen(false);
-  }
-
   // Wire the Telegram MainButton to "Start session"
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
     try {
-      if (!isSettingsOpen && !isModeSelectOpen) {
-        mainButton.setParams({ text: 'Начать сессию', isVisible: true, isEnabled: true })
+      if (!isSettingsOpen) {
+        mainButton.setParams({ text: pausedSession ? 'Продолжить сессию' : 'Начать сессию', isVisible: true, isEnabled: true })
         unsubscribe = mainButton.onClick(() => {
           primeSpeech()
           void primeAudio()
-          onStart(mode)
+          onStart(pausedSession ? pausedSession.mode : mode)
         })
       } else {
         mainButton.setParams({ isVisible: false })
       }
     } catch {
-      // SDK not mounted — fine, the in-webview button still works
+      // SDK not mounted
     }
     return () => {
       try {
@@ -158,7 +136,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
         // ditto
       }
     }
-  }, [onStart, mode, isSettingsOpen, isModeSelectOpen])
+  }, [onStart, mode, isSettingsOpen, pausedSession])
 
   return (
     <div
@@ -259,18 +237,18 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
 
         <div className="flex flex-col items-center gap-6 w-full max-w-[280px]">
           <div className="bg-app-surface px-5 py-2 rounded-2xl border border-app-border shadow-sm">
-            <p className="text-app-hint text-center text-xs font-semibold">
+            <p className="text-app-hint text-center text-[11px] font-bold uppercase tracking-wide">
               {totalForToday === 0
-                ? <>Карточек к повтору сейчас нет</>
+                ? <>Карточек к повтору нет</>
                 : due === 0
-                  ? <><span className="text-app-primary font-bold">{reviewed}</span> сегодня — отличный результат!</>
-                  : <><span className="text-app-text font-bold">{reviewed}</span> из <span className="text-app-text font-bold">{totalForToday}</span> карточек пройдено</>
+                  ? <><span className="text-app-primary">{reviewed}</span> сегодня — отлично!</>
+                  : <><span className="text-app-text">{reviewed}</span> из <span className="text-app-text">{totalForToday}</span> пройдено</>
               }
             </p>
           </div>
 
           {heatmapData && heatmapData.history.length > 0 && (
-            <div className="w-full">
+            <div className="w-full opacity-60">
                <h2 className="text-[10px] uppercase tracking-[0.15em] text-app-hint font-bold mb-3 text-center opacity-40">
                  История обучения
                </h2>
@@ -280,31 +258,26 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 relative z-10">
+      <div className="flex flex-col gap-3 relative z-10">
         {unreadCount > 0 && (
           <button
             onClick={onOpenAnswers}
             className="flex items-center gap-2 bg-app-primary/10 border border-app-primary/30 rounded-2xl px-3 py-2 text-sm active:scale-[0.98] transition-transform"
           >
-            <span className="flex-1 text-app-text text-left">
-              🤖 Hermes ответил на{' '}
-              <span className="font-bold">{unreadCount}</span>{' '}
-              {pluralize(unreadCount, ['вопрос', 'вопроса', 'вопросов'])}
+            <span className="flex-1 text-app-text text-left text-[11px] font-semibold">
+              🤖 Hermes ответил на {unreadCount} {pluralize(unreadCount, ['вопрос', 'вопроса', 'вопросов'])}
             </span>
-            <span className="text-[11px] text-app-primary font-semibold">Открыть →</span>
+            <ChevronDown size={14} className="-rotate-90 text-app-primary" />
           </button>
         )}
         {pausedSession && (
-          <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-3 py-2 text-sm">
-            <span className="flex-1 text-app-text">
-              ⏸ Незаконченная сессия:{' '}
-              <span className="font-semibold">
-                {pausedSession.currentIndex} / {pausedSession.cards.length}
-              </span>
+          <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-3 py-2 text-[11px]">
+            <span className="flex-1 text-app-text font-medium">
+              ⏸ Пауза: <span className="font-bold">{pausedSession.currentIndex} / {pausedSession.cards.length}</span>
             </span>
             <button
               onClick={handleDiscardPaused}
-              className="text-[11px] text-app-hint underline underline-offset-2 active:opacity-60"
+              className="text-app-hint font-bold uppercase tracking-tighter underline underline-offset-2 active:opacity-60"
             >
               Сбросить
             </button>
@@ -322,51 +295,15 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
             {pausedSession ? 'Продолжить сессию' : 'Начать сессию'}
           </button>
           
-          <div className="mt-4 flex flex-col items-center gap-2">
-            <button
-              onClick={() => setIsModeSelectOpen(!isModeSelectOpen)}
-              className="flex items-center gap-1.5 text-xs font-semibold text-app-hint hover:text-app-text transition-colors py-1.5 px-4 rounded-full bg-app-surface border border-app-border shadow-sm active:scale-95"
-            >
-              Режим: {modeName(mode)} <ChevronDown size={14} className={`transition-transform ${isModeSelectOpen ? 'rotate-180' : ''}`} />
-            </button>
-            <div className="flex gap-1.5">
-              {([null, 10, 20, 30] as const).map((n) => (
-                <button
-                  key={n ?? 'all'}
-                  onClick={() => selectSessionLimit(n)}
-                  className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-colors active:scale-95 ${
-                    sessionLimit === n
-                      ? 'bg-app-primary text-app-primary-text border-app-primary'
-                      : 'bg-app-surface text-app-hint border-app-border'
-                  }`}
-                >
-                  {n === null ? 'Все' : n}
-                </button>
-              ))}
-            </div>
+          <div className="mt-3 flex justify-center">
+            <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em] opacity-60">
+              Режим: <span className="text-app-text">{modeName(mode)}</span> 
+              {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit} карт</span>}
+            </p>
           </div>
-
-          {/* Minimalist Dropdown for Mode Selection */}
-          <AnimatePresence>
-            {isModeSelectOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95, translateX: '-50%' }}
-                animate={{ opacity: 1, y: 0, scale: 1, translateX: '-50%' }}
-                exit={{ opacity: 0, y: 10, scale: 0.95, translateX: '-50%' }}
-                transition={{ duration: 0.15, ease: 'easeOut' }}
-                className="absolute bottom-[4.5rem] left-1/2 w-56 bg-app-surface border border-app-border rounded-2xl shadow-xl overflow-hidden z-20 flex flex-col p-1 origin-bottom"
-              >
-                <ModeOption active={mode === 'mixed'} onClick={() => selectMode('mixed')}>Смешанно</ModeOption>
-                <ModeOption active={mode === 'recognition'} onClick={() => selectMode('recognition')}>Узнавание</ModeOption>
-                <ModeOption active={mode === 'cloze'} onClick={() => selectMode('cloze')}>Письмо</ModeOption>
-                <ModeOption active={mode === 'translation'} onClick={() => selectMode('translation')}>Перевод</ModeOption>
-                <ModeOption active={mode === 'listening'} onClick={() => selectMode('listening')}>Слух</ModeOption>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mt-2">
+        <div className="grid grid-cols-2 gap-3 mt-1">
           <button
             onClick={onOpenLibrary}
             className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-app-border bg-app-surface text-app-text font-semibold active:scale-95 transition-transform shadow-sm"
@@ -383,38 +320,14 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
           </button>
         </div>
       </div>
-      
-      {/* Dim overlay when dropdown is open */}
-      <AnimatePresence>
-        {isModeSelectOpen && (
-           <motion.div 
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             exit={{ opacity: 0 }}
-             transition={{ duration: 0.15 }}
-             className="fixed inset-0 bg-black/10 z-0" 
-             onClick={() => setIsModeSelectOpen(false)}
-           />
-        )}
-      </AnimatePresence>
 
-      <SettingsSheet isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <SettingsSheet 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)}
+        currentMode={mode}
+        onModeChange={(m) => setMode(m)}
+      />
     </div>
-  );
-}
-
-function ModeOption({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`py-3 px-4 text-sm font-semibold text-left transition-colors rounded-xl ${
-        active
-          ? 'bg-app-primary/10 text-app-primary'
-          : 'text-app-text active:bg-app-bg'
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -444,7 +357,6 @@ function CompactHeatmap({ history }: { history: { date: string; count: number }[
     return m
   }, [history])
 
-  // Show last 12 weeks (3 months)
   const WEEKS = 12
   const totalDays = WEEKS * 7
   const today = new Date()

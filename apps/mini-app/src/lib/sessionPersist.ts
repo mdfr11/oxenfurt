@@ -25,9 +25,25 @@ export interface PersistedSession {
   savedAt: number
 }
 
+// In-tab pub-sub. localStorage's own `storage` event only fires for OTHER
+// tabs, so Home (which keeps mounted across screen changes) needs an
+// explicit signal to know when PracticeSession just cleared the session.
+// Without this it kept showing the stale "Незаконченная 9 / 10" badge.
+const subscribers = new Set<() => void>()
+function notify(): void {
+  for (const cb of subscribers) cb()
+}
+export function subscribeToSession(cb: () => void): () => void {
+  subscribers.add(cb)
+  return () => {
+    subscribers.delete(cb)
+  }
+}
+
 export function saveSession(s: PersistedSession): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
+    notify()
   } catch {
     // localStorage full or unavailable — fine, resume is best-effort.
   }
@@ -61,6 +77,7 @@ export function loadSession(mode?: PracticeMode): PersistedSession | null {
 export function clearSession(): void {
   try {
     localStorage.removeItem(STORAGE_KEY)
+    notify()
   } catch {
     // ignore
   }

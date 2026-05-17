@@ -1092,7 +1092,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         setIsQuestionOpen(true)
                       }}
                       className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
-                      aria-label="Задать вопрос Hermes"
+                      aria-label="Задать вопрос агенту"
                     >
                       <HelpCircle size={14} />
                     </button>
