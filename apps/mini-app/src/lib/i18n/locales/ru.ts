@@ -151,6 +151,17 @@ export const ru = {
   'practice.rating_hint': 'Как легко вспомнил? · тап = далее',
   'practice.rated_label': 'Оценено',
   'practice.undo': 'Отменить',
+  // --- TTS speed labels (rendered on the speaker-speed chip) ---
+  'practice.tts_speed_slow': 'Медленно',
+  'practice.tts_speed_normal': 'Норма',
+  'practice.tts_speed_fast': 'Быстро',
+  // --- FSRS interval labels (rating buttons). `n` = numeric amount. ---
+  'practice.interval_lt1m': '<1м',
+  'practice.interval_minutes': '{n}м',
+  'practice.interval_hours': '{n}ч',
+  'practice.interval_days': '{n}д',
+  'practice.interval_months': '{n}мес',
+  'practice.interval_years': '{n}г',
   'home.aria_settings': 'Настройки',
   'home.ring_done_label': 'Выполнено',
   'home.backend_online': 'Онлайн',

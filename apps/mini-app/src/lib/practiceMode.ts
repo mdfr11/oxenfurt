@@ -13,14 +13,6 @@ export type ExerciseVariant = 'recognition' | 'cloze' | 'translation' | 'listeni
 
 const STORAGE_KEY = 'oxenfurt_practice_mode'
 
-export const PRACTICE_MODES: ReadonlyArray<PracticeMode> = [
-  'mixed',
-  'recognition',
-  'cloze',
-  'translation',
-  'listening',
-]
-
 export function loadPracticeMode(): PracticeMode {
   try {
     const v = localStorage.getItem(STORAGE_KEY)
@@ -71,9 +63,4 @@ function hashStr(s: string): number {
     h = ((h << 5) - h + s.charCodeAt(i)) | 0
   }
   return Math.abs(h)
-}
-
-// Kept for backward-compat with anything still importing the old name.
-export function shouldUseClozeFor(mode: PracticeMode, cardId: string): boolean {
-  return pickVariantFor(mode, cardId) === 'cloze'
 }

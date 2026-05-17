@@ -352,9 +352,8 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // Don't auto-focus the input — the soft keyboard popping up on every
   // new card is more disruptive than it is helpful, especially in cloze /
   // listening where the user wants to read or hear the prompt first.
-  // They tap the input themselves when ready.
-  void inputRef // keep the ref reachable for the field, even if we don't focus
-
+  // The user taps the input themselves when ready. `inputRef` is forwarded
+  // to TypedAnswerField below; it's not focused here on purpose.
 
   // Persisted TTS speed preference — toggle via the chip below the 🔊 button.
   const [ttsSpeed, setTtsSpeed] = useState<TtsSpeed>(() => loadTtsSpeed())
@@ -385,10 +384,14 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       }
     }
     return undefined
-  }, [currentCard?.id, variant, isRevealed, currentCard, ttsSpeed, flipForProduce])
+    // `currentCard` is intentionally NOT in deps — a background /due
+    // refetch hands us a fresh object with the same id, which would
+    // re-trigger pronunciation. `currentCard?.id` is the real dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCard?.id, variant, isRevealed, ttsSpeed, flipForProduce])
 
-  // Stop any pronunciation when leaving the screen.
-  useEffect(() => () => stopSpeaking(), [])
+  // (The screen-leave stopSpeaking() lives in the disableVerticalSwipes
+  // cleanup effect above — keeping a second copy here would double-fire.)
 
   const handleReveal = () => {
     // Typed variants reveal via submit, not tap.

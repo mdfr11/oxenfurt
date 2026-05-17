@@ -11,7 +11,7 @@
 // Forkers can edit this table or add a per-language sub-region setting
 // if a community asks.
 
-import type { LearningLanguage, NativeLanguage } from './settings'
+import type { LearningLanguage } from './settings'
 
 const REGION_BY_LANG: Record<LearningLanguage, string> = {
   en: 'en-US',  // overridden by voiceLocale setting
@@ -35,11 +35,3 @@ export function ttsLangTag(learning: LearningLanguage, englishVoice: 'en-US' | '
   return REGION_BY_LANG[learning]
 }
 
-/**
- * Short two-letter code for the MyMemory translate endpoint
- * (`langpair=src|tgt`). MyMemory accepts both `pt` and `pt-br` — we send
- * the short form for portability across other free providers.
- */
-export function shortLangCode(code: LearningLanguage | NativeLanguage): string {
-  return code
-}

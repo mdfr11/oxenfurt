@@ -9,7 +9,7 @@ import {
 } from '../lib/practiceMode';
 import { primeSpeech } from '../lib/tts';
 import { primeAudio } from '../lib/audio';
-import { getSettings } from '../lib/settings';
+import { useSettings } from '../lib/settings';
 import { clearSession, loadSession, subscribeToSession } from '../lib/sessionPersist';
 import { useT } from '../lib/i18n/useT';
 import { SettingsSheet } from './SettingsSheet';
@@ -50,7 +50,7 @@ function getRank(t: T, count: number): string {
 export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userFirstName }: HomeProps) {
   const [mode, setMode] = useState<PracticeMode>(() => loadPracticeMode());
   const [isSettingsOpen, setIsSettingsOpen] = useState(() => window.location.hash === '#settings');
-  const settings = getSettings();
+  const { settings } = useSettings();
   const t = useT();
 
   // Listen for hash changes to open settings
@@ -61,17 +61,11 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
   }, [])
 
 
-  // Resume offer: detect a paused session
+  // Resume offer: detect a paused session. sessionPersist's pub-sub
+  // already notifies on every save/clear from PracticeSession, so the
+  // refresh path is purely event-driven — no polling needed.
   const [pausedSession, setPausedSession] = useState(() => loadSession())
-  useEffect(() => {
-    const refresh = () => setPausedSession(loadSession())
-    const unsubscribe = subscribeToSession(refresh)
-    const id = setInterval(refresh, 30_000)
-    return () => {
-      unsubscribe()
-      clearInterval(id)
-    }
-  }, [])
+  useEffect(() => subscribeToSession(() => setPausedSession(loadSession())), [])
 
   const handleDiscardPaused = () => {
     clearSession()

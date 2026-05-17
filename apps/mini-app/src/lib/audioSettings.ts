@@ -36,8 +36,14 @@ export function rateForSpeed(speed: TtsSpeed): number {
   return RATES[speed]
 }
 
+import { t, type TKey } from './i18n'
+
+const SPEED_KEYS: Record<TtsSpeed, TKey> = {
+  slow: 'practice.tts_speed_slow',
+  normal: 'practice.tts_speed_normal',
+  fast: 'practice.tts_speed_fast',
+}
+
 export function labelForSpeed(speed: TtsSpeed): string {
-  if (speed === 'slow') return 'Медленно'
-  if (speed === 'fast') return 'Быстро'
-  return 'Норма'
+  return t(SPEED_KEYS[speed])
 }

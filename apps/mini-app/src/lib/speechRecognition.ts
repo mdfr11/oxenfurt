@@ -2,6 +2,7 @@
 // `SpeechRecognition` (Firefox) or `webkitSpeechRecognition` (Chromium /
 // Safari / Telegram WebView on Android & iOS). We hide the prefix and the
 // imperative event-handler shape behind a callback-style start/stop API.
+import { debug } from './debug'
 
 type SpeechResultEvent = { results: ArrayLike<ArrayLike<{ transcript: string }>>; resultIndex: number }
 type SpeechErrorEvent = { error: string }
@@ -95,11 +96,11 @@ export function startRecognition(opts: RecognitionOptions): RecognitionHandle | 
   let sawAnyResult = false
   let sawAudio = false
 
-  rec.onstart = () => console.info('[speech] start lang=' + rec.lang)
-  rec.onaudiostart = () => { sawAudio = true; console.info('[speech] audio start') }
-  rec.onaudioend = () => console.info('[speech] audio end, sawAudio=' + sawAudio)
-  rec.onspeechstart = () => console.info('[speech] speech detected')
-  rec.onspeechend = () => console.info('[speech] speech ended')
+  rec.onstart = () => debug('[speech] start lang=' + rec.lang)
+  rec.onaudiostart = () => { sawAudio = true; debug('[speech] audio start') }
+  rec.onaudioend = () => debug('[speech] audio end, sawAudio=' + sawAudio)
+  rec.onspeechstart = () => debug('[speech] speech detected')
+  rec.onspeechend = () => debug('[speech] speech ended')
 
   rec.onresult = (event) => {
     sawAnyResult = true
@@ -114,7 +115,7 @@ export function startRecognition(opts: RecognitionOptions): RecognitionHandle | 
         interim = text
       }
     }
-    console.info('[speech] result interim="' + interim + '" final="' + finalTranscript + '"')
+    debug('[speech] result interim="' + interim + '" final="' + finalTranscript + '"')
     if (interim !== '' && opts.onInterim) opts.onInterim(interim)
     finalTranscript = (finalTranscript + interim).trim()
   }
@@ -125,7 +126,7 @@ export function startRecognition(opts: RecognitionOptions): RecognitionHandle | 
   }
 
   rec.onend = () => {
-    console.info('[speech] end, transcript="' + finalTranscript + '" sawResult=' + sawAnyResult + ' sawAudio=' + sawAudio)
+    debug('[speech] end, transcript="' + finalTranscript + '" sawResult=' + sawAnyResult + ' sawAudio=' + sawAudio)
     if (finalTranscript !== '') opts.onResult(finalTranscript)
     else if (!sawAnyResult && opts.onError) {
       // Recognition stopped without ever producing a result. This is the

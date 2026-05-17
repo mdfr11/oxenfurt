@@ -24,6 +24,7 @@
 import { API_BASE, getToken } from './api'
 import { getSettings } from './settings'
 import { ttsLangTag } from './languages'
+import { debug } from './debug'
 
 // --- Dedicated AudioContext just for TTS playback ---
 //
@@ -153,7 +154,7 @@ async function tryPlayWebAudio(buffer: ArrayBuffer, opts: { rate?: number }): Pr
       if (activeSource === source) activeSource = null
     })
     source.start(0)
-    console.info('[tts] playing via Web Audio')
+    debug('[tts] playing via Web Audio')
     return true
   } catch (err) {
     console.warn('[tts] Web Audio start failed', err)
@@ -187,7 +188,7 @@ async function tryPlayHtmlAudio(buffer: ArrayBuffer, opts: { rate?: number }): P
 
   try {
     await audio.play()
-    console.info('[tts] playing via HTMLAudio')
+    debug('[tts] playing via HTMLAudio')
     return true
   } catch (err) {
     console.warn('[tts] audio.play() rejected', err)
@@ -247,12 +248,3 @@ export function primeSpeech(): void {
   }
 }
 
-// --- Legacy exports kept for compatibility ---
-
-export function ttsSupport(): 'ready' {
-  return 'ready'
-}
-
-export async function getEnglishVoice(): Promise<null> {
-  return null
-}

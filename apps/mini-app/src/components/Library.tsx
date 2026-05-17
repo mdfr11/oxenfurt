@@ -13,7 +13,7 @@ import type {
 import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
 import { useT } from '../lib/i18n/useT'
-import { t as tFn, type TKey } from '../lib/i18n'
+import { type TKey } from '../lib/i18n'
 
 interface LibraryProps {
   onExit: () => void
@@ -558,6 +558,3 @@ function formatDue(iso: string, t: ReturnType<typeof useT>): string {
   return t('date.in_months', { n: Math.round(days / 30) })
 }
 
-// Silence the imported-but-unused alias on the rare path where it's not
-// referenced (kept around for future helpers that might need direct t()).
-void tFn

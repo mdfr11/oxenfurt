@@ -83,7 +83,3 @@ export function clearSession(): void {
   }
 }
 
-/** Sanity check: is there at least one un-rated card left in the queue? */
-export function hasUnfinishedSession(s: PersistedSession): boolean {
-  return s.currentIndex < s.cards.length
-}
