@@ -76,17 +76,14 @@ async function record() {
     await page.waitForSelector('text=Pragmatic', { timeout: 15000 });
     await page.waitForTimeout(3000);
 
-    console.log('Step: Swipe');
+    console.log('Step: Rating');
     const card = page.locator('div.bg-app-surface').first();
     let box = await card.boundingBox();
     // Reveal
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await page.waitForTimeout(1000);
-    // Swipe
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width + 300, box.y + box.height / 2, { steps: 80 });
-    await page.mouse.up();
+    // Rate Good
+    await page.click('button:has-text("Good"), button:has-text("Хорошо")', { force: true });
     await page.waitForTimeout(3000);
 
     console.log('Step: Stats');
