@@ -268,7 +268,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
             className="flex items-center gap-2 bg-app-primary/10 border border-app-primary/30 rounded-2xl px-3 py-2 text-sm active:scale-[0.98] transition-transform"
           >
             <span className="flex-1 text-app-text text-left text-[11px] font-semibold">
-              🤖 Hermes ответил на {unreadCount} {pluralize(unreadCount, ['вопрос', 'вопроса', 'вопросов'])}
+              🤖 Агент ответил на {unreadCount} {pluralize(unreadCount, ['вопрос', 'вопроса', 'вопросов'])}
             </span>
             <ChevronDown size={14} className="-rotate-90 text-app-primary" />
           </button>
