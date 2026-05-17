@@ -76,6 +76,7 @@ export interface DueCardDto {
   source: string | null
   source_quote: string | null
   fsrs: FsrsCardState
+  has_questions?: boolean
 }
 
 export interface CardListDto {
@@ -89,6 +90,7 @@ export interface CardListDto {
   due: string
   reps: number
   lapses: number
+  has_questions?: boolean
 }
 
 export interface CardListResponse {

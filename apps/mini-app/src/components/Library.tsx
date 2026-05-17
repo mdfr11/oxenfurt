@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { backButton } from '@telegram-apps/sdk-react'
 import { haptic } from '../lib/telegram'
 import { Spinner } from '@telegram-apps/telegram-ui'
-import { Archive, ArrowLeft, BookOpen, Search, X, Quote, Type } from 'lucide-react'
+import { Archive, ArrowLeft, BookOpen, Search, X, Quote, Type, HelpCircle } from 'lucide-react'
 import type {
   CardListDto,
   CardListResponse,
@@ -401,7 +401,7 @@ function CardListItem({ card, onOpen }: { card: CardListDto; onOpen: () => void 
       : card.type === 'phrase'
         ? (card.payload as PhrasePayload).translation
         : (card.payload as TheoryPayload).answer.slice(0, 80)
-  
+
   const Icon = card.type === 'theory' ? BookOpen : card.type === 'phrase' ? Quote : Type
   const iconClass = card.type === 'theory' ? 'text-app-primary' : 'text-app-hint'
 
@@ -412,7 +412,14 @@ function CardListItem({ card, onOpen }: { card: CardListDto; onOpen: () => void 
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="font-semibold truncate">{title}</div>
+          <div className="font-semibold flex items-center gap-2">
+            <span className="truncate">{title}</span>
+            {card.has_questions && (
+              <span className="shrink-0 flex items-center justify-center w-4 h-4 rounded bg-app-primary/10 text-app-primary border border-app-primary/20">
+                <HelpCircle size={10} strokeWidth={2.5} />
+              </span>
+            )}
+          </div>
           <div className="text-xs text-app-hint truncate mt-0.5">{subtitle}</div>
         </div>
         <span className={`shrink-0 mt-0.5 ${iconClass}`}>
@@ -427,7 +434,6 @@ function CardListItem({ card, onOpen }: { card: CardListDto; onOpen: () => void 
     </button>
   )
 }
-
 function CardDetailSheet({
   card,
   onClose,

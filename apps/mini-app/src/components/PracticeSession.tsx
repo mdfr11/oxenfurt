@@ -901,8 +901,13 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   ) : null}
                   
                   {!expectsTypedAnswer && (
-                    <div className="absolute top-4 left-6 pointer-events-none">
+                    <div className="absolute top-4 left-6 pointer-events-none flex items-center gap-2">
                       <CardStabilityIndicator stability={currentCard!.fsrs.stability} />
+                      {currentCard!.has_questions && (
+                        <div className="flex items-center justify-center w-5 h-5 rounded bg-app-primary/10 text-app-primary border border-app-primary/20">
+                          <HelpCircle size={10} strokeWidth={2.5} />
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -955,10 +960,13 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         e.stopPropagation()
                         setIsQuestionOpen(true)
                       }}
-                      className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
+                      className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform relative"
                       aria-label={t('practice.action_question')}
                     >
                       <HelpCircle size={14} />
+                      {currentCard!.has_questions && (
+                        <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-app-primary rounded-full border-2 border-app-bg" />
+                      )}
                     </button>
                   </div>
                   {matchResult && expectsTypedAnswer && (

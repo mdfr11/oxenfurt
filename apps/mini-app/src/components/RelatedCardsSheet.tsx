@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { BottomSheet } from './BottomSheet'
-import { X, BookOpen, Quote, Type } from 'lucide-react'
+import { BookOpen, Quote, Type, X, HelpCircle } from 'lucide-react'
 import type { CardListDto, PhrasePayload, TheoryPayload, VocabPayload } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
 import { useT } from '../lib/i18n/useT'
@@ -86,7 +86,14 @@ function RelatedRow({ card }: { card: CardListDto }) {
     <li className="p-3 rounded-xl bg-app-surface border border-app-border">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="font-semibold truncate text-app-text">{title}</div>
+          <div className="font-semibold text-app-text flex items-center gap-2">
+            <span className="truncate">{title}</span>
+            {card.has_questions && (
+              <span className="shrink-0 flex items-center justify-center w-4 h-4 rounded bg-app-primary/10 text-app-primary border border-app-primary/20">
+                <HelpCircle size={10} strokeWidth={2.5} />
+              </span>
+            )}
+          </div>
           <div className="text-xs text-app-hint truncate mt-0.5">{subtitle}</div>
         </div>
         <span className={`shrink-0 mt-0.5 ${iconClass}`}>

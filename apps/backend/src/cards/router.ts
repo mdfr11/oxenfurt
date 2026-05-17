@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { and, asc, count, desc, eq, lte, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 import * as v from 'valibot'
 import {
   CardUpdateInputSchema,
@@ -15,7 +15,7 @@ import {
   type VocabPayload,
 } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
-import { cardReviews, cards, type CardRow } from '../db/schema.ts'
+import { cardQuestions, cardReviews, cards, type CardRow } from '../db/schema.ts'
 import { jwtAuth } from '../middleware/auth.ts'
 import { isUuid } from '../lib/uuid.ts'
 
@@ -24,6 +24,21 @@ export interface CardsRouterDeps {
   jwtSecret: string
   fsrs: FsrsService
   now?: () => Date
+}
+
+async function fetchQuestionsMap(db: Db, cardIds: string[]): Promise<Set<string>> {
+  if (cardIds.length === 0) return new Set()
+  // Count questions that are not discarded
+  const rows = await db
+    .selectDistinct({ cardId: cardQuestions.cardId })
+    .from(cardQuestions)
+    .where(
+      and(
+        inArray(cardQuestions.cardId, cardIds),
+        sql`status <> 'discarded'`
+      )
+    )
+  return new Set(rows.map(r => r.cardId))
 }
 
 export function createCardsRouter(deps: CardsRouterDeps): Hono {
@@ -82,7 +97,8 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
       deps.db.select({ value: count() }).from(cards).where(where),
     ])
     const total = totalRow[0]?.value ?? 0
-    return c.json({ cards: rows.map(toListDto), total })
+    const questionsSet = await fetchQuestionsMap(deps.db, rows.map(r => r.id))
+    return c.json({ cards: rows.map(r => toListDto(r, questionsSet.has(r.id))), total })
   })
 
   // Distinct list of sources with per-source card counts, for the Library's
@@ -153,7 +169,8 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
       .orderBy(asc(cards.due))
       .limit(limit)
 
-    return c.json({ cards: rows.map(toDueDto) })
+    const questionsSet = await fetchQuestionsMap(deps.db, rows.map(r => r.id))
+    return c.json({ cards: rows.map(r => toDueDto(r, questionsSet.has(r.id))) })
   })
 
   // Related cards from the same `source` (lesson). Used on the back of a
@@ -181,7 +198,8 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
       .orderBy(desc(cards.createdAt))
       .limit(20)
 
-    return c.json({ cards: rows.map(toListDto) })
+    const questionsSet = await fetchQuestionsMap(deps.db, rows.map(r => r.id))
+    return c.json({ cards: rows.map(r => toListDto(r, questionsSet.has(r.id))) })
   })
 
   // Inline edit. Updates only the human-editable fields of the payload —
@@ -206,7 +224,9 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
     const result = await updateCardPayload(deps.db, id, parsed.output)
     if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
     if (result === 'type_mismatch') return c.json({ error: 'type_mismatch' }, 400)
-    return c.json({ card: toListDto(result) })
+    
+    const questionsSet = await fetchQuestionsMap(deps.db, [id])
+    return c.json({ card: toListDto(result, questionsSet.has(id)) })
   })
 
   // Archive an active card — soft delete that hides it from /due and from
@@ -373,8 +393,8 @@ export async function archiveCard(
   })
 }
 
-function toListDto(row: CardRow): CardListDto {
-  return {
+function toListDto(row: CardRow, hasQuestions?: boolean): CardListDto {
+  const dto: CardListDto = {
     id: row.id,
     type: row.type,
     status: row.status,
@@ -386,10 +406,12 @@ function toListDto(row: CardRow): CardListDto {
     reps: row.reps,
     lapses: row.lapses,
   }
+  if (hasQuestions) dto.has_questions = true
+  return dto
 }
 
-function toDueDto(row: CardRow): DueCardDto {
-  return {
+function toDueDto(row: CardRow, hasQuestions?: boolean): DueCardDto {
+  const dto: DueCardDto = {
     id: row.id,
     type: row.type,
     payload: row.payload,
@@ -408,5 +430,7 @@ function toDueDto(row: CardRow): DueCardDto {
       last_review: row.lastReview === null ? null : row.lastReview.toISOString(),
     },
   }
+  if (hasQuestions) dto.has_questions = true
+  return dto
 }
 
