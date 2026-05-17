@@ -1,8 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/home.png" width="200" />
-  <img src="docs/screenshots/session.png" width="200" />
-  <img src="docs/screenshots/library.png" width="200" />
-  <img src="docs/screenshots/stats.png" width="200" />
+  <img src="docs/screenshots/demo.gif" width="320" />
 </p>
 
 # Oxenfurt
