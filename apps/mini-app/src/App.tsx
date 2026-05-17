@@ -45,6 +45,11 @@ export default function App() {
       else if (h.includes('stats')) setScreen('stats')
       else if (h.includes('answers')) setScreen('answers')
       else if (h.includes('practice')) setScreen('practice')
+      // `#summary` must be matched BEFORE the generic `home` fallback
+      // — PracticeSession.onComplete sets this hash on the last-card
+      // rating; without the branch the screen stayed on 'practice'
+      // and the session appeared to hang on the final card.
+      else if (h.includes('summary')) setScreen('summary')
       else if (h.includes('settings')) setScreen('home') // settings handled by prop
       else if (h.includes('home') || h === '') setScreen('home')
     }
