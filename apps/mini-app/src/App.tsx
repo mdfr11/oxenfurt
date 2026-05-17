@@ -118,15 +118,14 @@ export default function App() {
 
   return (
     <div data-testid="app-ready" className="app-container overflow-hidden relative">
-      <AnimatePresence>
-        {screen === 'loading' && (
+      <AnimatePresence mode="wait">
+        {screen === 'loading' ? (
           <motion.div key="loading" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-50">
             <div className="flex-1 flex items-center justify-center">
               <Spinner size="l" />
             </div>
           </motion.div>
-        )}
-        {screen === 'practice' && (
+        ) : screen === 'practice' ? (
           <motion.div key="practice" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <PracticeSession
               mode={practiceMode}
@@ -137,8 +136,7 @@ export default function App() {
               onExit={() => setScreen('home')}
             />
           </motion.div>
-        )}
-        {screen === 'summary' && (
+        ) : screen === 'summary' ? (
           <motion.div key="summary" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <Summary
               stats={stats}
@@ -146,23 +144,19 @@ export default function App() {
               onRepeatHard={() => setScreen('practice')}
             />
           </motion.div>
-        )}
-        {screen === 'library' && (
+        ) : screen === 'library' ? (
           <motion.div key="library" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <Library onExit={() => setScreen('home')} />
           </motion.div>
-        )}
-        {screen === 'stats' && (
+        ) : screen === 'stats' ? (
           <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <Stats onExit={() => setScreen('home')} />
           </motion.div>
-        )}
-        {screen === 'answers' && (
+        ) : screen === 'answers' ? (
           <motion.div key="answers" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <AnswersScreen onExit={() => setScreen('home')} />
           </motion.div>
-        )}
-        {screen === 'home' && (
+        ) : (
           <motion.div key="home" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
             <Home
               onStart={(mode) => {

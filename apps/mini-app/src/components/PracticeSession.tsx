@@ -839,6 +839,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
               expectsTypedAnswer ? '' : 'cursor-pointer'
             } ${isRevealed ? 'cursor-grab active:cursor-grabbing' : ''}`}
             whileTap={expectsTypedAnswer ? undefined : { scale: 0.98 }}
+            data-testid="card-ready"
           >
             {/* Swipe Feedback Overlay */}
             <motion.div 
