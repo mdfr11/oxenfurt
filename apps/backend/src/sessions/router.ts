@@ -100,6 +100,13 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
 
   // All five queries can run concurrently — no FK or ordering deps between them.
   const [reviewsAgg, sessionsAgg, forecastAgg, heatmapRows, recentRows, learnedAgg, streakRows] = await Promise.all([
+    // "correct" = anything that wasn't a lapse, i.e. rating ≥ 2 (Hard,
+    // Good, or Easy). Hard is a weak-but-successful retrieval; only
+    // Again resets FSRS stability. This matches the per-session number
+    // PracticeSession writes to `sessions.cards_correct` via the same
+    // `rating !== Again` rule. The two used to disagree (rating ≥ 3
+    // here vs ≠ Again on the client) and reported different accuracy
+    // numbers for the same data — fixed.
     db.execute<{
       today_count: string
       today_correct: string
@@ -110,11 +117,11 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
     }>(sql`
       SELECT
         COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${dayStartTs / 1000}))                                   AS today_count,
-        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${dayStartTs / 1000})  AND rating >= 3)                  AS today_correct,
+        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${dayStartTs / 1000})  AND rating >= 2)                  AS today_correct,
         COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${weekStartTs / 1000}))                                  AS week_count,
-        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${weekStartTs / 1000}) AND rating >= 3)                  AS week_correct,
+        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${weekStartTs / 1000}) AND rating >= 2)                  AS week_correct,
         COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${monthStartTs / 1000}))                                 AS month_count,
-        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${monthStartTs / 1000}) AND rating >= 3)                 AS month_correct
+        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${monthStartTs / 1000}) AND rating >= 2)                 AS month_correct
       FROM card_reviews
     `),
     db.execute<{ today_count: string; week_count: string }>(sql`

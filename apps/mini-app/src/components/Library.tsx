@@ -4,6 +4,7 @@ import { backButton } from '@telegram-apps/sdk-react'
 import { haptic } from '../lib/telegram'
 import { Spinner } from '@telegram-apps/telegram-ui'
 import { Archive, ArrowLeft, BookOpen, Search, X, Quote, Type, HelpCircle, Flame } from 'lucide-react'
+import { BottomSheet } from './BottomSheet'
 import type {
   CardListDto,
   CardListResponse,
@@ -473,19 +474,12 @@ function CardDetailSheet({
   const theory = card.type === 'theory' ? (card.payload as TheoryPayload) : null
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 z-50 flex items-end"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full bg-app-bg rounded-t-3xl max-h-[85vh] overflow-y-auto"
-        style={{ paddingBottom: `calc(1.5rem + var(--tg-safe-area-inset-bottom, 0px))` }}
-      >
-        <div className="sticky top-0 bg-app-bg flex justify-center py-2">
+    <>
+      <BottomSheet isOpen={true} onClose={onClose} maxHeight="85vh">
+        <div className="flex justify-center mb-2 -mt-2">
           <div className="w-10 h-1 rounded-full bg-app-border" />
         </div>
-        <div className="px-6 pb-4 flex flex-col gap-5">
+        <div className="flex flex-col gap-5">
           {vocab && (
             <>
               <div>
@@ -527,15 +521,15 @@ function CardDetailSheet({
                 <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_answer')}</div>
                 <Markdown className="text-sm leading-relaxed">{theory.answer}</Markdown>
               </div>
-              {card.source_quote && (
-                <div>
-                  <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_from_lesson')}</div>
-                  <Markdown className="text-xs italic text-app-hint leading-relaxed" inline>
-                    {`«${card.source_quote}»`}
-                  </Markdown>
-                </div>
-              )}
             </>
+          )}
+          {card.source_quote && (
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_from_lesson')}</div>
+              <Markdown className="text-xs italic text-app-hint leading-relaxed" inline>
+                {`«${card.source_quote}»`}
+              </Markdown>
+            </div>
           )}
 
           <div className="border-t border-app-border pt-4 text-[11px] text-app-hint space-y-1">
@@ -581,13 +575,14 @@ function CardDetailSheet({
             )}
           </div>
         </div>
-      </div>
+      </BottomSheet>
+
       <QuestionSheet
         isOpen={isQuestionOpen}
         onClose={() => setIsQuestionOpen(false)}
         cardId={card.id}
       />
-    </div>
+    </>
   )
 }
 
