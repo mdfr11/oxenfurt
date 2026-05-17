@@ -342,7 +342,14 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     else if (rating === RATING.Good) { haptic('selectionChanged'); playPopSound(); }
     else { haptic('notificationOccurred', 'success'); playPopSound(); }
 
-    const isCorrect = rating !== RATING.Again;
+    // "Correct" = the user confidently retrieved the card. Hard means
+    // "remembered with significant effort" — that's not a failure
+    // (FSRS only treats Again as a lapse), but it's not a confident
+    // recall either, so it doesn't count toward the user-facing
+    // accuracy %. Backend aggregates use the same `rating >= 3`
+    // threshold so the per-session row and today/week/month numbers
+    // tell the same story.
+    const isCorrect = rating >= RATING.Good;
     const correctDelta: 0 | 1 = isCorrect ? 1 : 0;
     const nextStats = {
       total: sessionStats.total + 1,
