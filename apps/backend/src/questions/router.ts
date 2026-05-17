@@ -190,12 +190,9 @@ export function createAgentQuestionsRouter(deps: AgentRouterDeps): Hono {
         card: {
           id: r.card_id,
           type: r.card_type,
-          // Same tolerance for jsonb: drivers can return parsed object OR
-          // raw JSON string. Hermes wants the object form.
-          payload:
-            typeof r.payload === 'string'
-              ? safeParseJson(r.payload)
-              : r.payload,
+          // postgres-js parses JSONB to JS objects by default, so this
+          // is already the right shape for Hermes.
+          payload: r.payload,
           source: r.source,
           source_quote: r.source_quote,
         },
