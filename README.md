@@ -107,6 +107,10 @@ On a fresh Ubuntu/Debian VPS, as root:
 curl -fsSL https://raw.githubusercontent.com/mdfr11/oxenfurt/master/deploy/install.sh | bash
 ```
 
+> First-time fresh? Append **`--with-demo`** to seed ~30 example cards
+> across three demo lessons — instant non-empty dashboard:
+> `… | bash -s -- --with-demo`
+
 You'll need:
 
 1. **A Telegram bot** — create one with [@BotFather](https://t.me/BotFather).

@@ -26,12 +26,33 @@
 # Or if you've already cloned the repo:
 #   sudo bash deploy/install.sh
 #
+# Optional flags:
+#   --with-demo     Seed ~30 example cards so the Mini App isn't empty
+#                   on first open. Idempotent; safe to add later.
+#   --help / -h     Print this header and exit.
+#
 # Non-interactive (CI / automation):
 #   export OXENFURT_BOT_TOKEN=… OXENFURT_OWNER_ID=… OXENFURT_DOMAIN=…
-#   export OXENFURT_EMAIL=… OXENFURT_NON_INTERACTIVE=1
+#   export OXENFURT_EMAIL=… OXENFURT_NON_INTERACTIVE=1 OXENFURT_WITH_DEMO=1
 #   sudo -E bash deploy/install.sh
 
 set -euo pipefail
+
+# --- CLI flag parsing -------------------------------------------------------
+# Single optional flag: --with-demo seeds ~30 example cards so a fresh
+# install isn't an empty coffee-cup. Can also be enabled via env var
+# OXENFURT_WITH_DEMO=1 for non-interactive use.
+WITH_DEMO="${OXENFURT_WITH_DEMO:-0}"
+for arg in "$@"; do
+  case "$arg" in
+    --with-demo) WITH_DEMO=1 ;;
+    --help|-h)
+      grep -E '^# ' "$0" | sed 's/^# //'
+      exit 0
+      ;;
+    *) echo "unknown flag: $arg" >&2; exit 1 ;;
+  esac
+done
 
 # --- Display helpers --------------------------------------------------------
 
@@ -248,6 +269,17 @@ sudo -u oxenfurt env \
   bun "${REL_DIR}/apps/backend/src/db/migrate.ts" 2>&1 | tail -3 || \
   fail "migrations failed — see output above"
 ok "migrations applied"
+
+if [[ "$WITH_DEMO" == "1" ]]; then
+  step "Seeding demo cards (--with-demo)"
+  sudo -u oxenfurt env \
+    HOME=/opt/oxenfurt \
+    PATH=/usr/local/bin:/usr/bin:/bin \
+    DATABASE_URL="${DATABASE_URL}" \
+    bun "${REL_DIR}/apps/backend/src/db/seed-demo.ts" 2>&1 | tail -3 || \
+    warn "seed failed — demo data won't be present, but the install is otherwise fine"
+  ok "demo cards seeded (idempotent — safe to re-run)"
+fi
 
 step "Switching symlink to new release"
 ln -sfn "$REL_DIR" /opt/oxenfurt/current

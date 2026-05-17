@@ -337,7 +337,7 @@ function SettingToggle({
           onClick={onTest}
           className="mt-2 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg bg-app-bg text-app-hint text-[10px] font-bold uppercase tracking-wider active:scale-95 transition-transform border border-app-border/40"
         >
-          <Play size={10} fill="currentColor" /> {t('common.retry')}
+          <Play size={10} fill="currentColor" /> {label.includes(t('settings.sound_label')) ? t('settings.test_sound') : t('settings.test_haptics')}
         </button>
       )}
     </div>
