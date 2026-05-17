@@ -1,9 +1,22 @@
 import { useState } from 'react'
-import { X, Save } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { X, Save, CheckCircle2, Clock } from 'lucide-react'
 import type { DueCardDto, VocabPayload, TheoryPayload, PhrasePayload } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
+import { Markdown } from './Markdown'
 import { useT } from '../lib/i18n/useT'
 import { BottomSheet } from './BottomSheet'
+
+interface CardQuestionDto {
+  id: string
+  card_id: string
+  question: string
+  status: 'pending' | 'answered' | 'discarded'
+  response: string | null
+  created_at: string
+  answered_at: string | null
+  seen_at: string | null
+}
 
 interface Props {
   card: DueCardDto | null
@@ -30,6 +43,20 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
 
   // Track the current card ID to reset state when it changes
   const [lastCardId, setLastCardId] = useState<string | null>(null)
+
+  // Past questions + agent answers for this exact card. Surfaces the same
+  // history that QuestionSheet shows during practice — so opening a card
+  // from Library / AnswersScreen already shows what's been asked.
+  const { data: historyData } = useQuery({
+    enabled: isOpen && card !== null,
+    queryKey: ['questions', 'card', card?.id ?? ''],
+    queryFn: async () => {
+      const res = await fetchWithAuth(`/questions/card/${card!.id}`)
+      if (!res.ok) throw new Error('Failed to load')
+      return (await res.json()) as { questions: CardQuestionDto[] }
+    },
+  })
+  const history = (historyData?.questions ?? []).filter((q) => q.status !== 'discarded')
 
   if (card && card.id !== lastCardId) {
     setLastCardId(card.id)
@@ -238,6 +265,52 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                 {saving ? t('edit.btn_saving') : t('edit.btn_save')}
               </button>
             </div>
+
+            {/* Question history for this card. Identical layout to the
+                section inside QuestionSheet — pending questions get a
+                clock icon, answered ones render the Markdown response
+                inline. Shown only when there's actually history so an
+                untouched card isn't visually padded with empty space. */}
+            {history.length > 0 && (
+              <section className="mt-6 pt-5 border-t border-app-border/60">
+                <h3 className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-3">
+                  {t('question.history_heading')}
+                </h3>
+                <ul className="flex flex-col gap-3">
+                  {history.map((q) => (
+                    <li
+                      key={q.id}
+                      className="p-3 rounded-xl bg-app-surface border border-app-border"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="mt-0.5 shrink-0">
+                          {q.status === 'answered' ? (
+                            <CheckCircle2 size={14} className="text-emerald-500" />
+                          ) : (
+                            <Clock size={14} className="text-app-hint" />
+                          )}
+                        </div>
+                        <p className="text-sm text-app-text leading-snug whitespace-pre-wrap flex-1">
+                          {q.question}
+                        </p>
+                      </div>
+                      {q.status === 'answered' && q.response !== null && (
+                        <div className="mt-2 pl-6">
+                          <Markdown className="text-[13px] leading-relaxed text-app-hint">
+                            {q.response}
+                          </Markdown>
+                        </div>
+                      )}
+                      {q.status === 'pending' && (
+                        <p className="mt-1 pl-6 text-[11px] text-app-hint italic">
+                          {t('question.status_pending')}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
           <div style={{ height: 'calc(0.5rem + var(--tg-safe-area-inset-bottom, 0px))' }} />
         </>

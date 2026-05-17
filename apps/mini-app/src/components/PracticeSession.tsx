@@ -23,6 +23,13 @@ import { fetchWithAuth } from '../lib/api';
 import { formatInterval, previewIntervals } from '../lib/fsrs';
 import { playPopSound, playSuccessChime, playThudSound } from '../lib/audio';
 import { pickVariantFor, type PracticeMode, type ExerciseVariant } from '../lib/practiceMode';
+import {
+  buildClozeSentence,
+  buildPhraseCloze,
+  extractClozeTerm,
+  fingerprintCards,
+  shouldReseed,
+} from './practiceHelpers';
 import { speak, stopSpeaking } from '../lib/tts';
 import { cycleTtsSpeed, labelForSpeed, loadTtsSpeed, rateForSpeed, saveTtsSpeed, type TtsSpeed } from '../lib/audioSettings';
 import { Markdown } from './Markdown';
@@ -277,8 +284,8 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // the *next* session, not this one. (Resumed sessions skip seeding
   // entirely because queue/currentIndex were hydrated from localStorage
   // in useState init.)
-  if (resumed === null && queueSeed === null && baseCards.length > 0) {
-    setQueueSeed(baseCards.map((c) => c.id).join('|'));
+  if (shouldReseed(resumed, queueSeed, baseCards)) {
+    setQueueSeed(fingerprintCards(baseCards));
     setQueue(baseCards);
   }
 
@@ -1710,69 +1717,3 @@ function SemanticGradeButton({
  * ingested with zero offsets). Matching uses this so casual inflections
  * stored in the sentence pass exact-match.
  */
-function extractClozeTerm(vocab: VocabPayload): string {
-  const start = vocab.context_term_start
-  const end = vocab.context_term_end
-  if (
-    Number.isFinite(start) &&
-    Number.isFinite(end) &&
-    start >= 0 &&
-    end > start &&
-    end <= vocab.context_sentence.length
-  ) {
-    return vocab.context_sentence.slice(start, end)
-  }
-  return vocab.term
-}
-
-function buildClozeSentence(vocab: VocabPayload): { before: string; after: string; targetLength: number } | null {
-  const start = vocab.context_term_start
-  const end = vocab.context_term_end
-  if (
-    !Number.isFinite(start) ||
-    !Number.isFinite(end) ||
-    start < 0 ||
-    end <= start ||
-    end > vocab.context_sentence.length
-  ) {
-    // Offsets unusable — fall back to "term-shaped blank" pattern, since the
-    // backend may not have populated them precisely.
-    return {
-      before: vocab.context_sentence + ' (',
-      after: ' = ?)',
-      targetLength: vocab.term.length,
-    }
-  }
-  return {
-    before: vocab.context_sentence.slice(0, start),
-    after: vocab.context_sentence.slice(end),
-    targetLength: end - start,
-  }
-}
-
-// Phrase cloze: blank one word inside the multi-word phrase. The blank
-// position is deterministic per card so the user sees the same gap across
-// retries (otherwise they'd be hitting a moving target). Skips the first
-// and last word when there are at least 3 — the middle is where the
-// "tricky" content words / prepositions live.
-function buildPhraseCloze(phrase: string, cardId: string): { before: string; blank: string; after: string } | null {
-  const words = phrase.trim().split(/\s+/)
-  if (words.length < 2) return null
-
-  let blankIdx: number
-  if (words.length === 2) {
-    blankIdx = 1
-  } else {
-    // Stable per card via a cheap charCode hash; restrict to inner positions.
-    let hash = 0
-    for (let i = 0; i < cardId.length; i++) hash = (hash * 31 + cardId.charCodeAt(i)) | 0
-    const innerSpan = words.length - 2 // 1..len-2 inclusive
-    blankIdx = 1 + (Math.abs(hash) % innerSpan)
-  }
-
-  return {
-    before: words.slice(0, blankIdx).join(' '),
-    blank: words[blankIdx]!,
-    after: words.slice(blankIdx + 1).join(' '),
-  }
-}
