@@ -44,7 +44,9 @@ if (import.meta.env.DEV) {
   ]).toString();
 
   // Write to hash FIRST so retrieveLaunchParams() can find it.
-  window.location.hash = `#${hash}`;
+  // Preserve existing hash (deep-links)
+  const existing = window.location.hash.replace(/^#/, '');
+  window.location.hash = `#${hash}${existing ? '&' + existing : ''}`;
 
   try {
     mockTelegramEnv({});

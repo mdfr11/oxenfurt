@@ -48,10 +48,18 @@ function getRank(t: T, count: number): string {
 }
 
 export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userFirstName }: HomeProps) {
-  const t = useT();
   const [mode, setMode] = useState<PracticeMode>(() => loadPracticeMode());
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(() => window.location.hash === '#settings');
   const settings = getSettings();
+  const t = useT();
+
+  // Listen for hash changes to open settings
+  useEffect(() => {
+    const h = () => setIsSettingsOpen(window.location.hash === '#settings')
+    window.addEventListener('hashchange', h)
+    return () => window.removeEventListener('hashchange', h)
+  }, [])
+
 
   // Resume offer: detect a paused session
   const [pausedSession, setPausedSession] = useState(() => loadSession())

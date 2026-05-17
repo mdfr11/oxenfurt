@@ -35,11 +35,12 @@ export default function App() {
   useEffect(() => {
     const handleHash = () => {
       const h = window.location.hash
-      if (h === '#library') setScreen('library')
-      else if (h === '#stats') setScreen('stats')
-      else if (h === '#answers') setScreen('answers')
-      else if (h === '#practice') setScreen('practice')
-      else if (h === '#home' || h === '') setScreen('home')
+      if (h.includes('library')) setScreen('library')
+      else if (h.includes('stats')) setScreen('stats')
+      else if (h.includes('answers')) setScreen('answers')
+      else if (h.includes('practice')) setScreen('practice')
+      else if (h.includes('settings')) setScreen('home') // settings handled by prop
+      else if (h.includes('home') || h === '') setScreen('home')
     }
     handleHash()
     window.addEventListener('hashchange', handleHash)
@@ -80,7 +81,10 @@ export default function App() {
         } catch (err) {
           console.error('Dev auth failed', err);
         }
-        if (!cancelled) setScreen('home');
+        if (!cancelled) {
+          const h = window.location.hash
+          if (!h || h === '#home') setScreen('home')
+        }
         return;
       }
 
@@ -92,10 +96,16 @@ export default function App() {
 
       try {
         await loginWithTelegram(data);
-        if (!cancelled) setScreen('home');
+        if (!cancelled) {
+          const h = window.location.hash
+          if (!h || h === '#home') setScreen('home')
+        }
       } catch (err) {
         console.error('Auth failed', err);
-        if (!cancelled) setScreen('home');
+        if (!cancelled) {
+          const h = window.location.hash
+          if (!h || h === '#home') setScreen('home')
+        }
       }
     }
     auth();
@@ -105,7 +115,7 @@ export default function App() {
   }, [initDataRaw]);
 
   return (
-    <div className="app-container overflow-hidden relative">
+    <div data-testid="app-ready" className="app-container overflow-hidden relative">
       <AnimatePresence>
         {screen === 'loading' && (
           <motion.div key="loading" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-50">
