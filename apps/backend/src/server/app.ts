@@ -39,6 +39,9 @@ export interface AppDeps {
    *  surfaces `llm_not_configured` to API consumers. */
   llm?: LlmClient
   llmConfig?: { baseUrl?: string | undefined; apiKey?: string | undefined; model?: string | undefined }
+  /** Optional Hermes webhook for instant question notifications.
+   *  Both URL and secret are required to enable; either missing → no-op. */
+  hermesWebhook?: { url?: string | undefined; secret?: string | undefined }
 }
 
 export function createApp(deps: AppDeps): Hono {
@@ -208,12 +211,20 @@ export function createApp(deps: AppDeps): Hono {
     }),
   )
 
+  const hookUrl = deps.hermesWebhook?.url
+  const hookSecret = deps.hermesWebhook?.secret
+  const hermesWebhook =
+    hookUrl !== undefined && hookUrl.length > 0 && hookSecret !== undefined && hookSecret.length > 0
+      ? { url: hookUrl, secret: hookSecret }
+      : undefined
+
   app.route(
     '/questions',
     createUserQuestionsRouter({
       db: deps.db,
       jwtSecret: deps.jwtSecret,
       now,
+      hermesWebhook,
     }),
   )
 

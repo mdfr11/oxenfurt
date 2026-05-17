@@ -29,6 +29,10 @@ export interface UserRouterDeps {
   db: Db
   jwtSecret: string
   now?: () => Date
+  /** Optional fire-and-forget webhook fired on every new question.
+   *  Leave both unset to disable; secret is sent as X-Webhook-Signature
+   *  HMAC-SHA256 of the JSON body. */
+  hermesWebhook?: { url: string; secret: string } | undefined
 }
 
 const PostQuestionSchema = v.object({
@@ -65,41 +69,17 @@ export function createUserQuestionsRouter(deps: UserRouterDeps): Hono {
       .values({ cardId, question: parsed.output.question })
       .returning()
 
-    // Notify Hermes Agent via webhook (fire-and-forget)
-    const webhookPayload = {
-      event_type: 'question_created',
-      payload: {
+    // Optional webhook notification — fire-and-forget so it never
+    // delays the user-facing response and never throws into the request
+    // path. Skipped silently when neither URL nor secret is configured;
+    // Hermes can still discover the question via /agent/questions/pending.
+    if (deps.hermesWebhook !== undefined) {
+      void notifyHermes(deps.hermesWebhook, {
         question_id: row!.id,
         card_id: cardId,
         question: parsed.output.question,
-        card_type: null,
-        source_quote: null,
-      },
+      })
     }
-    const bodyStr = JSON.stringify(webhookPayload)
-    const secret = '***REMOVED***'
-
-    // Compute HMAC-SHA256 using Web Crypto API
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    )
-    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(bodyStr))
-    const sigHex = Array.from(new Uint8Array(sig))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-
-    fetch('http://127.0.0.1:8644/webhooks/oxenfurt-questions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Webhook-Signature': sigHex,
-      },
-      body: bodyStr,
-    }).catch(() => {}) // ignore errors
 
     return c.json({ question: rowToDto(row!) })
   })
@@ -282,6 +262,38 @@ interface CardQuestionDto {
   created_at: string
   answered_at: string | null
   seen_at: string | null
+}
+
+async function notifyHermes(
+  hook: { url: string; secret: string },
+  payload: { question_id: string; card_id: string; question: string },
+): Promise<void> {
+  const body = JSON.stringify({ event_type: 'question_created', payload })
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(hook.secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    )
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body))
+    const sigHex = Array.from(new Uint8Array(sig))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+    await fetch(hook.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Webhook-Signature': sigHex,
+      },
+      body,
+      signal: AbortSignal.timeout(3000),
+    })
+  } catch (err) {
+    // Best-effort. The agent's poll endpoint is the canonical fallback.
+    console.warn('[questions] hermes webhook failed', err instanceof Error ? err.message : err)
+  }
 }
 
 function safeParseJson(s: string): unknown {

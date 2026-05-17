@@ -43,32 +43,34 @@ async function record() {
       else if (url.includes('/stats/heatmap')) body = { history: [] };
       else if (url.includes('/sessions')) body = { id: 'mock_session_id' };
       else if (url.includes('/questions/count')) body = { unread: 0 };
-      else if (url.includes('/cards/due')) body = [
-        { 
-          id: '1', 
-          type: 'vocab', 
-          payload: { term: 'Resilient', translation: 'Устойчивый', context_sentence: 'A resilient system withstands shocks.', context_term_start: 2, context_term_end: 11 }, 
-          source: 'demo', 
-          source_quote: null,
-          fsrs: { fsrs_state: 2, due: new Date().toISOString(), stability: 5, difficulty: 3, elapsed_days: 1, scheduled_days: 5, learning_steps: 0, reps: 5, lapses: 0, last_review: new Date().toISOString() } 
-        },
-        { 
-          id: '2', 
-          type: 'vocab', 
-          payload: { term: 'Nuance', translation: 'Нюанс', context_sentence: 'Pay attention to the nuance.', context_term_start: 19, context_term_end: 25 }, 
-          source: 'demo', 
-          source_quote: null,
-          fsrs: { fsrs_state: 2, due: new Date().toISOString(), stability: 12, difficulty: 2, elapsed_days: 3, scheduled_days: 12, learning_steps: 0, reps: 3, lapses: 0, last_review: new Date().toISOString() } 
-        },
-        { 
-          id: '3', 
-          type: 'vocab', 
-          payload: { term: 'Pragmatic', translation: 'Прагматичный', context_sentence: 'A pragmatic choice.', context_term_start: 2, context_term_end: 11 }, 
-          source: 'demo', 
-          source_quote: null,
-          fsrs: { fsrs_state: 1, due: new Date().toISOString(), stability: 2, difficulty: 5, elapsed_days: 0, scheduled_days: 1, learning_steps: 0, reps: 1, lapses: 0, last_review: null } 
-        }
-      ];
+      else if (url.includes('/cards/due')) body = {
+        cards: [
+          { 
+            id: '1', 
+            type: 'vocab', 
+            payload: { term: 'Resilient', translation: 'Устойчивый', context_sentence: 'A resilient system withstands shocks.', context_term_start: 2, context_term_end: 11 }, 
+            source: 'demo', 
+            source_quote: null,
+            fsrs: { fsrs_state: 2, due: new Date().toISOString(), stability: 5, difficulty: 3, elapsed_days: 1, scheduled_days: 5, learning_steps: 0, reps: 5, lapses: 0, last_review: new Date().toISOString() } 
+          },
+          { 
+            id: '2', 
+            type: 'vocab', 
+            payload: { term: 'Nuance', translation: 'Нюанс', context_sentence: 'Pay attention to the nuance.', context_term_start: 19, context_term_end: 25 }, 
+            source: 'demo', 
+            source_quote: null,
+            fsrs: { fsrs_state: 2, due: new Date().toISOString(), stability: 12, difficulty: 2, elapsed_days: 3, scheduled_days: 12, learning_steps: 0, reps: 3, lapses: 0, last_review: new Date().toISOString() } 
+          },
+          { 
+            id: '3', 
+            type: 'vocab', 
+            payload: { term: 'Pragmatic', translation: 'Прагматичный', context_sentence: 'A pragmatic choice.', context_term_start: 2, context_term_end: 11 }, 
+            source: 'demo', 
+            source_quote: null,
+            fsrs: { fsrs_state: 1, due: new Date().toISOString(), stability: 2, difficulty: 5, elapsed_days: 0, scheduled_days: 1, learning_steps: 0, reps: 1, lapses: 0, last_review: null } 
+          }
+        ]
+      };
       
       return r.fulfill({ json: body, headers: { 'Access-Control-Allow-Origin': '*' } });
     });
@@ -79,44 +81,59 @@ async function record() {
   await setupMocks(page);
 
   try {
-    console.log('  - Navigating to Practice');
-    await page.goto('http://localhost:5173/#practice');
+    console.log('  - Navigating to Home');
+    await page.goto('http://localhost:5173/#home');
+    await page.waitForSelector('button.bg-app-primary', { timeout: 10000 });
     await page.waitForTimeout(3000);
-    await page.screenshot({ path: path.join(SCREENSHOTS_DIR, 'debug_practice.png') });
+
+    // 1. Click Start
+    console.log('  - Starting session');
+    await page.click('button.bg-app-primary');
     
     console.log('  - Waiting for card');
-    // Wait for card wrapper or any text
-    await page.waitForSelector('.perspective-1000, h2, h3', { timeout: 15000 });
+    // Wait for the card content container
+    const card = page.locator('div.bg-app-surface.rounded-\\[2\\.5rem\\]').first();
+    await card.waitFor({ state: 'visible', timeout: 15000 });
     await page.waitForTimeout(2000);
 
     // 2. Swipe First Card Right (Easy)
     console.log('  - Swiping card 1 (Right)');
-    const card = page.locator('.perspective-1000').first();
     let box = await card.boundingBox();
     if (!box) throw new Error('Card not found for swipe');
     
+    // Tap to reveal first (since it's a recognition card by default)
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(1000);
+    
+    // Swipe
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width + 300, box.y + box.height / 2, { steps: 40 });
+    await page.mouse.move(box.x + box.width + 300, box.y + box.height / 2, { steps: 50 });
     await page.mouse.up();
     await page.waitForTimeout(2000);
 
     // 3. Swipe Second Card Left (Again)
     console.log('  - Swiping card 2 (Left)');
-    await page.waitForSelector('[data-testid="card-term"]');
+    await card.waitFor({ state: 'visible' });
     box = await card.boundingBox();
+    
+    // Tap to reveal
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(1000);
+    
+    // Swipe
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(box.x - 300, box.y + box.height / 2, { steps: 40 });
+    await page.mouse.move(box.x - 300, box.y + box.height / 2, { steps: 50 });
     await page.mouse.up();
     await page.waitForTimeout(2000);
 
     // 4. Reveal Third Card
     console.log('  - Revealing card 3');
-    await page.waitForSelector('[data-testid="card-term"]');
-    await page.click('.perspective-1000');
+    await card.waitFor({ state: 'visible' });
+    await page.click('div.bg-app-surface.rounded-\\[2\\.5rem\\]');
     await page.waitForTimeout(1000);
-    await page.click('button:has-text("Good"), button:has-text("Хорошо")');
+    await page.click('button:has-text("Good"), button:has-text("Хорошо")', { force: true });
     await page.waitForTimeout(3000);
 
     await context.close();

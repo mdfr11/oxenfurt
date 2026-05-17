@@ -70,6 +70,17 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
+    // Only advance off the loading screen if the hashchange listener
+    // hasn't already deep-linked elsewhere. Crucially: Telegram WebApp
+    // populates location.hash with `#tgWebAppData=…&tgWebAppVersion=…`
+    // — the previous `if (!h || h === '#home')` check returned false for
+    // that, so every fresh open from Telegram silently hung on the
+    // spinner. Use functional setState so we observe the live screen
+    // state set by the deep-link effect above, not a stale closure.
+    const exitLoading = () => {
+      if (cancelled) return
+      setScreen((prev) => (prev === 'loading' ? 'home' : prev))
+    }
     async function auth() {
       if (import.meta.env.DEV) {
         try {
@@ -81,31 +92,22 @@ export default function App() {
         } catch (err) {
           console.error('Dev auth failed', err);
         }
-        if (!cancelled) {
-          const h = window.location.hash
-          if (!h || h === '#home') setScreen('home')
-        }
+        exitLoading();
         return;
       }
 
       const data = initDataRaw ?? safeRetrieveInitData()
       if (data === undefined) {
-        if (!cancelled) setScreen('home');
+        exitLoading();
         return
       }
 
       try {
         await loginWithTelegram(data);
-        if (!cancelled) {
-          const h = window.location.hash
-          if (!h || h === '#home') setScreen('home')
-        }
+        exitLoading();
       } catch (err) {
         console.error('Auth failed', err);
-        if (!cancelled) {
-          const h = window.location.hash
-          if (!h || h === '#home') setScreen('home')
-        }
+        exitLoading();
       }
     }
     auth();

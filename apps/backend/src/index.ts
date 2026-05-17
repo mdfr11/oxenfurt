@@ -32,6 +32,10 @@ const app = createApp({
     apiKey: config.LLM_API_KEY,
     model: config.LLM_MODEL,
   },
+  hermesWebhook: {
+    url: config.HERMES_WEBHOOK_URL,
+    secret: config.HERMES_WEBHOOK_SECRET,
+  },
 })
 
 Bun.serve({
