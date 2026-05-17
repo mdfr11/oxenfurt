@@ -142,11 +142,11 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
       </header>
 
       {/* 2. Scrollable Middle Zone - Uses flex-1 to fill space but remains scrollable if needed */}
-      <div className="flex-1 overflow-y-auto px-6 no-scrollbar flex flex-col gap-6 py-4">
+      <div className="flex-1 overflow-y-auto px-6 no-scrollbar flex flex-col gap-4 py-2">
         
         {/* Ring Section - Centered within the flex-1 area */}
         <div className="flex flex-col items-center justify-center shrink-0">
-          <div className="relative w-48 h-48 sm:w-56 sm:h-56 flex items-center justify-center">
+          <div className="relative w-44 h-44 sm:w-48 sm:h-48 flex items-center justify-center">
             <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 200 200">
               <circle cx="100" cy="100" r={radius} stroke="currentColor" strokeWidth="8" fill="transparent" className="text-app-primary/5" />
               <motion.circle cx="100" cy="100" r={radius} stroke="currentColor" strokeWidth="8" fill="transparent" strokeLinecap="round" className="text-app-primary" style={{ strokeDasharray: circumference, strokeDashoffset, filter: 'drop-shadow(0 0 3px rgba(79, 70, 229, 0.2))' }} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset }} transition={{ duration: 1.5, ease: 'circOut' }} />
@@ -170,8 +170,8 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
         </div>
 
         {/* Stats Summary Area */}
-        <div className="flex flex-col items-center gap-6 w-full max-w-[340px] self-center shrink-0">
-          <div className="bg-app-surface px-6 py-2 rounded-full border border-app-border shadow-sm text-app-hint text-center text-[10px] font-bold uppercase tracking-wider">
+        <div className="flex flex-col items-center gap-4 w-full max-w-[340px] self-center shrink-0">
+          <div className="bg-app-surface px-6 py-1.5 rounded-full border border-app-border shadow-sm text-app-hint text-center text-[10px] font-bold uppercase tracking-wider">
             {totalForToday === 0 ? t('home.no_due') : due === 0 ? t('home.progress_done_excellent', { reviewed }) : t('home.progress_in_progress', { reviewed, total: totalForToday })}
           </div>
 
@@ -201,9 +201,9 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
       </div>
 
       {/* 3. Fixed Footer Actions */}
-      <footer className="shrink-0 flex flex-col gap-3 px-6 py-6 bg-app-bg/95 backdrop-blur-md border-t border-app-border/10">
-        <div className="max-w-[500px] mx-auto w-full flex flex-col gap-4">
-          <button className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-bold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20" onClick={() => { primeSpeech(); void primeAudio(); onStart(pausedSession ? pausedSession.mode : mode); }}>
+      <footer className="shrink-0 flex flex-col gap-2 px-6 py-4 bg-app-bg/95 backdrop-blur-md border-t border-app-border/10">
+        <div className="max-w-[500px] mx-auto w-full flex flex-col gap-3">
+          <button className="w-full bg-app-primary text-app-primary-text py-3.5 rounded-2xl font-bold text-lg active:scale-95 shadow-lg shadow-app-primary/20" onClick={() => { primeSpeech(); void primeAudio(); onStart(pausedSession ? pausedSession.mode : mode); }}>
             {pausedSession ? t('home.resume_session') : t('home.start_session')}
           </button>
           <div className="flex flex-col items-center gap-1.5 opacity-60">
@@ -241,8 +241,8 @@ function CompactHeatmap({ history }: { history: { date: string; count: number }[
     cells.push({ date: iso, count: counts.get(iso) ?? 0 });
   }
   return (
-    <div className="flex flex-col items-center">
-      <div className="grid grid-flow-col gap-1.5" style={{ gridTemplateRows: 'repeat(7, 8px)' }}>
+    <div className="flex flex-col items-center shrink-0">
+      <div className="grid grid-flow-col gap-1.5 shrink-0" style={{ gridTemplateRows: 'repeat(7, 8px)', height: '92px' }}>
         {cells.map(c => ( <div key={c.date} className={`w-2 h-2 rounded-[2px] ${c.count === 0 ? 'bg-app-hint/10' : c.count < 5 ? 'bg-app-primary/30' : c.count < 15 ? 'bg-app-primary/60' : 'bg-app-primary'}`} /> ))}
       </div>
     </div>
