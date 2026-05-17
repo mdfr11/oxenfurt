@@ -160,9 +160,14 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
       FROM cards
       WHERE status = 'active' AND stability >= 10
     `),
-    db.execute<{ review_date: Date }>(sql`
+    // Bounded streak window. The streak loop stops at the first gap
+    // day, so anything older than ~2 months is dead weight; the prior
+    // unbounded SELECT DISTINCT scanned the entire card_reviews table.
+    // 90 days covers any realistic streak comfortably.
+    db.execute<{ review_date: Date | string }>(sql`
       SELECT DISTINCT date_trunc('day', reviewed_at) as review_date
       FROM card_reviews
+      WHERE reviewed_at >= to_timestamp(${(whenTs - 90 * 24 * 3600 * 1000) / 1000})
       ORDER BY review_date DESC
     `),
   ])

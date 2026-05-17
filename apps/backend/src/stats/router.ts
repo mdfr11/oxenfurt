@@ -1,8 +1,18 @@
+// Legacy thin wrappers that project `computeStats` (in sessions/router)
+// into the shapes the Mini App's two original endpoints returned. Kept
+// so the Mini App keeps working without a refactor; ALL stats SQL lives
+// in `computeStats` — there is no duplicate aggregation in this file
+// anymore. Previously this router had its own ~130 LOC of queries that
+// drifted from sessions/router's copy (the regressed FSRS-state column
+// reference was first spotted here, then re-fixed in sessions when it
+// copied the bug).
+//
+// New code should call /sessions/stats directly instead.
+
 import { Hono } from 'hono'
-import { and, asc, count, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import type { Db } from '../db/client.ts'
-import { cardReviews, cards } from '../db/schema.ts'
 import { jwtAuth } from '../middleware/auth.ts'
+import { computeStats } from '../sessions/router.ts'
 
 export interface StatsRouterDeps {
   db: Db
@@ -17,119 +27,18 @@ export function createStatsRouter(deps: StatsRouterDeps): Hono {
   app.use('*', jwtAuth({ jwtSecret: deps.jwtSecret, now }))
 
   app.get('/today', async (c) => {
-    const todayStart = new Date(now())
-    todayStart.setHours(0, 0, 0, 0)
-    const tomorrowStart = new Date(todayStart)
-    tomorrowStart.setDate(tomorrowStart.getDate() + 1)
-
-    // 1. Cards reviewed today
-    const reviewedTodayRes = await deps.db
-      .select({ count: count() })
-      .from(cardReviews)
-      .where(
-        and(
-          gte(cardReviews.reviewedAt, todayStart),
-          lte(cardReviews.reviewedAt, tomorrowStart)
-        )
-      )
-    const reviewedToday = reviewedTodayRes[0]?.count ?? 0
-
-    // 2. Cards due (active cards where due <= now)
-    const dueRes = await deps.db
-      .select({ count: count() })
-      .from(cards)
-      .where(
-        and(
-          eq(cards.status, 'active'),
-          lte(cards.due, now())
-        )
-      )
-    const dueCount = dueRes[0]?.count ?? 0
-
-    // 2.5. Learned cards — stability is a flat column on `cards`, not a
-    // JSON field. The earlier `cards.fsrs->>'stability'` reference was the
-    // bug behind the /stats 500s (Postgres: column "fsrs" does not exist).
-    const learnedRes = await deps.db
-      .select({ count: count() })
-      .from(cards)
-      .where(
-        and(
-          eq(cards.status, 'active'),
-          gte(cards.stability, 10),
-        ),
-      )
-    const learnedCount = learnedRes[0]?.count ?? 0
-
-    // 3. Streak calculation
-    // This is a naive streak calculation: we fetch distinct review dates (in local time)
-    // and count backwards.
-    // For a more robust timezone-aware streak, we'd group by Date(reviewedAt) in SQL.
-    const streakRes = await deps.db.execute<{ review_date: Date }>(sql`
-      SELECT DISTINCT date_trunc('day', reviewed_at) as review_date
-      FROM ${cardReviews}
-      ORDER BY review_date DESC
-    `)
-
-    let streak = 0
-    let expectedDate = new Date(todayStart)
-
-    for (const row of streakRes) {
-      const rowDate = new Date(row.review_date)
-      // If the user hasn't reviewed today yet, but reviewed yesterday,
-      // the streak is still alive, we just start counting from yesterday.
-      if (streak === 0 && rowDate.getTime() < expectedDate.getTime()) {
-        const yesterday = new Date(expectedDate)
-        yesterday.setDate(yesterday.getDate() - 1)
-        if (rowDate.getTime() === yesterday.getTime()) {
-          streak++
-          expectedDate = yesterday
-          continue
-        } else {
-          break // Streak broken
-        }
-      }
-
-      if (rowDate.getTime() === expectedDate.getTime()) {
-        streak++
-        expectedDate.setDate(expectedDate.getDate() - 1)
-      } else {
-        break // Gap found
-      }
-    }
-
+    const stats = await computeStats(deps.db, now())
     return c.json({
-      reviewedToday,
-      dueCount,
-      learnedCount,
-      streak,
+      reviewedToday: stats.reviews.today.count,
+      dueCount: stats.forecast.due_now,
+      learnedCount: stats.learned_count,
+      streak: stats.streak,
     })
   })
 
   app.get('/heatmap', async (c) => {
-    const sixMonthsAgo = new Date(now())
-    sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180)
-    sixMonthsAgo.setHours(0, 0, 0, 0)
-
-    // Pass the cutoff as an ISO string and cast on the SQL side. Embedding a
-    // raw Date in a postgres-js tagged template crashed at runtime with
-    // "The 'string' argument must be of type string ... Received an instance
-    // of Date" — the driver tries to Buffer.from() the parameter through a
-    // path that doesn't accept Date objects.
-    const cutoffIso = sixMonthsAgo.toISOString()
-
-    const result = await deps.db.execute<{ date: string; count: number }>(sql`
-      SELECT
-        to_char(date_trunc('day', reviewed_at), 'YYYY-MM-DD') as date,
-        count(*)::int as count
-      FROM ${cardReviews}
-      WHERE reviewed_at >= ${cutoffIso}::timestamptz
-      GROUP BY date
-      ORDER BY date ASC
-    `)
-
-    return c.json({
-      history: result,
-    })
+    const stats = await computeStats(deps.db, now())
+    return c.json({ history: stats.heatmap })
   })
 
   return app
