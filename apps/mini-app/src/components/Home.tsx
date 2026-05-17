@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { mainButton } from '@telegram-apps/sdk-react';
 import { Library as LibraryIcon, BarChart3, Settings, Flame, ChevronDown, GraduationCap } from 'lucide-react';
-import { fetchWithAuth } from '../lib/api';
+import { fetchWithAuth, API_BASE } from '../lib/api';
 import {
   loadPracticeMode,
   type PracticeMode,
@@ -103,13 +103,19 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
   });
   const unreadCount = unreadData?.unread ?? 0;
 
+  // Backend liveness ping. Must go through API_BASE — a bare `/health`
+  // hits the SPA static-fallback on the production reverse proxy (Caddy
+  // routes `/api/*` to the backend, everything else to index.html), so
+  // the previous unscoped fetch was always returning HTML and parsing
+  // to a false negative.
   const { data: health } = useQuery({
     queryKey: ['health'],
     queryFn: async () => {
       try {
-        const res = await fetch('/health');
+        const res = await fetch(`${API_BASE}/health`);
         if (!res.ok) return { ok: false };
-        return await res.json() as { ok: boolean };
+        const data = (await res.json()) as { ok?: boolean };
+        return { ok: data.ok === true };
       } catch {
         return { ok: false };
       }
