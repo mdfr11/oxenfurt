@@ -106,14 +106,11 @@ export function validateInitData(raw: string, opts: ValidateInitDataOptions): In
 
 function constantTimeHexEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false
-  let bufA: Buffer
-  let bufB: Buffer
-  try {
-    bufA = Buffer.from(a, 'hex')
-    bufB = Buffer.from(b, 'hex')
-  } catch {
-    return false
-  }
+  // Buffer.from(str, 'hex') never throws — it returns an empty buffer
+  // when the input is malformed. The length check below rejects that
+  // case before timingSafeEqual sees mismatched lengths.
+  const bufA = Buffer.from(a, 'hex')
+  const bufB = Buffer.from(b, 'hex')
   if (bufA.length === 0 || bufA.length !== bufB.length) return false
   return timingSafeEqual(bufA, bufB)
 }

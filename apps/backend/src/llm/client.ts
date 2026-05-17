@@ -22,8 +22,6 @@ export interface ChatOptions {
 }
 
 export interface LlmClient {
-  /** True if env is configured; false otherwise. */
-  available: boolean
   /** Send a chat and return the assistant message text. */
   chat(messages: ChatMessage[], opts?: ChatOptions): Promise<string>
 }
@@ -34,15 +32,7 @@ export interface LlmConfig {
   model?: string | undefined
 }
 
-class DisabledClient implements LlmClient {
-  public readonly available = false
-  async chat(): Promise<string> {
-    throw new Error('llm_not_configured')
-  }
-}
-
 class OpenAICompatClient implements LlmClient {
-  public readonly available = true
   constructor(
     private readonly baseUrl: string,
     private readonly apiKey: string,
@@ -93,7 +83,13 @@ class OpenAICompatClient implements LlmClient {
   }
 }
 
-export function createLlmClient(cfg: LlmConfig): LlmClient {
+/**
+ * Returns a client only when all three env vars are set; otherwise
+ * `null`. Callers gate on the null check (the previous DisabledClient
+ * stub existed solely so they could do `if (!llm.available)` — same
+ * thing as `if (llm === null)`, one class fewer).
+ */
+export function createLlmClient(cfg: LlmConfig): LlmClient | null {
   if (
     cfg.baseUrl === undefined ||
     cfg.baseUrl.length === 0 ||
@@ -102,7 +98,7 @@ export function createLlmClient(cfg: LlmConfig): LlmClient {
     cfg.model === undefined ||
     cfg.model.length === 0
   ) {
-    return new DisabledClient()
+    return null
   }
   return new OpenAICompatClient(cfg.baseUrl, cfg.apiKey, cfg.model)
 }

@@ -11,21 +11,11 @@ async function authHeader(): Promise<string> {
   return `Bearer ${token}`
 }
 
-function disabledLlm(): LlmClient {
-  return {
-    available: false,
-    async chat() {
-      throw new Error('should not be called')
-    },
-  }
-}
-
 function stubLlm(
   reply: string | (() => Promise<string>),
 ): LlmClient & { calls: Array<{ messages: ChatMessage[]; opts: ChatOptions | undefined }> } {
   const calls: Array<{ messages: ChatMessage[]; opts: ChatOptions | undefined }> = []
   return {
-    available: true,
     calls,
     async chat(messages, opts) {
       calls.push({ messages, opts })
@@ -34,7 +24,7 @@ function stubLlm(
   }
 }
 
-function buildApp(llm: LlmClient) {
+function buildApp(llm: LlmClient | null) {
   return createGradeRouter({ jwtSecret: JWT_SECRET, llm, now: () => NOW })
 }
 
@@ -51,7 +41,7 @@ describe('POST /grade', () => {
   })
 
   test('503 llm_not_configured when LLM is disabled', async () => {
-    const res = await buildApp(disabledLlm()).request('/', {
+    const res = await buildApp(null).request('/', {
       method: 'POST',
       headers: { authorization: await authHeader(), 'content-type': 'application/json' },
       body: validBody,

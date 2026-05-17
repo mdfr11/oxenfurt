@@ -34,7 +34,10 @@ export interface AppDeps {
    *  env-driven creation via {LLM_API_BASE_URL, LLM_API_KEY, LLM_MODEL};
    *  if any of those is missing the resulting client is a no-op stub that
    *  surfaces `llm_not_configured` to API consumers. */
-  llm?: LlmClient
+  /** Pre-built LLM client for tests. Production wires it up from env
+   *  via `llmConfig` below; either being missing leaves the LLM
+   *  surface disabled (the grade endpoint returns 503). */
+  llm?: LlmClient | null
   llmConfig?: { baseUrl?: string | undefined; apiKey?: string | undefined; model?: string | undefined }
 }
 
@@ -42,7 +45,7 @@ export function createApp(deps: AppDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
   const fsrs = new FsrsService()
-  const llm = deps.llm ?? createLlmClient(deps.llmConfig ?? {})
+  const llm = deps.llm !== undefined ? deps.llm : createLlmClient(deps.llmConfig ?? {})
 
   // Print every unhandled error to stderr (journald) before returning a
   // generic 500 to the client. The client only gets the opaque code —

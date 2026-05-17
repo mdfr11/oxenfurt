@@ -6,10 +6,6 @@ import type { Rating } from '../schemas/rating.ts'
 export interface FsrsConfig {
   /** Enable interval fuzzing in production. Disable in tests for determinism. */
   enableFuzz?: boolean
-  /** Target retention probability. Default 0.9. Do not change on a populated deck. */
-  requestRetention?: number
-  /** Cap on scheduled interval in days. Default 36500 (100 years). */
-  maximumInterval?: number
 }
 
 export interface ReviewResult {
@@ -39,8 +35,6 @@ export class FsrsService {
   constructor(config: FsrsConfig = {}) {
     const params = generatorParameters({
       enable_fuzz: config.enableFuzz ?? true,
-      request_retention: config.requestRetention ?? 0.9,
-      maximum_interval: config.maximumInterval ?? 36500,
     })
     this.scheduler = fsrs(params)
   }

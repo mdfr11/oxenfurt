@@ -5,7 +5,8 @@ import { jwtAuth } from '../middleware/auth.ts'
 
 export interface GradeRouterDeps {
   jwtSecret: string
-  llm: LlmClient
+  /** Null when LLM env isn't configured — endpoint returns 503. */
+  llm: LlmClient | null
   now?: () => Date
 }
 
@@ -43,7 +44,7 @@ export function createGradeRouter(deps: GradeRouterDeps): Hono {
   app.use('*', jwtAuth({ jwtSecret: deps.jwtSecret, now }))
 
   app.post('/', async (c) => {
-    if (!deps.llm.available) {
+    if (deps.llm === null) {
       return c.json({ error: 'llm_not_configured' }, 503)
     }
     let body: unknown
