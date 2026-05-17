@@ -27,6 +27,7 @@ import { speak, stopSpeaking } from '../lib/tts';
 import { cycleTtsSpeed, labelForSpeed, loadTtsSpeed, rateForSpeed, saveTtsSpeed, type TtsSpeed } from '../lib/audioSettings';
 import { Markdown } from './Markdown';
 import { getSettings } from '../lib/settings';
+import { ttsLangTag } from '../lib/languages';
 import { isSpeechRecognitionSupported, startRecognition, type RecognitionHandle } from '../lib/speechRecognition';
 import { clearSession, loadSession, saveSession } from '../lib/sessionPersist';
 import { EditCardSheet } from './EditCardSheet';
@@ -588,7 +589,13 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     });
 
     try {
-      const res = await fetchWithAuth(`/translate?text=${encodeURIComponent(cleanWord)}`);
+      const { learningLanguage, nativeLanguage } = getSettings()
+      const params = new URLSearchParams({
+        text: cleanWord,
+        from: learningLanguage,
+        to: nativeLanguage,
+      })
+      const res = await fetchWithAuth(`/translate?${params.toString()}`);
       if (res.ok) {
         const { translation } = await res.json();
         setTranslationTooltip(prev => prev ? { ...prev, translation } : null);
@@ -1415,8 +1422,9 @@ function TypedAnswerField({
       return;
     }
     setVoiceHint(null);
+    const { learningLanguage, voiceLocale } = getSettings()
     const handle = startRecognition({
-      lang: 'en-US',
+      lang: ttsLangTag(learningLanguage, voiceLocale),
       onInterim: (interim) => onChange(interim),
       onResult: (transcript) => {
         onChange(transcript);

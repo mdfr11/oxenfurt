@@ -23,6 +23,7 @@
 
 import { API_BASE, getToken } from './api'
 import { getSettings } from './settings'
+import { ttsLangTag } from './languages'
 
 // --- Dedicated AudioContext just for TTS playback ---
 //
@@ -80,9 +81,13 @@ export async function speak(text: string, opts: { rate?: number } = {}): Promise
 
   disposeActive()
 
-  const { voiceLocale } = getSettings()
+  // Compute the BCP-47 tag from the learning language. English honours the
+  // user's accent preference (US/UK); other languages have a canonical
+  // region picked in lib/languages.ts.
+  const { learningLanguage, voiceLocale } = getSettings()
+  const langTag = ttsLangTag(learningLanguage, voiceLocale)
 
-  const buf = await fetchTtsBuffer(trimmed, voiceLocale)
+  const buf = await fetchTtsBuffer(trimmed, langTag)
   if (buf !== null) {
     // Path 1: Web Audio decode + play. The canonical mobile-friendly path.
     if (await tryPlayWebAudio(buf, opts)) return
@@ -92,7 +97,7 @@ export async function speak(text: string, opts: { rate?: number } = {}): Promise
   }
 
   // Path 3: ultimate fallback — system synthesizer.
-  trySpeakSystem(trimmed, voiceLocale, opts)
+  trySpeakSystem(trimmed, langTag, opts)
 }
 
 async function fetchTtsBuffer(text: string, lang: string): Promise<ArrayBuffer | null> {
