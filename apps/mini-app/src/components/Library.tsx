@@ -15,6 +15,7 @@ import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
 import { useT } from '../lib/i18n/useT'
 import { plurKey } from '../lib/i18n/plural'
+import { QuestionSheet } from './QuestionSheet'
 
 interface LibraryProps {
   onExit: () => void
@@ -448,6 +449,7 @@ function CardDetailSheet({
   onJumpToSource: (source: string | null) => void
 }) {
   const t = useT()
+  const [isQuestionOpen, setIsQuestionOpen] = useState(false)
   const vocab = card.type === 'vocab' ? (card.payload as VocabPayload) : null
   const phrase = card.type === 'phrase' ? (card.payload as PhrasePayload) : null
   const theory = card.type === 'theory' ? (card.payload as TheoryPayload) : null
@@ -535,23 +537,38 @@ function CardDetailSheet({
             )}
           </div>
 
-          {card.status === 'active' && (
+          <div className="flex flex-col gap-2 pt-2">
             <button
-              onClick={onArchive}
-              disabled={archiving}
-              className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border border-rose-500/30 text-rose-500 font-semibold active:scale-95 transition-transform disabled:opacity-50"
+              onClick={() => setIsQuestionOpen(true)}
+              className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border border-app-primary/30 text-app-primary font-semibold active:scale-95 transition-transform"
             >
-              <Archive size={18} />
-              {archiving ? t('library.btn_archiving') : t('library.btn_archive')}
+              <HelpCircle size={18} />
+              {card.has_questions ? t('library.btn_questions_has_history') : t('library.btn_questions')}
             </button>
-          )}
-          {card.status === 'archived' && (
-            <div className="text-center text-app-hint text-sm py-2">
-              {t('library.archived_notice')}
-            </div>
-          )}
+
+            {card.status === 'active' && (
+              <button
+                onClick={onArchive}
+                disabled={archiving}
+                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border border-rose-500/30 text-rose-500 font-semibold active:scale-95 transition-transform disabled:opacity-50"
+              >
+                <Archive size={18} />
+                {archiving ? t('library.btn_archiving') : t('library.btn_archive')}
+              </button>
+            )}
+            {card.status === 'archived' && (
+              <div className="text-center text-app-hint text-sm py-2">
+                {t('library.archived_notice')}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+      <QuestionSheet
+        isOpen={isQuestionOpen}
+        onClose={() => setIsQuestionOpen(false)}
+        cardId={card.id}
+      />
     </div>
   )
 }

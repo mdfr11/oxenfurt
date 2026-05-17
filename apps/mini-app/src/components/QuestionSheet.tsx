@@ -94,7 +94,7 @@ export function QuestionSheet({ cardId, isOpen, onClose }: Props) {
         rows={5}
         autoFocus
         placeholder={t('question.placeholder')}
-        className="w-full bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary resize-none text-sm"
+        className="w-full shrink-0 bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary resize-none text-sm"
         disabled={state === 'sending' || state === 'sent'}
       />
 

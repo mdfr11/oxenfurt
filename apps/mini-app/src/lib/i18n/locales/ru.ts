@@ -237,6 +237,8 @@ export const ru = {
   'library.detail_lapses': 'Ошибок',
   'library.detail_next_review': 'Следующее повторение',
   'library.detail_source': 'Источник',
+  'library.btn_questions': 'Задать вопрос',
+  'library.btn_questions_has_history': 'Вопросы (есть история)',
   'library.btn_archive': 'В архив',
   'library.btn_archiving': 'Архивирую…',
   'library.archived_notice': 'Карточка в архиве — не показывается в сессиях',

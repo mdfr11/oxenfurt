@@ -226,7 +226,9 @@ export const en: Record<keyof typeof ru, string> = {
   'library.detail_lapses': 'Lapses',
   'library.detail_next_review': 'Next review',
   'library.detail_source': 'Source',
-  'library.btn_archive': 'Archive',
+  'library.btn_questions': 'Ask a question',
+  'library.btn_questions_has_history': 'Questions (has history)',
+  'library.btn_archive': 'Archive card',
   'library.btn_archiving': 'Archiving…',
   'library.archived_notice': 'Card archived — not shown in sessions',
 
