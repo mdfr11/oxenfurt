@@ -37,11 +37,6 @@ const ConfigSchema = v.object({
   LLM_API_BASE_URL: v.optional(v.string()),
   LLM_API_KEY: v.optional(v.string()),
   LLM_MODEL: v.optional(v.string()),
-  // Optional fire-and-forget webhook fired when a learner posts a card
-  // question. Lets the Hermes Agent react instantly instead of polling
-  // /agent/questions/pending. Leave both unset to disable.
-  HERMES_WEBHOOK_URL: v.optional(v.string()),
-  HERMES_WEBHOOK_SECRET: v.optional(v.string()),
 })
 
 export type Config = v.InferOutput<typeof ConfigSchema>
@@ -61,8 +56,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     LLM_API_BASE_URL: env.LLM_API_BASE_URL,
     LLM_API_KEY: env.LLM_API_KEY,
     LLM_MODEL: env.LLM_MODEL,
-    HERMES_WEBHOOK_URL: env.HERMES_WEBHOOK_URL,
-    HERMES_WEBHOOK_SECRET: env.HERMES_WEBHOOK_SECRET,
   }
   const config = v.parse(ConfigSchema, raw)
 
