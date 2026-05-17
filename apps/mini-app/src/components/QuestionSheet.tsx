@@ -92,7 +92,6 @@ export function QuestionSheet({ cardId, isOpen, onClose }: Props) {
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={5}
-        autoFocus
         placeholder={t('question.placeholder')}
         className="w-full shrink-0 bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary resize-none text-sm"
         disabled={state === 'sending' || state === 'sent'}
