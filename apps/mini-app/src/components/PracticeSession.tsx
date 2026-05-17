@@ -930,18 +930,18 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="absolute inset-0 p-8 flex flex-col items-center justify-center gap-5"
+                  className="absolute inset-0 px-6 pt-6 pb-20 flex flex-col items-center justify-center gap-5"
                 >
-                  <div className="absolute top-4 right-4 flex flex-col gap-2">
+                  <div className="absolute bottom-5 inset-x-0 flex justify-center gap-4">
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
                         setIsEditOpen(true)
                       }}
-                      className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
+                      className="w-10 h-10 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform shadow-sm"
                       aria-label={t('practice.action_edit')}
                     >
-                      <Pencil size={14} />
+                      <Pencil size={18} />
                     </button>
                     {currentCard!.source && (
                       <button
@@ -949,10 +949,10 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                           e.stopPropagation()
                           setIsRelatedOpen(true)
                         }}
-                        className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
+                        className="w-10 h-10 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform shadow-sm"
                         aria-label={t('practice.action_related')}
                       >
-                        <Layers size={14} />
+                        <Layers size={18} />
                       </button>
                     )}
                     <button
@@ -960,12 +960,12 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         e.stopPropagation()
                         setIsQuestionOpen(true)
                       }}
-                      className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform relative"
+                      className="w-10 h-10 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform shadow-sm relative"
                       aria-label={t('practice.action_question')}
                     >
-                      <HelpCircle size={14} />
+                      <HelpCircle size={18} />
                       {currentCard!.has_questions && (
-                        <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-app-primary rounded-full border-2 border-app-bg" />
+                        <div className="absolute top-0 right-0 w-3 h-3 bg-app-primary rounded-full border-2 border-app-bg" />
                       )}
                     </button>
                   </div>

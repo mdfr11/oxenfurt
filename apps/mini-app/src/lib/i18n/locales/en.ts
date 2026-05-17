@@ -40,6 +40,8 @@ export const en: Record<keyof typeof ru, string> = {
   'home.agent_answered_plural_few': 'questions',
   'home.agent_answered_plural_many': 'questions',
   'home.history_heading': 'Activity',
+  'home.welcome_title': 'Welcome to the Academy',
+  'home.welcome_desc': 'Send a lesson transcript or notes to the bot to create your first flashcards.',
   'home.btn_library': 'Library',
   'home.btn_stats': 'Stats',
   'home.rank_label': 'Rank',

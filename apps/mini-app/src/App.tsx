@@ -137,38 +137,50 @@ export default function App() {
               mode={practiceMode}
               onComplete={(total, correct) => {
                 setStats({ total, correct });
-                setScreen('summary');
+                window.location.hash = '#summary';
               }}
-              onExit={() => setScreen('home')}
+              onExit={() => {
+                if (window.history.length > 1) window.history.back();
+                else window.location.hash = '#home';
+              }}
             />
           </motion.div>
         ) : screen === 'summary' ? (
           <motion.div key="summary" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <Summary
               stats={stats}
-              onFinish={() => setScreen('home')}
-              onRepeatHard={() => setScreen('practice')}
+              onFinish={() => { window.location.hash = '#home'; }}
+              onRepeatHard={() => { window.location.hash = '#practice'; }}
             />
           </motion.div>
         ) : screen === 'library' ? (
           <motion.div key="library" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <Library
-              onExit={() => setScreen('home')}
+              onExit={() => {
+                if (window.history.length > 1) window.history.back();
+                else window.location.hash = '#home';
+              }}
               autoOpenCardId={pendingOpenCardId}
               onAutoOpenConsumed={() => setPendingOpenCardId(null)}
             />
           </motion.div>
         ) : screen === 'stats' ? (
           <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
-            <Stats onExit={() => setScreen('home')} />
+            <Stats onExit={() => {
+              if (window.history.length > 1) window.history.back();
+              else window.location.hash = '#home';
+            }} />
           </motion.div>
         ) : screen === 'answers' ? (
           <motion.div key="answers" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <AnswersScreen
-              onExit={() => setScreen('home')}
+              onExit={() => {
+                if (window.history.length > 1) window.history.back();
+                else window.location.hash = '#home';
+              }}
               onJumpToCard={(id) => {
                 setPendingOpenCardId(id);
-                setScreen('library');
+                window.location.hash = '#library';
               }}
             />
           </motion.div>
@@ -177,11 +189,11 @@ export default function App() {
             <Home
               onStart={(mode) => {
                 setPracticeMode(mode);
-                setScreen('practice');
+                window.location.hash = '#practice';
               }}
-              onOpenLibrary={() => setScreen('library')}
-              onOpenStats={() => setScreen('stats')}
-              onOpenAnswers={() => setScreen('answers')}
+              onOpenLibrary={() => { window.location.hash = '#library'; }}
+              onOpenStats={() => { window.location.hash = '#stats'; }}
+              onOpenAnswers={() => { window.location.hash = '#answers'; }}
               userFirstName={userFirstName}
             />
           </motion.div>

@@ -167,21 +167,28 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
               )}
             </div>
           </div>
-        </div>
-
-        {/* Stats Summary Area */}
-        <div className="flex flex-col items-center gap-4 w-full max-w-[340px] self-center shrink-0">
-          <div className="bg-app-surface px-6 py-1.5 rounded-full border border-app-border shadow-sm text-app-hint text-center text-[10px] font-bold uppercase tracking-wider">
-            {totalForToday === 0 ? t('home.no_due') : due === 0 ? t('home.progress_done_excellent', { reviewed }) : t('home.progress_in_progress', { reviewed, total: totalForToday })}
-          </div>
-
-          {heatmapData && heatmapData.history.length > 0 && (
-            <div className="w-full">
-               <h2 className="text-[9px] uppercase tracking-[0.15em] text-app-hint font-bold mb-3 text-center opacity-40">{t('home.history_heading')}</h2>
-               <CompactHeatmap history={heatmapData.history} />
+        {/* Stats & Heatmap */}
+        <div className="flex flex-col items-center gap-4 w-full max-w-[300px]">
+          {stats && stats.learnedCount === 0 && totalForToday === 0 ? (
+            <div className="bg-app-primary/10 border border-app-primary/20 rounded-2xl p-4 text-center mb-2">
+              <h3 className="font-bold text-app-primary text-sm mb-1">{t('home.welcome_title')}</h3>
+              <p className="text-xs text-app-text/80 leading-relaxed">{t('home.welcome_desc')}</p>
+            </div>
+          ) : (
+            <div className="bg-app-surface px-5 py-1.5 rounded-full border border-app-border shadow-sm">
+              <p className="text-app-hint text-center text-[10px] font-bold uppercase tracking-wide">
+                {totalForToday === 0 ? t('home.no_due') : due === 0 ? t('home.progress_done_excellent', { reviewed }) : t('home.progress_in_progress', { reviewed, total: totalForToday })}
+              </p>
             </div>
           )}
 
+          {heatmapData && heatmapData.history.length > 0 && stats?.learnedCount !== 0 && (
+            <div className="w-full">
+               <h2 className="text-[9px] uppercase tracking-[0.15em] text-app-hint font-bold mb-2 text-center opacity-40">{t('home.history_heading')}</h2>
+               <CompactHeatmap history={heatmapData.history} />
+            </div>
+          )}
+        </div>
           {/* Notifications - Integrated into flow ABOVE buttons */}
           <div className="flex flex-col gap-3 w-full mt-2">
             {unreadCount > 0 && (

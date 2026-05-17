@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { backButton } from '@telegram-apps/sdk-react'
 import { haptic } from '../lib/telegram'
 import { Spinner } from '@telegram-apps/telegram-ui'
-import { Archive, ArrowLeft, BookOpen, Search, X, Quote, Type, HelpCircle } from 'lucide-react'
+import { Archive, ArrowLeft, BookOpen, Search, X, Quote, Type, HelpCircle, Flame } from 'lucide-react'
 import type {
   CardListDto,
   CardListResponse,
@@ -428,8 +428,13 @@ function CardListItem({ card, onOpen }: { card: CardListDto; onOpen: () => void 
         </span>
       </div>
       {card.reps > 0 && (
-        <div className="text-[10px] text-app-hint mt-2 opacity-70">
-          {t('library.detail_reviews')}: {card.reps} · {t('library.detail_lapses')}: {card.lapses}
+        <div className="flex items-center gap-2 text-[10px] text-app-hint mt-2 opacity-70">
+          <span>{t('library.detail_reviews')}: {card.reps}</span>
+          <span>·</span>
+          <span className={card.lapses >= 4 ? 'text-rose-500 font-bold opacity-100 flex items-center gap-0.5' : ''}>
+            {card.lapses >= 4 && <Flame size={10} />}
+            {t('library.detail_lapses')}: {card.lapses}
+          </span>
         </div>
       )}
     </button>

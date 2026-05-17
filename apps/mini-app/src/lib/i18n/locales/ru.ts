@@ -44,6 +44,8 @@ export const ru = {
   'home.agent_answered_plural_few': 'вопроса',
   'home.agent_answered_plural_many': 'вопросов',
   'home.history_heading': 'История обучения',
+  'home.welcome_title': 'Добро пожаловать в Академию',
+  'home.welcome_desc': 'Отправь боту транскрипт урока или конспект, чтобы агент создал первые карточки.',
   'home.btn_library': 'Карточки',
   'home.btn_stats': 'Статистика',
   'home.rank_label': 'Ранг',
