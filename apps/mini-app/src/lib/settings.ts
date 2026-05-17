@@ -1,13 +1,33 @@
 import { useState } from 'react';
 
+// The language the user is *learning*. The app is polyglot — same code
+// works for English, Spanish, German, etc. Drives TTS voice selection,
+// translation API langpair, and microcopy that mentions the language by
+// name. Whitelist matches what Google Translate TTS and MyMemory both
+// support; extending to other languages is a one-line addition.
+export type LearningLanguage = 'en' | 'es' | 'de' | 'fr' | 'it' | 'pt' | 'ja' | 'zh' | 'ko'
+
+// The user's native language — what translations land in and what the UI
+// is rendered in by default. Same source-of-truth for i18n locale.
+export type NativeLanguage = 'ru' | 'en'
+
 interface AppSettings {
   soundEnabled: boolean;
   hapticsEnabled: boolean;
   autoPronounce: boolean;
+  // Region variant for the TTS voice of `learningLanguage`. Currently only
+  // English has two variants exposed; others use a single canonical
+  // region picked in lib/tts.ts.
   voiceLocale: 'en-US' | 'en-GB';
-  // Produce-mode (RU → EN). When on, recognition-variant vocab cards flip:
-  // translation on the front, term on the back. Forces the user to recall
-  // the English form. Shares FSRS state with recognition direction.
+  // What language the user is learning. Default 'en' for personal use;
+  // forkers from other countries flip this in Settings.
+  learningLanguage: LearningLanguage;
+  // What language the user speaks natively — drives translation target
+  // and UI strings.
+  nativeLanguage: NativeLanguage;
+  // Produce-mode (native → learning). When on, recognition-variant vocab
+  // cards flip: translation on the front, term on the back. Forces the
+  // user to recall the foreign form. Shares FSRS state with recognition.
   produceDirection: boolean;
   // Soft cap on session size. `null` = no cap (take all due cards from
   // the backend's default page). Respected by PracticeSession's /due
@@ -31,6 +51,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   hapticsEnabled: true,
   autoPronounce: false,
   voiceLocale: 'en-US',
+  learningLanguage: 'en',
+  nativeLanguage: 'ru',
   produceDirection: false,
   sessionLimit: null,
   aiGradingEnabled: false,

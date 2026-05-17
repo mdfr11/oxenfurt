@@ -3,6 +3,8 @@ import { useRawInitData, useLaunchParams, retrieveLaunchParams } from '@telegram
 import { Spinner } from '@telegram-apps/telegram-ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import { API_BASE, loginWithTelegram, setToken } from './lib/api';
+import { detectLocale, setLocale } from './lib/i18n';
+import { getSettings, saveSettings } from './lib/settings';
 import { PracticeSession } from './components/PracticeSession';
 import { Home } from './components/Home';
 import { Summary } from './components/Summary';
@@ -33,6 +35,22 @@ export default function App() {
 
   const userFirstName: string | undefined =
     launchParams.tgWebAppData?.user?.first_name
+
+  // Pick UI language once on mount. Order of preference:
+  //   1. Explicit user choice in settings (nativeLanguage)
+  //   2. Telegram-reported locale
+  //   3. English fallback
+  // Persist whatever we landed on so the next boot is deterministic.
+  useEffect(() => {
+    const stored = getSettings()
+    const tgCode = launchParams.tgWebAppData?.user?.language_code
+    const chosen = detectLocale(stored.nativeLanguage ?? tgCode)
+    setLocale(chosen)
+    if (stored.nativeLanguage !== chosen) {
+      saveSettings({ ...stored, nativeLanguage: chosen })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let cancelled = false
