@@ -27,8 +27,6 @@ import {
   buildClozeSentence,
   buildPhraseCloze,
   extractClozeTerm,
-  fingerprintCards,
-  shouldReseed,
 } from './practiceHelpers';
 import { stopSpeaking } from '../lib/tts';
 import { useCardAudio } from '../hooks/useCardAudio';
@@ -37,7 +35,8 @@ import { Markdown } from './Markdown';
 import { getSettings } from '../lib/settings';
 import { ttsLangTag } from '../lib/languages';
 import { isSpeechRecognitionSupported, startRecognition, type RecognitionHandle } from '../lib/speechRecognition';
-import { clearSession, loadSession, saveSession } from '../lib/sessionPersist';
+import { loadSession } from '../lib/sessionPersist';
+import { usePracticeQueue } from '../hooks/usePracticeQueue';
 import { EditCardSheet } from './EditCardSheet';
 import { RelatedCardsSheet } from './RelatedCardsSheet';
 import { QuestionSheet } from './QuestionSheet';
@@ -69,15 +68,20 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // Soft cap from settings — null = no override, let backend default kick in.
   const sessionLimit = useMemo(() => getSettings().sessionLimit, [])
 
-  // Resume in-flight session if we left one. Reading once is fine: we only
-  // care about the snapshot taken when the screen mounted; later writes go
-  // back into localStorage via saveSession below.
-  const resumed = useMemo(() => loadSession(mode), [mode])
+  // Snapshot of any paused session for THIS mode. Read once so the
+  // /due query can decide whether to fetch fresh cards. The
+  // usePracticeQueue hook also reads localStorage internally for its
+  // own init — cheap, and avoids prop-drilling the snapshot in.
+  const hasResumedSession = useMemo(() => loadSession(mode) !== null, [mode])
 
+  // /due query — gated by the resumed-session check. Resumed sessions
+  // hydrate the queue from localStorage in usePracticeQueue, so we skip
+  // the fetch entirely. Fresh sessions issue a single request keyed by
+  // (bypassDue, sessionLimit); background refetches are ignored by the
+  // hook's shouldReseed guard.
   const { data, isLoading, error } = useQuery({
     queryKey: ['cards', 'due', bypassDue, sessionLimit],
-    // Skip the fetch entirely on resume — we already have the queue.
-    enabled: resumed === null,
+    enabled: !hasResumedSession,
     queryFn: async () => {
       const params = new URLSearchParams()
       if (bypassDue) {
@@ -87,31 +91,18 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       if (sessionLimit !== null) params.set('limit', String(sessionLimit))
       const qs = params.toString()
       const path = qs ? `/cards/due?${qs}` : '/cards/due'
-      const res = await fetchWithAuth(path);
-      if (!res.ok) throw new Error('Failed to fetch cards');
-      return (await res.json()) as { cards: DueCardDto[] };
+      const res = await fetchWithAuth(path)
+      if (!res.ok) throw new Error('Failed to fetch cards')
+      return (await res.json()) as { cards: DueCardDto[] }
     },
-  });
+  })
 
-  const [currentIndex, setCurrentIndex] = useState(() => resumed?.currentIndex ?? 0);
   const [isRevealed, setIsRevealed] = useState(false);
-  const [sessionStats, setSessionStats] = useState(() => resumed?.stats ?? { total: 0, correct: 0 });
   // Cloze-only state — reset on each card via the effect below.
   const [typedAnswer, setTypedAnswer] = useState('');
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const [translationTooltip, setTranslationTooltip] = useState<{ text: string; translation: string | null; x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-
-  // Undo functionality state. `replaySpliceIndex` is set when a card was
-  // re-queued after an Again rating, so undo can also remove the splice.
-  const [pendingReview, setPendingReview] = useState<{
-    id: string;
-    rating: Rating;
-    timeoutId: number;
-    previousIndex: number;
-    previousStats: typeof sessionStats;
-    replaySpliceIndex: number | null;
-  } | null>(null);
 
   // Motion values for swipe feedback
   const dragX = useMotionValue(0);
@@ -134,46 +125,9 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     return 'rgba(255, 255, 255, 0)';
   });
 
-  // Working queue. Starts as the filtered `data.cards` (or the resumed
-  // session's snapshot) and grows whenever the user rates Again — the
-  // failed card gets spliced back in a few positions ahead for in-session
-  // retry (Anki "learning steps" style).
-  const [queue, setQueue] = useState<DueCardDto[]>(() => resumed?.cards ?? []);
-  // Re-seed key: a stable fingerprint of the underlying due list. Was
-  // previously the array identity, which changed on every background
-  // refetch (e.g. when the Home stats poll won the race) — that wiped
-  // the user's queue position mid-session.
-  const [queueSeed, setQueueSeed] = useState<string | null>(() =>
-    resumed ? resumed.cards.map((c) => c.id).join('|') : null,
-  );
-
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isRelatedOpen, setIsRelatedOpen] = useState(false);
   const [isQuestionOpen, setIsQuestionOpen] = useState(false);
-
-  // Backend session id (UUID). Set once on mount via POST /sessions, then
-  // used by finishSession() on completion. Fire-and-forget — if the start
-  // request fails, sessionIdRef stays null and the finish call is skipped.
-  // The local practice flow doesn't depend on it.
-  const sessionIdRef = useRef<string | null>(null)
-  const sessionFinishedRef = useRef(false)
-
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await fetchWithAuth('/sessions', { method: 'POST' })
-        if (!res.ok) return
-        const body = (await res.json()) as { id: string }
-        if (!cancelled) sessionIdRef.current = body.id
-      } catch {
-        // Backend unreachable — practice still works locally untracked.
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   // Disable Telegram's vertical-swipe-to-close while a card flow is active —
   // otherwise a rating gesture can collapse the Mini App. Re-enable on unmount.
@@ -239,30 +193,6 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     },
   });
 
-  // Mirror of pendingReview into a ref so the unmount cleanup below sees
-  // the latest value without needing to depend on `pendingReview` (which
-  // the cleanup on every rating, double-flushing reviews).
-  const pendingReviewRef = useRef(pendingReview)
-  useEffect(() => {
-    pendingReviewRef.current = pendingReview
-  }, [pendingReview])
-
-  // Flush any pending review on unmount only — the undo-window timer is
-
-  // in-memory only, so if the user exits before it fires, we still want
-  // the rating to land on the server. Empty deps + ref guarantees this
-  // runs exactly once at teardown.
-  useEffect(() => {
-    return () => {
-      const pending = pendingReviewRef.current
-      if (pending) {
-        clearTimeout(pending.timeoutId);
-        reviewMutation.mutate({ id: pending.id, rating: pending.rating });
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Typed-answer modes (cloze/translation/listening) have no sensible
   // rendering for theory cards — they have no `term` to gap-fill, translate,
   // or pronounce. Filter them out so the session stays coherent with the
@@ -275,23 +205,43 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     return all;
   }, [data?.cards, mode]);
 
-  // Seed the working queue exactly ONCE per component lifetime — first
-  // time /due hands us a non-empty list. Background refetches (and they
-  // fire on screen wake, network reconnect, etc.) MUST NOT re-seed: by
-  // the time they happen the user has rated cards, those cards have
-  // dropped out of /due, and a naive re-seed would silently reset
-  // currentIndex to 0. The queue stays frozen for the session — new
-  // cards added by the agent while the user is mid-session show up in
-  // the *next* session, not this one. (Resumed sessions skip seeding
-  // entirely because queue/currentIndex were hydrated from localStorage
-  // in useState init.)
-  if (shouldReseed(resumed, queueSeed, baseCards)) {
-    setQueueSeed(fingerprintCards(baseCards));
-    setQueue(baseCards);
-  }
+  // Queue + cursor + stats + pending-review undo slot + session-id ref
+  // all live in this hook. See hooks/usePracticeQueue.ts for the why —
+  // short version: the lock/unlock regression was a queue state-machine
+  // bug, isolating the state makes it both easier to reason about and
+  // easier to write regression tests for (see practiceHelpers.test.ts).
+  const queueState = usePracticeQueue({ mode, baseCards })
+  const {
+    queue,
+    currentIndex,
+    sessionStats,
+    currentCard,
+    progress,
+    pendingReview,
+    setPendingReview,
+  } = queueState
 
-  const currentCard = queue[currentIndex];
-  const progress = queue.length > 0 ? (currentIndex / queue.length) * 100 : 0;
+  // Mirror of pendingReview into a ref so the unmount cleanup below sees
+  // the latest value without needing pendingReview in deps (which would
+  // re-run the cleanup on every rating, double-flushing reviews).
+  const pendingReviewRef = useRef(pendingReview)
+  useEffect(() => {
+    pendingReviewRef.current = pendingReview
+  }, [pendingReview])
+
+  // Flush any pending review on unmount — the undo timer is in-memory
+  // only, so if the user exits before it fires we still want the rating
+  // to land on the server.
+  useEffect(() => {
+    return () => {
+      const pending = pendingReviewRef.current
+      if (pending) {
+        clearTimeout(pending.timeoutId);
+        reviewMutation.mutate({ id: pending.id, rating: pending.rating });
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const intervalLabels = useMemo(() => {
     if (!currentCard) return null
@@ -411,35 +361,29 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     else { haptic('notificationOccurred', 'success'); playPopSound(); }
 
     const isCorrect = rating !== RATING.Again;
+    const correctDelta: 0 | 1 = isCorrect ? 1 : 0;
     const nextStats = {
       total: sessionStats.total + 1,
-      correct: sessionStats.correct + (isCorrect ? 1 : 0),
+      correct: sessionStats.correct + correctDelta,
     }
 
     // Auto-replay: on Again, re-queue this card a few positions ahead so
     // the user sees it again in the same session (Anki learning-steps
-    // style). The FSRS review still fires normally — the server treats
-    // each retry as an independent rating event. Gated by a setting
-    // (default off) because users were surprised when the session grew
-    // from N to N+1 with no visible reason.
+    // style). Gated by a setting (default off).
     let replaySpliceIndex: number | null = null;
     let workingLength = queue.length;
     if (rating === RATING.Again && getSettings().inSessionReplay) {
-      replaySpliceIndex = Math.min(currentIndex + 4, queue.length);
+      replaySpliceIndex = queueState.spliceAhead(currentCard);
       workingLength = queue.length + 1;
-      setQueue((q) => {
-        const pos = Math.min(currentIndex + 4, q.length);
-        return [...q.slice(0, pos), currentCard, ...q.slice(pos)];
-      });
     }
 
-    // Flush any existing pending review immediately before queueing the next one
+    // Flush any existing pending review immediately before queueing the next one.
     if (pendingReview) {
       clearTimeout(pendingReview.timeoutId);
       reviewMutation.mutate({ id: pendingReview.id, rating: pendingReview.rating });
     }
 
-    // Delay the API call by 3.5 seconds to allow undo
+    // Delay the API call by 3.5 seconds to allow undo.
     const timeoutId = window.setTimeout(() => {
       reviewMutation.mutate({ id: currentCard.id, rating });
       setPendingReview(null);
@@ -454,70 +398,36 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       replaySpliceIndex,
     });
 
-    setSessionStats(nextStats)
-
-    // Optimistically advance
     if (currentIndex < workingLength - 1) {
+      // Optimistically advance to the next card.
       setIsRevealed(false);
-      setCurrentIndex((idx) => idx + 1);
+      queueState.advance({ total: 1, correct: correctDelta });
     } else {
-      // If it's the last card, we don't allow undo to keep it simple, flush immediately
+      // Last card: no undo, flush immediately and complete.
       clearTimeout(timeoutId);
       setPendingReview(null);
       reviewMutation.mutate({ id: currentCard.id, rating });
 
       haptic('notificationOccurred', 'success')
       playSuccessChime()
-      finishBackendSession(nextStats.total, nextStats.correct)
-      // Mark practice as done BEFORE clearing storage. The save effect
-      // reads this ref to short-circuit after the post-clear setSessionStats
-      // commit; without this line the effect would silently re-save the
-      // queue and Home would keep showing "Незаконченная сессия 9/10"
-      // even though we just finished. Independent of finishBackendSession,
-      // which only sets the ref when a backend session id exists.
-      sessionFinishedRef.current = true
-      clearSession();
+      queueState.finishBackendSession(nextStats.total, nextStats.correct)
+      queueState.markFinished();
       onComplete(nextStats.total, nextStats.correct);
     }
   };
 
-  // Persist working state on every meaningful change. Skipped when:
-  //   - the queue is empty (loading state),
-  //   - the user is past the last card (already-finished),
-  //   - or the session has been explicitly marked finished. The last guard
-  //     is the important one — `handleRate` on the final card calls
-  //     `clearSession()` synchronously, but React commits the
-  //     `setSessionStats` update right after, and the effect would otherwise
-  //     re-save the just-cleared state. The ref flag lets us short-circuit
-  //     before that race fires.
-  useEffect(() => {
-    if (sessionFinishedRef.current) return
-    if (queue.length === 0 || currentIndex >= queue.length) return
-    saveSession({
-      mode,
-      cards: queue,
-      currentIndex,
-      stats: sessionStats,
-      savedAt: Date.now(),
-    })
-  }, [mode, queue, currentIndex, sessionStats])
+  // (Persist effect, session-id boot, and finish-API call all live in
+  // usePracticeQueue now.)
 
   const handleUndo = () => {
     if (!pendingReview) return;
-    
-    // Cancel the delayed API call
     clearTimeout(pendingReview.timeoutId);
-    
     // If the previous Again spliced the card into the queue, also remove
-    // that splice so the future-position state is consistent with the undo.
+    // that splice so the future-position state is consistent with undo.
     if (pendingReview.replaySpliceIndex !== null) {
-      const pos = pendingReview.replaySpliceIndex;
-      setQueue((q) => [...q.slice(0, pos), ...q.slice(pos + 1)]);
+      queueState.removeAt(pendingReview.replaySpliceIndex);
     }
-
-    // Revert state
-    setCurrentIndex(pendingReview.previousIndex);
-    setSessionStats(pendingReview.previousStats);
+    queueState.rollback(pendingReview.previousIndex, pendingReview.previousStats);
     setIsRevealed(true);
     setPendingReview(null);
     haptic('selectionChanged');
@@ -560,19 +470,6 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       return () => window.removeEventListener('click', hideTooltip);
     }
   }, [translationTooltip]);
-  // Fire-and-forget. Idempotent — backend rejects double-finish with 400 and
-  // sessionFinishedRef prevents us from even sending it twice locally.
-  function finishBackendSession(total: number, correct: number): void {
-    const id = sessionIdRef.current
-    if (id === null || sessionFinishedRef.current) return
-    sessionFinishedRef.current = true
-    void fetchWithAuth(`/sessions/${id}/finish`, {
-      method: 'POST',
-      body: JSON.stringify({ cards_reviewed: total, cards_correct: correct }),
-    }).catch(() => {
-      // Best-effort; do nothing on failure.
-    })
-  }
 
   if (isLoading) {
     return (
@@ -649,7 +546,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
             <button
               onClick={() => {
                 setBypassDue(true)
-                setCurrentIndex(0)
+                queueState.resetQueue()
                 setIsRevealed(false)
               }}
               className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
@@ -672,14 +569,20 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     );
   }
 
-  const vocab = currentCard!.type === 'vocab' ? (currentCard!.payload as VocabPayload) : null;
-  const theory = currentCard!.type === 'theory' ? (currentCard!.payload as TheoryPayload) : null;
-  const phrase = currentCard!.type === 'phrase' ? (currentCard!.payload as PhrasePayload) : null;
+  // Past the queue.length=0 guard above, currentCard *should* be set —
+  // but if we're past the last card (currentIndex >= queue.length) it
+  // can still be undefined for a tick before onComplete fires. Render
+  // nothing rather than letting the !-assertions explode below.
+  if (!currentCard) return null
+
+  const vocab = currentCard.type === 'vocab' ? (currentCard.payload as VocabPayload) : null;
+  const theory = currentCard.type === 'theory' ? (currentCard.payload as TheoryPayload) : null;
+  const phrase = currentCard.type === 'phrase' ? (currentCard.payload as PhrasePayload) : null;
 
   // Sentence with the target term replaced by an underline blank — used as
   // the cloze prompt. Falls back gracefully if the offsets look bogus.
   const clozePrompt = vocab && variant === 'cloze' ? buildClozeSentence(vocab) : null;
-  const phraseCloze = phrase && variant === 'cloze' ? buildPhraseCloze(phrase.phrase, currentCard!.id) : null;
+  const phraseCloze = phrase && variant === 'cloze' ? buildPhraseCloze(phrase.phrase, currentCard.id) : null;
 
   // Split sentence logic for target term highlighting and contextual translation
   const renderSentenceWithHighlight = (sentence: string, term: string) => {
@@ -1066,7 +969,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                             : vocab.term
                           : phrase
                             ? variant === 'cloze'
-                              ? (buildPhraseCloze(phrase.phrase, currentCard!.id)?.blank ?? phrase.phrase)
+                              ? (buildPhraseCloze(phrase.phrase, currentCard.id)?.blank ?? phrase.phrase)
                               : phrase.phrase
                             : undefined
                       }
@@ -1222,9 +1125,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         isOpen={isEditOpen}
         onClose={() => setIsEditOpen(false)}
         onSaved={(updated) => {
-          // Patch the working queue in place so the user sees the edit
-          // immediately on the back they're already looking at.
-          setQueue((q) => q.map((c) => (c.id === updated.id ? updated : c)))
+          queueState.updateCard(updated)
         }}
       />
 
