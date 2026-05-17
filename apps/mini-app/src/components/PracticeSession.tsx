@@ -1032,16 +1032,16 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         </AnimatePresence>
       </div>
 
-      {/* Rating Buttons */}
+      {/* Rating Buttons & Undo Snackbar */}
       <div
         className={`px-2 pb-10 pt-4 transition-all duration-300 ${
-          isRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+          isRevealed || pendingReview ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
         }`}
         style={{ paddingBottom: `calc(2.5rem + var(--tg-safe-area-inset-bottom, 0px))` }}
       >
         {/* Tells the user the rating row is the way forward, not a result of
             their typed answer. Empirically the most common confusion. */}
-        <div className="flex items-center justify-center gap-1.5 pb-2 px-3">
+        <div className={`flex items-center justify-center gap-1.5 pb-2 px-3 transition-opacity ${isRevealed && !pendingReview ? 'opacity-100' : 'opacity-0'}`}>
           <p className="text-[10px] text-app-hint uppercase tracking-widest font-bold">
             {t('practice.rating_hint')}
           </p>
@@ -1054,10 +1054,13 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
           </button>
         </div>
         <div className="flex gap-2 h-16 relative">
-          <RatingButton label={t('practice.rating_again')} sub={intervalLabels?.[RATING.Again] ?? '…'} bg="bg-rose-500/10" color="text-rose-600 dark:text-rose-400" onClick={() => handleRate(RATING.Again)} />
-          <RatingButton label={t('practice.rating_hard')} sub={intervalLabels?.[RATING.Hard] ?? '…'} bg="bg-orange-500/10" color="text-orange-600 dark:text-orange-400" onClick={() => handleRate(RATING.Hard)} />
-          <RatingButton label={t('practice.rating_good')} sub={intervalLabels?.[RATING.Good] ?? '…'} bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" onClick={() => handleRate(RATING.Good)} />
-          <RatingButton label={t('practice.rating_easy')} sub={intervalLabels?.[RATING.Easy] ?? '…'} bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" onClick={() => handleRate(RATING.Easy)} />
+          {/* Rating Buttons - only visible when revealed and NOT undoing */}
+          <div className={`absolute inset-0 flex gap-2 transition-opacity duration-200 ${isRevealed && !pendingReview ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+            <RatingButton label={t('practice.rating_again')} sub={intervalLabels?.[RATING.Again] ?? '…'} bg="bg-rose-500/10" color="text-rose-600 dark:text-rose-400" onClick={() => handleRate(RATING.Again)} />
+            <RatingButton label={t('practice.rating_hard')} sub={intervalLabels?.[RATING.Hard] ?? '…'} bg="bg-orange-500/10" color="text-orange-600 dark:text-orange-400" onClick={() => handleRate(RATING.Hard)} />
+            <RatingButton label={t('practice.rating_good')} sub={intervalLabels?.[RATING.Good] ?? '…'} bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" onClick={() => handleRate(RATING.Good)} />
+            <RatingButton label={t('practice.rating_easy')} sub={intervalLabels?.[RATING.Easy] ?? '…'} bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" onClick={() => handleRate(RATING.Easy)} />
+          </div>
 
           <AnimatePresence>
             {pendingReview && (
@@ -1065,24 +1068,27 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 20 }}
-                className="absolute inset-x-2 -top-[4.5rem] flex items-center justify-between bg-app-text text-app-bg px-4 py-3 rounded-xl shadow-lg z-20 pointer-events-auto"
+                className="absolute inset-x-0 inset-y-0 flex items-center justify-between bg-app-text text-app-bg px-5 py-3 rounded-2xl shadow-xl z-20 pointer-events-auto"
               >
-                <span className="text-sm font-medium">
-                  {t('practice.rated_label')}: <span className="font-bold">
-                    {pendingReview.rating === RATING.Again && t('practice.rating_again')}
-                    {pendingReview.rating === RATING.Hard && t('practice.rating_hard')}
-                    {pendingReview.rating === RATING.Good && t('practice.rating_good')}
-                    {pendingReview.rating === RATING.Easy && t('practice.rating_easy')}
+                <div className="flex items-center gap-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-app-bg animate-pulse" />
+                  <span className="text-sm font-bold tracking-tight">
+                    {t('practice.rated_label')}: <span className="uppercase">
+                      {pendingReview.rating === RATING.Again && t('practice.rating_again')}
+                      {pendingReview.rating === RATING.Hard && t('practice.rating_hard')}
+                      {pendingReview.rating === RATING.Good && t('practice.rating_good')}
+                      {pendingReview.rating === RATING.Easy && t('practice.rating_easy')}
+                    </span>
                   </span>
-                </span>
+                </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleUndo();
                   }}
-                  className="text-sm font-bold text-app-bg bg-white/20 px-3 py-1 rounded-lg active:bg-white/30 transition-colors"
+                  className="px-4 py-1.5 rounded-lg bg-app-bg/10 text-app-bg font-black text-[10px] uppercase tracking-wider border border-app-bg/20 active:scale-95 transition-transform"
                 >
-                  {t('practice.undo')}
+                  {t('common.cancel')}
                 </button>
               </motion.div>
             )}
