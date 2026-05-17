@@ -547,7 +547,7 @@ function CardDetailSheet({
           <div className="flex flex-col gap-2 pt-2">
             <button
               onClick={() => setIsQuestionOpen(true)}
-              className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border border-app-primary/30 text-app-primary font-semibold active:scale-95 transition-transform"
+              className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-app-primary/10 border border-app-primary/20 text-app-primary font-semibold active:scale-95 transition-transform"
             >
               <HelpCircle size={18} />
               {card.has_questions ? t('library.btn_questions_has_history') : t('library.btn_questions')}
