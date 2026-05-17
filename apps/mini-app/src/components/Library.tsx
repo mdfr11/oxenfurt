@@ -341,64 +341,59 @@ function SourcePickerSheet({
 }) {
   const t = useT()
   return (
-    <div
-      className="fixed inset-0 bg-black/40 z-50 flex items-end"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full bg-app-bg rounded-t-3xl max-h-[75vh] overflow-y-auto"
-        style={{ paddingBottom: `calc(1.5rem + var(--tg-safe-area-inset-bottom, 0px))` }}
-      >
-        <div className="sticky top-0 bg-app-bg flex justify-center py-2">
-          <div className="w-10 h-1 rounded-full bg-app-border" />
-        </div>
-        <div className="px-6 pb-4 flex flex-col gap-2">
-          <h2 className="text-lg font-bold mb-2">{t('library.source_picker_title')}</h2>
-          <button
-            onClick={() => onPick(null)}
-            className={`text-left px-4 py-3 rounded-xl border ${
-              current === null ? 'bg-app-primary/10 border-app-primary text-app-primary' : 'bg-app-surface border-app-border text-app-text'
-            } active:scale-[0.98] transition-transform`}
-          >
-            <div className="font-semibold">{t('library.source_picker_all')}</div>
-            <div className="text-xs text-app-hint mt-0.5">{t('library.source_picker_all_hint')}</div>
-          </button>
-          {sources.length === 0 ? (
-            <p className="text-app-hint text-sm text-center py-6">
-              {t('library.source_picker_empty')}
-            </p>
-          ) : (
-            sources.map((s) => {
-              const key = s.source ?? '__none__'
-              const label = s.source ?? t('library.no_source_bucket')
-              const isActive = current === key
-              return (
-                <button
-                  key={key}
-                  onClick={() => onPick(key)}
-                  className={`text-left px-4 py-3 rounded-xl border ${
-                    isActive ? 'bg-app-primary/10 border-app-primary text-app-primary' : 'bg-app-surface border-app-border text-app-text'
-                  } active:scale-[0.98] transition-transform`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-semibold truncate">{label}</div>
-                    <span className="text-[10px] uppercase tracking-widest text-app-hint font-bold shrink-0">
-                      {s.total}
-                    </span>
-                  </div>
-                  <div className="text-xs text-app-hint mt-0.5 flex items-center gap-2">
-                    {s.vocab_count > 0 && <span className="flex items-center gap-1"><Type size={10} /> {s.vocab_count}</span>}
-                    {s.phrase_count > 0 && <span className="flex items-center gap-1"><Quote size={10} /> {s.phrase_count}</span>}
-                    {s.theory_count > 0 && <span className="flex items-center gap-1"><BookOpen size={10} /> {s.theory_count}</span>}
-                  </div>
-                </button>
-              )
-            })
-          )}
-        </div>
+    <BottomSheet isOpen={true} onClose={onClose} maxHeight="75vh">
+      <div className="flex justify-center mb-2 -mt-2">
+        <div className="w-10 h-1 rounded-full bg-app-border" />
       </div>
-    </div>
+      <div className="flex flex-col gap-2">
+        <h2 className="text-lg font-bold mb-2">{t('library.source_picker_title')}</h2>
+        <button
+          onClick={() => onPick(null)}
+          className={`text-left px-4 py-3 rounded-xl border ${
+            current === null
+              ? 'bg-app-primary/10 border-app-primary text-app-primary'
+              : 'bg-app-surface border-app-border text-app-text'
+          } active:scale-[0.98] transition-transform`}
+        >
+          <div className="font-semibold">{t('library.source_picker_all')}</div>
+          <div className="text-xs text-app-hint mt-0.5">{t('library.source_picker_all_hint')}</div>
+        </button>
+        {sources.length === 0 ? (
+          <p className="text-app-hint text-sm text-center py-6">
+            {t('library.source_picker_empty')}
+          </p>
+        ) : (
+          sources.map((s) => {
+            const key = s.source ?? '__none__'
+            const label = s.source ?? t('library.no_source_bucket')
+            const isActive = current === key
+            return (
+              <button
+                key={key}
+                onClick={() => onPick(key)}
+                className={`text-left px-4 py-3 rounded-xl border ${
+                  isActive
+                    ? 'bg-app-primary/10 border-app-primary text-app-primary'
+                    : 'bg-app-surface border-app-border text-app-text'
+                } active:scale-[0.98] transition-transform`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-semibold truncate">{label}</div>
+                  <span className="text-[10px] uppercase tracking-widest text-app-hint font-bold shrink-0">
+                    {s.total}
+                  </span>
+                </div>
+                <div className="text-xs text-app-hint mt-0.5 flex items-center gap-2">
+                  {s.vocab_count > 0 && <span className="flex items-center gap-1"><Type size={10} /> {s.vocab_count}</span>}
+                  {s.phrase_count > 0 && <span className="flex items-center gap-1"><Quote size={10} /> {s.phrase_count}</span>}
+                  {s.theory_count > 0 && <span className="flex items-center gap-1"><BookOpen size={10} /> {s.theory_count}</span>}
+                </div>
+              </button>
+            )
+          })
+        )}
+      </div>
+    </BottomSheet>
   )
 }
 
