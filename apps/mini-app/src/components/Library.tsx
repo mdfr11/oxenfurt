@@ -18,6 +18,12 @@ import { plurKey } from '../lib/i18n/plural'
 
 interface LibraryProps {
   onExit: () => void
+  /** When set, Library opens this card's EditCardSheet as soon as the
+   *  list query lands. Deep-link from AnswersScreen "jump to card". */
+  autoOpenCardId?: string | null
+  /** Called once the deep-link has been resolved (whether the card was
+   *  found or not), so the parent can clear its pending state. */
+  onAutoOpenConsumed?: () => void
 }
 
 type TypeFilter = 'all' | 'vocab' | 'theory' | 'phrase'
@@ -32,7 +38,7 @@ interface SourceEntry {
   latest: string
 }
 
-export function Library({ onExit }: LibraryProps) {
+export function Library({ onExit, autoOpenCardId, onAutoOpenConsumed }: LibraryProps) {
   const t = useT()
   const queryClient = useQueryClient()
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
@@ -116,6 +122,50 @@ export function Library({ onExit }: LibraryProps) {
 
   const cards = data?.cards ?? []
   const total = data?.total ?? 0
+
+  // Deep-link from AnswersScreen: open the requested card as soon as
+  // it shows up in the loaded list. We reset filters once (so a card
+  // hidden by an active type/source filter still resolves) and try
+  // both active and archived statuses. The `consumed` flag prevents
+  // re-opening if the user closes the sheet and the parent prop
+  // hasn't been cleared yet.
+  const [autoOpenConsumed, setAutoOpenConsumed] = useState(false)
+  useEffect(() => {
+    if (autoOpenCardId === null || autoOpenCardId === undefined) return
+    if (autoOpenConsumed) return
+    if (isLoading) return
+    const found = cards.find((c) => c.id === autoOpenCardId)
+    if (found) {
+      setOpenCard(found)
+      setAutoOpenConsumed(true)
+      onAutoOpenConsumed?.()
+      return
+    }
+    // Not in current filter view. Reset filters once to widen the net.
+    // If we've already widened (filters are at defaults) and the card
+    // still isn't here, try the archived bucket.
+    const filtersAtDefault =
+      typeFilter === 'all' && search === '' && sourceFilter === null
+    if (!filtersAtDefault) {
+      setTypeFilter('all')
+      setSearch('')
+      setSourceFilter(null)
+    } else if (statusFilter === 'active') {
+      setStatusFilter('archived')
+    } else {
+      // Card genuinely not found anywhere — give up.
+      setAutoOpenConsumed(true)
+      onAutoOpenConsumed?.()
+    }
+  }, [autoOpenCardId, autoOpenConsumed, isLoading, cards, typeFilter, search, sourceFilter, statusFilter, onAutoOpenConsumed])
+
+  // Reset the consumed flag whenever a new deep-link target arrives so
+  // back-to-back jumps from AnswersScreen work.
+  useEffect(() => {
+    if (autoOpenCardId !== null && autoOpenCardId !== undefined) {
+      setAutoOpenConsumed(false)
+    }
+  }, [autoOpenCardId])
 
   return (
     <div

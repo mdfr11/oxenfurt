@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { backButton } from '@telegram-apps/sdk-react'
-import { ArrowLeft, MessageCircle, Trash2, Quote, Type, BookOpen } from 'lucide-react'
+import { ArrowLeft, MessageCircle, Trash2, Quote, Type, BookOpen, ChevronRight } from 'lucide-react'
 import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
 import { useT } from '../lib/i18n/useT'
@@ -9,6 +9,9 @@ import { plurKey } from '../lib/i18n/plural'
 
 interface Props {
   onExit: () => void
+  /** Optional deep-link callback. When provided, each answer becomes a
+   *  tappable affordance that jumps to the card in Library. */
+  onJumpToCard?: (cardId: string) => void
 }
 
 interface UnreadQuestionDto {
@@ -32,7 +35,7 @@ interface UnreadQuestionDto {
 // the user mark each as seen (or discard). No editor — answers are
 // generated; if the user wants to ask follow-ups, they go back to the
 // card itself.
-export function AnswersScreen({ onExit }: Props) {
+export function AnswersScreen({ onExit, onJumpToCard }: Props) {
   const t = useT()
   const queryClient = useQueryClient()
 
@@ -127,10 +130,16 @@ export function AnswersScreen({ onExit }: Props) {
                 key={q.id}
                 className="p-4 rounded-2xl bg-app-surface border border-app-border"
               >
-                {/* Card preview header — tells the learner which card the
-                    answer is about. The icon mirrors what Library uses for
-                    the same card type so the visual vocabulary is shared. */}
-                <div className="flex items-center gap-2 mb-3 pb-3 border-b border-app-border/60">
+                {/* Card preview header — tap to jump to the card in
+                    Library. When onJumpToCard isn't wired up (older host
+                    or test harness) it degrades to a plain block, no
+                    onClick. */}
+                <button
+                  type="button"
+                  onClick={onJumpToCard ? () => onJumpToCard(q.card.id) : undefined}
+                  disabled={!onJumpToCard}
+                  className="w-full flex items-center gap-2 mb-3 pb-3 border-b border-app-border/60 text-left active:opacity-60 transition-opacity disabled:active:opacity-100"
+                >
                   <div className="w-7 h-7 rounded-full bg-app-primary/10 text-app-primary flex items-center justify-center shrink-0">
                     {q.card.type === 'vocab' ? <Type size={13} />
                       : q.card.type === 'phrase' ? <Quote size={13} />
@@ -144,7 +153,10 @@ export function AnswersScreen({ onExit }: Props) {
                       <div className="text-[10px] text-app-hint truncate">{q.card.source}</div>
                     )}
                   </div>
-                </div>
+                  {onJumpToCard && (
+                    <ChevronRight size={14} className="text-app-hint shrink-0" />
+                  )}
+                </button>
 
                 <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">
                   {t('answers.field_question')}

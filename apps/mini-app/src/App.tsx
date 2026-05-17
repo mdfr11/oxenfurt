@@ -30,6 +30,12 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('loading');
   const [stats, setStats] = useState<SessionStats>({ total: 0, correct: 0 });
   const [practiceMode, setPracticeMode] = useState<PracticeMode>(() => loadPracticeMode());
+  // Deep-link target for Library — when set, Library auto-opens this
+  // card after its list query lands. Used by AnswersScreen's "jump to
+  // card" affordance; cleared as soon as Library consumes it so going
+  // back-and-forth between Home and Library doesn't accidentally
+  // re-open the same card later.
+  const [pendingOpenCardId, setPendingOpenCardId] = useState<string | null>(null);
 
   // Hash-based navigation hack for automation/deep-linking
   useEffect(() => {
@@ -146,7 +152,11 @@ export default function App() {
           </motion.div>
         ) : screen === 'library' ? (
           <motion.div key="library" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
-            <Library onExit={() => setScreen('home')} />
+            <Library
+              onExit={() => setScreen('home')}
+              autoOpenCardId={pendingOpenCardId}
+              onAutoOpenConsumed={() => setPendingOpenCardId(null)}
+            />
           </motion.div>
         ) : screen === 'stats' ? (
           <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
@@ -154,7 +164,13 @@ export default function App() {
           </motion.div>
         ) : screen === 'answers' ? (
           <motion.div key="answers" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
-            <AnswersScreen onExit={() => setScreen('home')} />
+            <AnswersScreen
+              onExit={() => setScreen('home')}
+              onJumpToCard={(id) => {
+                setPendingOpenCardId(id);
+                setScreen('library');
+              }}
+            />
           </motion.div>
         ) : (
           <motion.div key="home" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
