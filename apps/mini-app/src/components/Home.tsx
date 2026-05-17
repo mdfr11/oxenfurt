@@ -151,53 +151,58 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
 
   return (
     <div
-      className="flex-1 flex flex-col bg-app-bg text-app-text relative overflow-hidden h-full"
+      className="flex-1 flex flex-col bg-app-bg text-app-text relative overflow-hidden"
       style={{
-        paddingTop: `calc(1rem + var(--tg-safe-area-inset-top, 0px))`,
-        paddingBottom: `calc(1rem + var(--tg-safe-area-inset-bottom, 0px))`,
+        paddingTop: `calc(1.5rem + var(--tg-safe-area-inset-top, 0px))`,
+        paddingBottom: `calc(1.5rem + var(--tg-safe-area-inset-bottom, 0px))`,
       }}
     >
-      {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto px-6 no-scrollbar flex flex-col pb-[300px]">
-        {/* Header - Simple and Robust */}
-        <div className="flex justify-between items-start pt-4 mb-8">
-          <div className="min-w-0 flex-1 pr-4">
-            <h1 className="text-[22px] font-black tracking-tight leading-tight truncate mb-3">
+      <div className="flex-1 overflow-y-auto px-6 no-scrollbar flex flex-col pb-4">
+        {/* Header */}
+        <div className="flex justify-between items-start z-10 relative text-app-text gap-3 mb-8">
+          <div className="flex-1 min-w-0 pt-1">
+            <h1 className="text-[22px] font-black tracking-tight leading-[1.1] truncate pr-2">
               {getGreeting(t, userFirstName)}
             </h1>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                {stats && stats.streak > 0 && (
-                 <div className="flex items-center gap-1 text-orange-500 font-bold text-[10px] uppercase tracking-wider bg-orange-500/10 px-2 py-1 rounded-full border border-orange-500/20 shadow-sm">
+                 <motion.div 
+                   animate={due === 0 && reviewed > 0 ? { filter: ['drop-shadow(0 0 2px #f97316)', 'drop-shadow(0 0 8px #f97316)', 'drop-shadow(0 0 2px #f97316)'] } : {}}
+                   transition={{ duration: 2, repeat: Infinity }}
+                   className="flex items-center gap-1.5 text-orange-500 font-bold text-[10px] uppercase tracking-wider bg-orange-500/10 px-2.5 py-1.5 rounded-full border border-orange-500/20 shadow-sm"
+                 >
                    <Flame size={12} fill="currentColor" />
-                   <span>{stats.streak} {t(plurKey(stats.streak, 'home.streak_one', 'home.streak_few', 'home.streak_many'))}</span>
-                 </div>
+                   <span className="leading-none">{stats.streak} {t(plurKey(stats.streak, 'home.streak_one', 'home.streak_few', 'home.streak_many'))}</span>
+                 </motion.div>
                )}
-               <div className="bg-app-surface text-app-primary px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-app-primary/30 shadow-sm flex items-center gap-1.5 h-[26px]">
-                 <GraduationCap size={12} strokeWidth={2.5} className="opacity-80" />
+               <div className="bg-app-surface text-app-primary px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border border-app-primary/30 shadow-sm flex items-center gap-1.5 active:scale-95 transition-transform cursor-default h-[30px]">
+                 <GraduationCap size={13} strokeWidth={2.5} className="opacity-80" />
                  <span className="leading-none">{getRank(t, stats?.learnedCount ?? 0)}</span>
                </div>
             </div>
           </div>
           
-          <div className="flex flex-col items-end gap-2.5 shrink-0">
+          <div className="flex flex-col items-end gap-2 shrink-0">
             <button 
               onClick={() => setIsSettingsOpen(true)}
-              className="p-2.5 text-app-hint active:opacity-60 bg-app-surface border border-app-border rounded-xl shadow-sm"
+              className="p-3 text-app-hint active:opacity-60 transition-opacity bg-app-surface border border-app-border rounded-2xl shadow-sm"
               aria-label={t('home.aria_settings')}
             >
               <Settings size={22} />
             </button>
             <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest transition-colors ${
-              health?.ok ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-rose-500/10 border-rose-500/20 text-rose-500 animate-pulse'
+              health?.ok 
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' 
+                : 'bg-rose-500/10 border-rose-500/20 text-rose-500 animate-pulse'
             }`}>
-              <span className={`w-1 h-1 rounded-full ${health?.ok ? 'bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.5)]' : 'bg-rose-500'} ${health?.ok ? 'animate-pulse' : ''}`} />
+              <span className={`w-1 h-1 rounded-full ${health?.ok ? 'bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.5)]' : 'bg-rose-500 shadow-[0_0_4px_rgba(244,63,94,0.5)]'} ${health?.ok ? 'animate-pulse' : ''}`} />
               {health?.ok ? t('home.backend_online') : t('home.backend_offline')}
             </div>
           </div>
         </div>
 
-        {/* Progress Ring and Heatmap stacked naturally */}
-        <div className="flex flex-col items-center gap-10 py-4">
+        {/* Middle Section */}
+        <div className="flex-1 flex flex-col items-center justify-center gap-10 py-4 min-h-0">
           <div className="relative w-56 h-56 flex items-center justify-center shrink-0">
             <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 200 200">
               <circle cx="100" cy="100" r={radius} stroke="currentColor" strokeWidth="8" fill="transparent" className="text-app-primary/5" />
@@ -224,7 +229,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
                 </motion.div>
               ) : (
                 <>
-                  <span className="text-5xl opacity-20">📚</span>
+                  <span className="text-5xl">📚</span>
                   <div className="h-4 flex items-center mt-4">
                     <span className="text-[10px] font-black uppercase tracking-[0.2em] text-app-hint text-center opacity-60 leading-none">{t('home.ring_empty')}</span>
                   </div>
@@ -234,7 +239,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
           </div>
 
           <div className="flex flex-col items-center gap-8 w-full max-w-[280px]">
-            <div className="bg-app-surface px-5 py-2.5 rounded-2xl border border-app-border shadow-sm">
+            <div className="bg-app-surface px-5 py-2 rounded-2xl border border-app-border shadow-sm">
               <p className="text-app-hint text-center text-[11px] font-bold uppercase tracking-wide">
                 {totalForToday === 0 ? t('home.no_due') : due === 0 ? t('home.progress_done_excellent', { reviewed }) : t('home.progress_in_progress', { reviewed, total: totalForToday })}
               </p>
@@ -242,62 +247,60 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
 
             {heatmapData && heatmapData.history.length > 0 && (
               <div className="w-full">
-                 <h2 className="text-[10px] uppercase tracking-[0.15em] text-app-hint font-bold mb-4 text-center opacity-40">{t('home.history_heading')}</h2>
+                 <h2 className="text-[10px] uppercase tracking-[0.15em] text-app-hint font-bold mb-3 text-center opacity-40">{t('home.history_heading')}</h2>
                  <CompactHeatmap history={heatmapData.history} />
               </div>
             )}
           </div>
-          
-          {/* Notifications integrated into scroll flow */}
-          <div className="flex flex-col gap-3 w-full max-w-[340px] pb-10">
-            {unreadCount > 0 && (
-              <button onClick={onOpenAnswers} className="flex items-center gap-3 bg-app-primary/10 border border-app-primary/20 rounded-2xl px-4 py-3.5 text-sm active:scale-[0.98] transition-transform shadow-sm">
-                <span className="flex-1 text-app-text text-left text-[11px] font-bold tracking-tight">
-                  🤖 {t('home.agent_answered', { count: unreadCount, plural: t(plurKey(unreadCount, 'home.agent_answered_plural_one', 'home.agent_answered_plural_few', 'home.agent_answered_plural_many')) })}
-                </span>
-                <ChevronDown size={14} className="-rotate-90 text-app-primary" />
-              </button>
-            )}
-            {pausedSession && (
-              <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3.5 text-[11px] shadow-sm">
-                <span className="flex-1 text-app-text font-bold tracking-tight">{t('home.paused_pill', { current: pausedSession.currentIndex, total: pausedSession.cards.length })}</span>
-                <button onClick={handleDiscardPaused} className="text-app-hint font-black uppercase tracking-tighter underline underline-offset-4 active:opacity-60 text-[10px]">{t('common.discard')}</button>
-              </div>
-            )}
-          </div>
+        </div>
+
+        {/* Notifications */}
+        <div className="flex flex-col gap-3 w-full mt-6">
+          {unreadCount > 0 && (
+            <button onClick={onOpenAnswers} className="flex items-center gap-2 bg-app-primary/10 border border-app-primary/30 rounded-2xl px-3 py-2 text-sm active:scale-[0.98] transition-transform">
+              <span className="flex-1 text-app-text text-left text-[11px] font-semibold">
+                🤖 {t('home.agent_answered', { count: unreadCount, plural: t(plurKey(unreadCount, 'home.agent_answered_plural_one', 'home.agent_answered_plural_few', 'home.agent_answered_plural_many')) })}
+              </span>
+              <ChevronDown size={14} className="-rotate-90 text-app-primary" />
+            </button>
+          )}
+          {pausedSession && (
+            <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-3 py-2 text-[11px]">
+              <span className="flex-1 text-app-text font-medium">{t('home.paused_pill', { current: pausedSession.currentIndex, total: pausedSession.cards.length })}</span>
+              <button onClick={handleDiscardPaused} className="text-app-hint font-bold uppercase tracking-tighter underline underline-offset-2 active:opacity-60">{t('common.discard')}</button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Fixed Footer Area */}
-      <footer className="absolute bottom-0 left-0 right-0 z-30 px-6 py-6 bg-app-bg/95 backdrop-blur-md border-t border-app-border/10">
-        <div className="max-w-[500px] mx-auto flex flex-col gap-4">
-          <div className="relative">
-            <button
-              className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-bold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
-              onClick={() => { primeSpeech(); void primeAudio(); onStart(pausedSession ? pausedSession.mode : mode); }}
-            >
-              {pausedSession ? t('home.resume_session') : t('home.start_session')}
-            </button>
-            
-            <div className="mt-3 flex flex-col items-center gap-1.5">
-              <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em] opacity-60">
-                {t('settings.mode_label')}: <span className="text-app-text">{t(modeKey(mode))}</span>
-                {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit}</span>}
-              </p>
-              <p className="text-[8px] text-app-hint font-black uppercase tracking-[0.2em] opacity-30">Oxenfurt System v1.0.0-selfhosted</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 mt-1 pb-2">
-            <button onClick={onOpenLibrary} className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-app-border bg-app-surface text-app-text font-semibold active:scale-95 transition-transform shadow-sm">
-              <LibraryIcon size={18} className="text-app-hint" /> {t('home.btn_library')}
-            </button>
-            <button onClick={onOpenStats} className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-app-border bg-app-surface text-app-text font-semibold active:scale-95 transition-transform shadow-sm">
-              <BarChart3 size={18} className="text-app-hint" /> {t('home.btn_stats')}
-            </button>
+      {/* Footer */}
+      <div className="shrink-0 flex flex-col gap-3 relative z-10 px-6 pt-2 bg-app-bg/80 backdrop-blur-md border-t border-app-border/10 pb-4">
+        <div className="relative">
+          <button
+            className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-bold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
+            onClick={() => { primeSpeech(); void primeAudio(); onStart(pausedSession ? pausedSession.mode : mode); }}
+          >
+            {pausedSession ? t('home.resume_session') : t('home.start_session')}
+          </button>
+          
+          <div className="mt-3 flex flex-col items-center gap-1.5">
+            <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em] opacity-60">
+              {t('settings.mode_label')}: <span className="text-app-text">{t(modeKey(mode))}</span>
+              {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit}</span>}
+            </p>
+            <p className="text-[8px] text-app-hint font-black uppercase tracking-[0.2em] opacity-30">Oxenfurt System v1.0.0-selfhosted</p>
           </div>
         </div>
-      </footer>
+
+        <div className="grid grid-cols-2 gap-3 mt-1">
+          <button onClick={onOpenLibrary} className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-app-border bg-app-surface text-app-text font-semibold active:scale-95 transition-transform shadow-sm">
+            <LibraryIcon size={18} className="text-app-hint" /> {t('home.btn_library')}
+          </button>
+          <button onClick={onOpenStats} className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-app-border bg-app-surface text-app-text font-semibold active:scale-95 transition-transform shadow-sm">
+            <BarChart3 size={18} className="text-app-hint" /> {t('home.btn_stats')}
+          </button>
+        </div>
+      </div>
 
       <SettingsSheet isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} currentMode={mode} onModeChange={(m) => setMode(m)} />
     </div>
@@ -336,11 +339,11 @@ function CompactHeatmap({ history }: { history: { date: string; count: number }[
 
   return (
     <div className="flex flex-col items-center">
-      <div className="grid grid-flow-col gap-1.5" style={{ gridTemplateRows: 'repeat(7, 8px)' }}>
+      <div className="grid grid-flow-col gap-1" style={{ gridTemplateRows: 'repeat(7, 6px)' }}>
         {cells.map(c => (
            <div 
              key={c.date} 
-             className={`w-2 h-2 rounded-[2px] ${
+             className={`w-[6px] h-[6px] rounded-[1px] ${
                c.count === 0 ? 'bg-app-hint/10' : 
                c.count < 5 ? 'bg-app-primary/30' :
                c.count < 15 ? 'bg-app-primary/60' : 'bg-app-primary'
