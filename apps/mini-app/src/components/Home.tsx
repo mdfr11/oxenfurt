@@ -10,6 +10,7 @@ import { useSettings } from '../lib/settings';
 import { clearSession, loadSession, subscribeToSession } from '../lib/sessionPersist';
 import { useT } from '../lib/i18n/useT';
 import { plurKey } from '../lib/i18n/plural';
+import { buildHeatmapCells } from '../lib/heatmap';
 import { SettingsSheet } from './SettingsSheet';
 import { motion } from 'framer-motion';
 
@@ -247,16 +248,34 @@ function modeKey(mode: PracticeMode): 'mode.mixed' | 'mode.recognition' | 'mode.
 }
 
 function CompactHeatmap({ history }: { history: { date: string; count: number }[] }) {
-  const counts = useMemo(() => { const m = new Map<string, number>(); for (const h of history) m.set(h.date, h.count); return m; }, [history]);
-  const WEEKS = 12; const totalDays = WEEKS * 7; const today = new Date(); today.setHours(0, 0, 0, 0);
-  const cells = []; for (let i = 0; i < totalDays; i++) {
-    const d = new Date(today); d.setDate(d.getDate() - (totalDays - 1 - i)); const iso = d.toISOString().slice(0, 10);
-    cells.push({ date: iso, count: counts.get(iso) ?? 0 });
-  }
+  // Pure cell-building logic lives in lib/heatmap.ts so Home + Stats
+  // share one source of truth for "what cells does N weeks back from
+  // today contain." Home's compact look (8px cells, 4-tier colours,
+  // no legend, no DOW alignment) stays here.
+  const cells = useMemo(
+    () => buildHeatmapCells({ history, weeks: 12, anchorAt: new Date() }),
+    [history],
+  );
   return (
     <div className="flex flex-col items-center shrink-0">
-      <div className="grid grid-flow-col gap-1.5 shrink-0" style={{ gridTemplateRows: 'repeat(7, 8px)', height: '92px' }}>
-        {cells.map(c => ( <div key={c.date} className={`w-2 h-2 rounded-[2px] ${c.count === 0 ? 'bg-app-hint/10' : c.count < 5 ? 'bg-app-primary/30' : c.count < 15 ? 'bg-app-primary/60' : 'bg-app-primary'}`} /> ))}
+      <div
+        className="grid grid-flow-col gap-1.5 shrink-0"
+        style={{ gridTemplateRows: 'repeat(7, 8px)', height: '92px' }}
+      >
+        {cells.map((c) => (
+          <div
+            key={c.date}
+            className={`w-2 h-2 rounded-[2px] ${
+              c.count === 0
+                ? 'bg-app-hint/10'
+                : c.count < 5
+                  ? 'bg-app-primary/30'
+                  : c.count < 15
+                    ? 'bg-app-primary/60'
+                    : 'bg-app-primary'
+            }`}
+          />
+        ))}
       </div>
     </div>
   );

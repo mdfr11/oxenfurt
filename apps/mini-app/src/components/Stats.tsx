@@ -9,6 +9,7 @@ import { fetchWithAuth } from '../lib/api'
 import { useT } from '../lib/i18n/useT'
 import { getLocale } from '../lib/i18n'
 import { plurKey } from '../lib/i18n/plural'
+import { buildHeatmapCells } from '../lib/heatmap'
 
 interface StatsProps {
   onExit: () => void
@@ -299,39 +300,13 @@ const GAP_PX = 2
 
 function Heatmap({ heatmap, generatedAt }: { heatmap: HeatmapCell[]; generatedAt: string }) {
   const t = useT()
-  // Build a Map for O(1) lookup, then iterate calendar days.
-  const counts = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const c of heatmap) m.set(c.date, c.count)
-    return m
-  }, [heatmap])
-
-  // Anchor the grid to "today" in UTC — backend dates are UTC, day boundaries
-  // might be slightly off the user's local time but that's acceptable for a
-  // single-user app.
-  const today = useMemo(() => new Date(generatedAt), [generatedAt])
-  const totalDays = WEEKS * 7
-
-  // Find the most recent Sunday so columns align by week.
-  const lastDay = new Date(Date.UTC(
-    today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(),
-  ))
-  const firstDay = new Date(lastDay.getTime() - (totalDays - 1) * 24 * 3600 * 1000)
-
-  // Generate (col, row, date, count) for every cell.
-  const cells: Array<{ col: number; row: number; date: string; count: number; isFuture: boolean }> = []
-  for (let i = 0; i < totalDays; i++) {
-    const d = new Date(firstDay.getTime() + i * 24 * 3600 * 1000)
-    const iso = d.toISOString().slice(0, 10)
-    const dow = d.getUTCDay() // 0 = Sunday
-    cells.push({
-      col: Math.floor(i / 7),
-      row: dow,
-      date: iso,
-      count: counts.get(iso) ?? 0,
-      isFuture: d > lastDay,
-    })
-  }
+  // Pure cell-building logic shared with Home's CompactHeatmap — see
+  // lib/heatmap.ts. Stats anchors to the backend's `generated_at` so
+  // the grid edge is stable across refetches (Home uses `new Date()`).
+  const cells = useMemo(
+    () => buildHeatmapCells({ history: heatmap, weeks: WEEKS, anchorAt: new Date(generatedAt) }),
+    [heatmap, generatedAt],
+  )
 
   const gridWidth = WEEKS * (CELL_PX + GAP_PX)
 
