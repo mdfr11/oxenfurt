@@ -465,13 +465,15 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       correct: sessionStats.correct + (isCorrect ? 1 : 0),
     }
 
-    // Auto-replay: on Again, re-queue this card a few positions ahead so the
-    // user sees it again in the same session (Anki learning-steps style).
-    // The FSRS review still fires normally — the server treats each retry
-    // as an independent rating event.
+    // Auto-replay: on Again, re-queue this card a few positions ahead so
+    // the user sees it again in the same session (Anki learning-steps
+    // style). The FSRS review still fires normally — the server treats
+    // each retry as an independent rating event. Gated by a setting
+    // (default off) because users were surprised when the session grew
+    // from N to N+1 with no visible reason.
     let replaySpliceIndex: number | null = null;
     let workingLength = queue.length;
-    if (rating === RATING.Again) {
+    if (rating === RATING.Again && getSettings().inSessionReplay) {
       replaySpliceIndex = Math.min(currentIndex + 4, queue.length);
       workingLength = queue.length + 1;
       setQueue((q) => {

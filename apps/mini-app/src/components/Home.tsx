@@ -47,11 +47,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const settings = getSettings();
 
-  // Resume offer: detect a paused session. Home stays mounted across
-  // screen changes, so we subscribe to the sessionPersist pub-sub —
-  // PracticeSession's clearSession()/saveSession() fires `notify()` and
-  // we update immediately. The 30 s poll is a belt-and-braces tick for
-  // sessions paused in another tab / device.
+  // Resume offer: detect a paused session
   const [pausedSession, setPausedSession] = useState(() => loadSession())
   useEffect(() => {
     const refresh = () => setPausedSession(loadSession())
@@ -107,7 +103,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
   
   const progressPercent = totalForToday > 0 ? (reviewed / totalForToday) * 100 : (reviewed > 0 ? 100 : 0);
   
-  const radius = 54;
+  const radius = 72;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
 
@@ -148,7 +144,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
     >
       <div className="flex justify-between items-start z-10 relative text-app-text">
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-xl font-bold tracking-tight">{getGreeting(userFirstName)}</h1>
+          <h1 className="text-xl font-bold mb-0.5 tracking-tight">{getGreeting(userFirstName)}</h1>
           <div className="flex items-center gap-2 flex-wrap">
              {stats && stats.streak > 0 && (
                <motion.div 
@@ -176,40 +172,47 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center relative z-0">
-        <div className="relative w-48 h-48 flex items-center justify-center mb-8">
+        <div className="relative w-56 h-56 flex items-center justify-center mb-8">
           {/* Background Ring */}
-          <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 192 192">
+          <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 200 200">
             <circle
-              cx="96"
-              cy="96"
+              cx="100"
+              cy="100"
               r={radius}
               stroke="currentColor"
-              strokeWidth="12"
+              strokeWidth="8"
               fill="transparent"
               className="text-app-primary/5"
             />
-            {/* Progress Ring */}
-            <circle
-              cx="96"
-              cy="96"
+            {/* Progress Ring with soft glow */}
+            <motion.circle
+              cx="100"
+              cy="100"
               r={radius}
               stroke="currentColor"
-              strokeWidth="12"
+              strokeWidth="8"
               fill="transparent"
               strokeLinecap="round"
-              className="text-app-primary transition-all duration-1000 ease-out"
-              style={{ strokeDasharray: circumference, strokeDashoffset }}
+              className="text-app-primary"
+              style={{ 
+                strokeDasharray: circumference, 
+                strokeDashoffset,
+                filter: 'drop-shadow(0 0 3px rgba(79, 70, 229, 0.2))'
+              }}
+              initial={{ strokeDashoffset: circumference }}
+              animate={{ strokeDashoffset }}
+              transition={{ duration: 1.5, ease: 'circOut' }}
             />
           </svg>
           <div className="flex flex-col items-center text-center mt-1 px-4 relative">
             {due > 0 ? (
               <>
-                <span className={`font-black text-app-text tracking-tighter leading-none ${
-                  due > 999 ? 'text-3xl' : due > 99 ? 'text-4xl' : 'text-5xl'
+                <span className={`font-black text-app-text tracking-tighter leading-none transition-all ${
+                  due > 999 ? 'text-4xl' : due > 99 ? 'text-5xl' : 'text-6xl'
                 }`}>
                   {due}
                 </span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-2">К повтору</span>
+                <span className="text-[11px] font-black uppercase tracking-[0.25em] text-app-hint mt-3 opacity-60">К повтору</span>
               </>
             ) : reviewed > 0 ? (
               <>
@@ -219,17 +222,17 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
                   className="flex flex-col items-center"
                 >
                   <span className={`font-black text-app-primary tracking-tighter leading-none ${
-                    reviewed > 999 ? 'text-3xl' : reviewed > 99 ? 'text-4xl' : 'text-5xl'
+                    reviewed > 999 ? 'text-4xl' : reviewed > 99 ? 'text-5xl' : 'text-6xl'
                   }`}>
                     {reviewed}
                   </span>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-2">Выполнено</span>
+                  <span className="text-[11px] font-black uppercase tracking-[0.25em] text-app-hint mt-3 opacity-60">Выполнено</span>
                 </motion.div>
               </>
             ) : (
               <>
-                <span className="text-4xl">📚</span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-app-hint mt-2 text-center">Пусто</span>
+                <span className="text-5xl">📚</span>
+                <span className="text-[11px] font-black uppercase tracking-[0.25em] text-app-hint mt-4 text-center opacity-60">Пусто</span>
               </>
             )}
           </div>

@@ -182,6 +182,13 @@ export function SettingsSheet({
                       />
                     </label>
                   </div>
+                  <SettingToggle
+                    icon={Layout}
+                    label="Повтор провалов"
+                    hint="«Снова» возвращает карточку в этой сессии"
+                    checked={settings.inSessionReplay}
+                    onChange={(v: boolean) => updateSettings({ inSessionReplay: v })}
+                  />
                 </div>
               </section>
 
