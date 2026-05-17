@@ -16,6 +16,7 @@
     "clean": "pnpm -r exec rm -rf dist .turbo .cache *.tsbuildinfo"
   },
   "devDependencies": {
+    "playwright": "^1.60.0",
     "typescript": "^5.7.2"
   }
 }
