@@ -289,17 +289,19 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     return all;
   }, [data?.cards, mode]);
 
-  // Re-seed working queue when the *content* of the due list changes —
-  // not just when react-query hands us a new array reference. Background
-  // refetches return identical card ids but a fresh array; without this
-  // fingerprint comparison the user's position would reset on every
-  // refetch tick. Skip entirely if we resumed a saved session — the query
-  // is disabled in that branch and `baseCards` would be empty.
-  const baseSeed = baseCards.map((c) => c.id).join('|');
-  if (resumed === null && baseCards.length > 0 && queueSeed !== baseSeed) {
-    setQueueSeed(baseSeed);
+  // Seed the working queue exactly ONCE per component lifetime — first
+  // time /due hands us a non-empty list. Background refetches (and they
+  // fire on screen wake, network reconnect, etc.) MUST NOT re-seed: by
+  // the time they happen the user has rated cards, those cards have
+  // dropped out of /due, and a naive re-seed would silently reset
+  // currentIndex to 0. The queue stays frozen for the session — new
+  // cards added by the agent while the user is mid-session show up in
+  // the *next* session, not this one. (Resumed sessions skip seeding
+  // entirely because queue/currentIndex were hydrated from localStorage
+  // in useState init.)
+  if (resumed === null && queueSeed === null && baseCards.length > 0) {
+    setQueueSeed(baseCards.map((c) => c.id).join('|'));
     setQueue(baseCards);
-    if (currentIndex !== 0) setCurrentIndex(0);
   }
 
   const currentCard = queue[currentIndex];
