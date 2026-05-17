@@ -162,7 +162,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         // SDK not mounted — ignore
       }
     }
-  }, [handleExit, isExiting])
+  }, [handleExit, isExiting, t])
 
   const reviewMutation = useMutation({
     mutationFn: async ({ id, rating }: { id: string; rating: Rating }) => {

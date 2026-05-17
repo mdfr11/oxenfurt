@@ -121,7 +121,10 @@ export function Library({ onExit, autoOpenCardId, onAutoOpenConsumed }: LibraryP
     },
   })
 
-  const cards = data?.cards ?? []
+  // Memoised so the deep-link effect's deps array stays stable across
+  // renders that didn't actually change the card list (otherwise the
+  // `data?.cards ?? []` fallback creates a fresh array each time).
+  const cards = useMemo(() => data?.cards ?? [], [data?.cards])
   const total = data?.total ?? 0
 
   // Deep-link from AnswersScreen: open the requested card as soon as
@@ -130,6 +133,12 @@ export function Library({ onExit, autoOpenCardId, onAutoOpenConsumed }: LibraryP
   // both active and archived statuses. The `consumed` flag prevents
   // re-opening if the user closes the sheet and the parent prop
   // hasn't been cleared yet.
+  // Deep-link resolution requires setState inside an effect: the
+  // result depends on async data (the /cards query) and on widened
+  // filters that also need state writes. eslint's set-state-in-effect
+  // rule is conservative — this is one of the legitimate uses
+  // (resolving asynchronously-discovered state). Disable per-line
+  // with a comment explaining why.
   const [autoOpenConsumed, setAutoOpenConsumed] = useState(false)
   useEffect(() => {
     if (autoOpenCardId === null || autoOpenCardId === undefined) return
@@ -137,6 +146,7 @@ export function Library({ onExit, autoOpenCardId, onAutoOpenConsumed }: LibraryP
     if (isLoading) return
     const found = cards.find((c) => c.id === autoOpenCardId)
     if (found) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpenCard(found)
       setAutoOpenConsumed(true)
       onAutoOpenConsumed?.()
@@ -161,9 +171,12 @@ export function Library({ onExit, autoOpenCardId, onAutoOpenConsumed }: LibraryP
   }, [autoOpenCardId, autoOpenConsumed, isLoading, cards, typeFilter, search, sourceFilter, statusFilter, onAutoOpenConsumed])
 
   // Reset the consumed flag whenever a new deep-link target arrives so
-  // back-to-back jumps from AnswersScreen work.
+  // back-to-back jumps from AnswersScreen work. Same setState-in-effect
+  // exception — the trigger (parent prop change) is asynchronous from
+  // this component's perspective.
   useEffect(() => {
     if (autoOpenCardId !== null && autoOpenCardId !== undefined) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAutoOpenConsumed(false)
     }
   }, [autoOpenCardId])
