@@ -168,43 +168,41 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
         paddingBottom: `calc(2rem + var(--tg-safe-area-inset-bottom, 0px))`,
       }}
     >
-      <div className="flex justify-between items-start z-10 relative text-app-text">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight">{getGreeting(t, userFirstName)}</h1>
-            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest transition-colors ${
-              health?.ok 
-                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' 
-                : 'bg-rose-500/10 border-rose-500/20 text-rose-500 animate-pulse'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${health?.ok ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'} ${health?.ok ? 'animate-pulse' : ''}`} />
-              Hermes: {health?.ok ? 'Online' : 'Offline'}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex justify-between items-start z-10 relative text-app-text gap-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl font-bold tracking-tight truncate pr-2">{getGreeting(t, userFirstName)}</h1>
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
              {stats && stats.streak > 0 && (
                <motion.div 
                  animate={due === 0 && reviewed > 0 ? { filter: ['drop-shadow(0 0 2px #f97316)', 'drop-shadow(0 0 8px #f97316)', 'drop-shadow(0 0 2px #f97316)'] } : {}}
                  transition={{ duration: 2, repeat: Infinity }}
-                 className="flex items-center gap-1 text-orange-500 font-bold text-[10px] uppercase tracking-wider bg-orange-500/10 px-2 py-1 rounded-full border border-orange-500/20 shadow-sm"
+                 className="flex items-center gap-1 text-orange-500 font-bold text-[10px] uppercase tracking-wider bg-orange-500/10 px-2.5 py-1 rounded-full border border-orange-500/20 shadow-sm"
                >
                  <Flame size={12} fill="currentColor" />
-                 <span>{stats.streak} {t(plurKey(stats.streak, 'home.streak_one', 'home.streak_few', 'home.streak_many'))}</span>
+                 <span className="leading-none">{stats.streak} {t(plurKey(stats.streak, 'home.streak_one', 'home.streak_few', 'home.streak_many'))}</span>
                </motion.div>
              )}
-             <div className="bg-app-surface text-app-primary px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-app-primary/30 shadow-sm flex items-center gap-1.5 active:scale-95 transition-transform cursor-default">
+             <div className="bg-app-surface text-app-primary px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-app-primary/30 shadow-sm flex items-center gap-1.5 active:scale-95 transition-transform cursor-default h-[26px]">
                <GraduationCap size={12} strokeWidth={2.5} className="opacity-80" />
-               <span>{getRank(t, stats?.learnedCount ?? 0)}</span>
+               <span className="leading-none">{getRank(t, stats?.learnedCount ?? 0)}</span>
              </div>
           </div>
         </div>
-        <button 
-          onClick={() => setIsSettingsOpen(true)}
-          className="p-2 text-app-hint active:opacity-60 transition-opacity bg-app-surface/50 border border-app-border rounded-xl shadow-sm"
-          aria-label={t('home.aria_settings')}
-        >
-          <Settings size={22} />
-        </button>
+        
+        <div className="relative shrink-0 flex items-start gap-1">
+          <div className={`mt-2 w-2 h-2 rounded-full border border-app-bg ${
+            health?.ok 
+              ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)] animate-pulse' 
+              : 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.4)]'
+          }`} title={health?.ok ? 'Hermes Online' : 'Hermes Offline'} />
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2.5 text-app-hint active:opacity-60 transition-opacity bg-app-surface/50 border border-app-border rounded-xl shadow-sm"
+            aria-label={t('home.aria_settings')}
+          >
+            <Settings size={22} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center relative z-0">
@@ -240,7 +238,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
               transition={{ duration: 1.5, ease: 'circOut' }}
             />
           </svg>
-          <div className="flex flex-col items-center text-center mt-1 px-4 relative">
+          <div className="flex flex-col items-center text-center mt-1 px-4 relative min-h-[120px] justify-center">
             {due > 0 ? (
               <>
                 <span className={`font-black text-app-text tracking-tighter leading-none transition-all ${
@@ -248,7 +246,11 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
                 }`}>
                   {due}
                 </span>
-                <span className="text-[11px] font-black uppercase tracking-[0.25em] text-app-hint mt-3 opacity-60">{t('home.ring_to_review')}</span>
+                <div className="h-4 flex items-center mt-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-app-hint opacity-60 leading-none">
+                    {t('home.ring_to_review')}
+                  </span>
+                </div>
               </>
             ) : reviewed > 0 ? (
               <>
@@ -262,13 +264,21 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
                   }`}>
                     {reviewed}
                   </span>
-                  <span className="text-[11px] font-black uppercase tracking-[0.25em] text-app-hint mt-3 opacity-60">{t('home.ring_done_label')}</span>
+                  <div className="h-4 flex items-center mt-3">
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-app-hint opacity-60 leading-none">
+                      {t('home.ring_done_label')}
+                    </span>
+                  </div>
                 </motion.div>
               </>
             ) : (
               <>
                 <span className="text-5xl">📚</span>
-                <span className="text-[11px] font-black uppercase tracking-[0.25em] text-app-hint mt-4 text-center opacity-60">{t('home.ring_empty')}</span>
+                <div className="h-4 flex items-center mt-4">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-app-hint text-center opacity-60 leading-none">
+                    {t('home.ring_empty')}
+                  </span>
+                </div>
               </>
             )}
           </div>

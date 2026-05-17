@@ -30,6 +30,20 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('loading');
   const [stats, setStats] = useState<SessionStats>({ total: 0, correct: 0 });
   const [practiceMode, setPracticeMode] = useState<PracticeMode>(() => loadPracticeMode());
+
+  // Hash-based navigation hack for automation/deep-linking
+  useEffect(() => {
+    const handleHash = () => {
+      const h = window.location.hash
+      if (h === '#library') setScreen('library')
+      else if (h === '#stats') setScreen('stats')
+      else if (h === '#answers') setScreen('answers')
+      else if (h === '#home' || h === '') setScreen('home')
+    }
+    handleHash()
+    window.addEventListener('hashchange', handleHash)
+    return () => window.removeEventListener('hashchange', handleHash)
+  }, [])
   const initDataRaw = useRawInitData();
   const launchParams = useLaunchParams();
 

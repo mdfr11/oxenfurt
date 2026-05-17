@@ -991,7 +991,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   ) : vocab ? (
                     <>
                       <div className="flex items-center gap-3">
-                        <h2 className="text-4xl font-bold tracking-tight">
+                        <h2 data-testid="card-term" className="text-4xl font-bold tracking-tight">
                           {vocab.term}
                         </h2>
                         <button
@@ -1127,7 +1127,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   {vocab && flipForProduce ? (
                     <>
                       <div className="flex items-center gap-3">
-                        <h2 className="text-4xl font-bold tracking-tight">
+                        <h2 data-testid="card-term" className="text-4xl font-bold tracking-tight">
                           {vocab.term}
                         </h2>
                         <button

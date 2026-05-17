@@ -87,6 +87,11 @@ or any local Ollama.
   <img src="docs/screenshots/library.png" alt="Library with filters and source-grouped cards" width="280" />
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/stats.png" alt="Academic Archives with relics and history" width="280" />
+  <img src="docs/screenshots/settings.png" alt="Overhauled settings sheet" width="280" />
+</p>
+
 <!-- video:demo -->
 <p align="center">
   <a href="docs/screenshots/demo.mp4">▶ 30-second demo (MP4)</a>
