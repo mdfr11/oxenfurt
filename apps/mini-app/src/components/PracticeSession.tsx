@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Coffee, X, Info, Pencil, Type, Quote, BookOpen, Layers, HelpCircle, Volume2 } from 'lucide-react';
 import {
   backButton,
@@ -106,27 +106,6 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const [translationTooltip, setTranslationTooltip] = useState<{ text: string; translation: string | null; x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-
-  // Motion values for swipe feedback
-  const dragX = useMotionValue(0);
-  const dragY = useMotionValue(0);
-
-  // useTransform with multiple inputs got stricter typing in framer-motion 11
-  // — the legacy array-input overload no longer matches a plain `[x, y]`
-  // destructure. Use the callback form, which reads .get() from each.
-  const cardBackground = useTransform(() => {
-    const x = dragX.get()
-    const y = dragY.get()
-    const threshold = 50;
-    if (Math.abs(x) > Math.abs(y)) {
-      if (x > threshold) return `rgba(59, 130, 246, ${Math.min(0.15, (x - threshold) / 400)})`; // Good - Blue
-      if (x < -threshold) return `rgba(249, 115, 22, ${Math.min(0.15, (Math.abs(x) - threshold) / 400)})`; // Hard - Orange
-    } else {
-      if (y > threshold) return `rgba(244, 63, 94, ${Math.min(0.15, (y - threshold) / 400)})`; // Again - Rose
-      if (y < -threshold) return `rgba(16, 185, 129, ${Math.min(0.15, (Math.abs(y) - threshold) / 400)})`; // Easy - Emerald
-    }
-    return 'rgba(255, 255, 255, 0)';
-  });
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isRelatedOpen, setIsRelatedOpen] = useState(false);
@@ -663,42 +642,17 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         <AnimatePresence mode="popLayout">
           <motion.div
             key={currentCard.id}
-            style={{ x: dragX, y: dragY }}
             initial={{ opacity: 0, x: 50, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: -50, scale: 0.9, pointerEvents: 'none' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             onClick={expectsTypedAnswer ? undefined : handleReveal}
-            drag={isRevealed}
-            dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-            dragElastic={0.6}
-            onDragEnd={(_, info: PanInfo) => {
-              if (!isRevealed) return;
-              const { offset } = info;
-              const threshold = 100;
-              if (Math.abs(offset.x) > Math.abs(offset.y)) {
-                if (offset.x > threshold) handleRate(RATING.Good);
-                else if (offset.x < -threshold) handleRate(RATING.Hard);
-              } else {
-                if (offset.y > threshold) handleRate(RATING.Again);
-                else if (offset.y < -threshold) handleRate(RATING.Easy);
-              }
-              // Reset motion values after drag
-              dragX.set(0);
-              dragY.set(0);
-            }}
             className={`w-full aspect-[3/4] bg-app-surface rounded-[2.5rem] relative border border-app-border shadow-xl overflow-hidden ${
               expectsTypedAnswer ? '' : 'cursor-pointer'
-            } ${isRevealed ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            }`}
             whileTap={expectsTypedAnswer ? undefined : { scale: 0.98 }}
             data-testid="card-ready"
           >
-            {/* Swipe Feedback Overlay */}
-            <motion.div 
-              style={{ backgroundColor: cardBackground }}
-              className="absolute inset-0 pointer-events-none z-10"
-            />
-
             {/* Hourglass Timer - subtle line inside the card top */}
             {!isRevealed && !isExiting && (
                <motion.div 

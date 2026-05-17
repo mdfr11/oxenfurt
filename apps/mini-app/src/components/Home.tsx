@@ -114,11 +114,16 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
   return (
     <div 
       className="flex-1 flex flex-col bg-app-bg text-app-text relative h-full overflow-hidden" 
-      style={{ paddingTop: 'var(--tg-safe-area-inset-top, 0px)', paddingBottom: 'var(--tg-safe-area-inset-bottom, 0px)' }}
+      style={{ 
+        paddingTop: 'calc(1rem + var(--tg-safe-area-inset-top, 0px))', 
+        paddingBottom: 'calc(1.5rem + var(--tg-safe-area-inset-bottom, 0px))' 
+      }}
     >
-      {/* 1. Natural Header */}
-      <header className="px-6 pt-6 pb-2 shrink-0">
-        <div className="flex justify-between items-start gap-4">
+      {/* 1. MAIN FLOW - EVERYTHING SCROLLS */}
+      <div className="flex-1 overflow-y-auto px-6 no-scrollbar flex flex-col">
+        
+        {/* Header - Simple natural flow */}
+        <header className="flex justify-between items-start gap-4 pt-4 mb-8 shrink-0">
           <div className="min-w-0 flex-1">
             <h1 className="text-[20px] font-black tracking-tight leading-tight truncate mb-2">{getGreeting(t, userFirstName)}</h1>
             <div className="flex items-center gap-2 flex-wrap">
@@ -132,21 +137,18 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
                </div>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2.5 shrink-0">
-            <button onClick={() => setIsSettingsOpen(true)} className="p-2.5 text-app-hint active:opacity-60 bg-app-surface border border-app-border rounded-xl shadow-sm"><Settings size={20} /></button>
+          <div className="flex flex-col items-end gap-2 shrink-0">
+            <button onClick={() => setIsSettingsOpen(true)} className="p-2 text-app-hint active:opacity-60 bg-app-surface border border-app-border rounded-xl shadow-sm"><Settings size={20} /></button>
             <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-lg border text-[7px] font-black uppercase tracking-widest transition-colors ${health?.ok ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-rose-500/10 border-rose-500/20 text-rose-500 animate-pulse'}`}>
               <span className={`w-1 h-1 rounded-full ${health?.ok ? 'bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.5)]' : 'bg-rose-500'} ${health?.ok ? 'animate-pulse' : ''}`} /> {health?.ok ? 'Online' : 'Offline'}
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* 2. Scrollable Middle Zone - Uses flex-1 to fill space but remains scrollable if needed */}
-      <div className="flex-1 overflow-y-auto px-6 no-scrollbar flex flex-col gap-4 py-2">
-        
-        {/* Ring Section - Centered within the flex-1 area */}
-        <div className="flex flex-col items-center justify-center shrink-0">
-          <div className="relative w-44 h-44 sm:w-48 sm:h-48 flex items-center justify-center">
+        {/* Middle Content - Centered but allowed to overflow naturally */}
+        <div className="flex flex-col items-center gap-10 py-2">
+          {/* Ring */}
+          <div className="relative w-48 h-48 sm:w-56 sm:h-56 flex items-center justify-center shrink-0">
             <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 200 200">
               <circle cx="100" cy="100" r={radius} stroke="currentColor" strokeWidth="8" fill="transparent" className="text-app-primary/5" />
               <motion.circle cx="100" cy="100" r={radius} stroke="currentColor" strokeWidth="8" fill="transparent" strokeLinecap="round" className="text-app-primary" style={{ strokeDasharray: circumference, strokeDashoffset, filter: 'drop-shadow(0 0 3px rgba(79, 70, 229, 0.2))' }} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset }} transition={{ duration: 1.5, ease: 'circOut' }} />
@@ -167,59 +169,61 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
               )}
             </div>
           </div>
-        {/* Stats & Heatmap */}
-        <div className="flex flex-col items-center gap-4 w-full max-w-[300px]">
-          {stats && stats.learnedCount === 0 && totalForToday === 0 ? (
-            <div className="bg-app-primary/10 border border-app-primary/20 rounded-2xl p-4 text-center mb-2">
-              <h3 className="font-bold text-app-primary text-sm mb-1">{t('home.welcome_title')}</h3>
-              <p className="text-xs text-app-text/80 leading-relaxed">{t('home.welcome_desc')}</p>
-            </div>
-          ) : (
-            <div className="bg-app-surface px-5 py-1.5 rounded-full border border-app-border shadow-sm">
-              <p className="text-app-hint text-center text-[10px] font-bold uppercase tracking-wide">
-                {totalForToday === 0 ? t('home.no_due') : due === 0 ? t('home.progress_done_excellent', { reviewed }) : t('home.progress_in_progress', { reviewed, total: totalForToday })}
-              </p>
-            </div>
-          )}
 
-          {heatmapData && heatmapData.history.length > 0 && (
-            <div className="w-full">
-               <h2 className="text-[9px] uppercase tracking-[0.15em] text-app-hint font-bold mb-2 text-center opacity-40">{t('home.history_heading')}</h2>
-               <CompactHeatmap history={heatmapData.history} />
-            </div>
-          )}
-        </div>
-          {/* Notifications - Integrated into flow ABOVE buttons */}
-          <div className="flex flex-col gap-3 w-full mt-2">
-            {unreadCount > 0 && (
-              <button onClick={onOpenAnswers} className="flex items-center gap-3 bg-app-primary/10 border border-app-primary/20 rounded-2xl px-4 py-3 text-sm active:scale-[0.98] transition-transform">
-                <span className="flex-1 text-app-text text-left text-[11px] font-bold tracking-tight">🤖 {t('home.agent_answered', { count: unreadCount, plural: t(plurKey(unreadCount, 'home.agent_answered_plural_one', 'home.agent_answered_plural_few', 'home.agent_answered_plural_many')) })}</span>
-                <ChevronDown size={14} className="-rotate-90 text-app-primary" />
-              </button>
-            )}
-            {pausedSession && (
-              <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3 text-[11px]">
-                <span className="flex-1 text-app-text font-bold tracking-tight">{t('home.paused_pill', { current: pausedSession.currentIndex, total: pausedSession.cards.length })}</span>
-                <button onClick={handleDiscardPaused} className="text-app-hint font-black uppercase tracking-tighter underline underline-offset-4 text-[10px] active:opacity-60 transition-opacity">{t('common.discard')}</button>
+          {/* Progress Banner, Heatmap and Notifications */}
+          <div className="flex flex-col items-center gap-6 w-full max-w-[340px] self-center shrink-0">
+            {stats && stats.learnedCount === 0 && totalForToday === 0 ? (
+              <div className="bg-app-primary/10 border border-app-primary/20 rounded-2xl p-4 text-center">
+                <h3 className="font-bold text-app-primary text-sm mb-1">{t('home.welcome_title')}</h3>
+                <p className="text-xs text-app-text/80 leading-relaxed">{t('home.welcome_desc')}</p>
+              </div>
+            ) : (
+              <div className="bg-app-surface px-6 py-2 rounded-full border border-app-border shadow-sm text-app-hint text-center text-[10px] font-bold uppercase tracking-wider">
+                {totalForToday === 0 ? t('home.no_due') : due === 0 ? t('home.progress_done_excellent', { reviewed }) : t('home.progress_in_progress', { reviewed, total: totalForToday })}
               </div>
             )}
+
+            {heatmapData && heatmapData.history.length > 0 && (
+              <div className="w-full">
+                 <h2 className="text-[9px] uppercase tracking-[0.15em] text-app-hint font-bold mb-3 text-center opacity-40">{t('home.history_heading')}</h2>
+                 <CompactHeatmap history={heatmapData.history} />
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3 w-full mt-2">
+              {unreadCount > 0 && (
+                <button onClick={onOpenAnswers} className="flex items-center gap-3 bg-app-primary/10 border border-app-primary/20 rounded-2xl px-4 py-3 text-sm active:scale-[0.98] transition-transform">
+                  <span className="flex-1 text-app-text text-left text-[11px] font-bold tracking-tight">🤖 {t('home.agent_answered', { count: unreadCount, plural: t(plurKey(unreadCount, 'home.agent_answered_plural_one', 'home.agent_answered_plural_few', 'home.agent_answered_plural_many')) })}</span>
+                  <ChevronDown size={14} className="-rotate-90 text-app-primary" />
+                </button>
+              )}
+              {pausedSession && (
+                <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3 text-[11px]">
+                  <span className="flex-1 text-app-text font-bold tracking-tight">{t('home.paused_pill', { current: pausedSession.currentIndex, total: pausedSession.cards.length })}</span>
+                  <button onClick={handleDiscardPaused} className="text-app-hint font-black uppercase tracking-tighter underline underline-offset-4 text-[10px] active:opacity-60 transition-opacity">{t('common.discard')}</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Extra Bottom Padding to clear fixed footer */}
+        <div className="h-40 shrink-0" />
       </div>
 
       {/* 3. Fixed Footer Actions */}
-      <footer className="shrink-0 flex flex-col gap-2 px-6 py-4 bg-app-bg/95 backdrop-blur-md border-t border-app-border/10">
-        <div className="max-w-[500px] mx-auto w-full flex flex-col gap-3">
-          <button className="w-full bg-app-primary text-app-primary-text py-3.5 rounded-2xl font-bold text-lg active:scale-95 shadow-lg shadow-app-primary/20" onClick={() => { primeSpeech(); void primeAudio(); onStart(pausedSession ? pausedSession.mode : mode); }}>
-            {pausedSession ? t('home.resume_session') : t('home.start_session')}
-          </button>
-          <div className="mt-2 flex flex-col items-center gap-1.5 opacity-60">
-            <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em]">
-              {t('settings.mode_label')}: <span className="text-app-text">{t(modeKey(mode))}</span>
-              {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit}</span>}
-            </p>
+      <footer className="shrink-0 flex flex-col gap-3 px-6 py-6 bg-app-bg/95 backdrop-blur-md border-t border-app-border/10">
+        <div className="max-w-[500px] mx-auto w-full flex flex-col gap-4">
+          <div className="relative">
+            <button className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-bold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20" onClick={() => { primeSpeech(); void primeAudio(); onStart(pausedSession ? pausedSession.mode : mode); }}>
+              {pausedSession ? t('home.resume_session') : t('home.start_session')}
+            </button>
+            <div className="mt-2.5 flex flex-col items-center gap-1 opacity-60">
+              <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em]">{t('settings.mode_label')}: <span className="text-app-text">{t(modeKey(mode))}</span> {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit}</span>}</p>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 mt-1">
+
+          <div className="grid grid-cols-2 gap-3">
             <button onClick={onOpenLibrary} className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-app-border bg-app-surface text-app-text font-semibold active:scale-95 transition-transform shadow-sm">
               <LibraryIcon size={18} className="text-app-hint" /> {t('home.btn_library')}
             </button>
