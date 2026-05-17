@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { motion, AnimatePresence } from 'framer-motion'
+import { BottomSheet } from './BottomSheet'
 import { X, BookOpen, Quote, Type } from 'lucide-react'
 import type { CardListDto, PhrasePayload, TheoryPayload, VocabPayload } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
@@ -31,58 +31,37 @@ export function RelatedCardsSheet({ cardId, source, isOpen, onClose }: Props) {
   const related = data?.cards ?? []
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 bg-black/40 z-40"
-          />
-          <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
-            className="fixed bottom-0 inset-x-0 bg-app-bg rounded-t-3xl p-6 z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] flex flex-col max-w-[500px] mx-auto max-h-[75vh] overflow-y-auto"
-          >
-            <div className="flex justify-between items-center mb-4 text-app-text">
-              <div>
-                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-0.5">
-                  {t('related.from_lesson')}
-                </div>
-                <h2 className="text-lg font-bold leading-tight">{source ?? '—'}</h2>
-              </div>
-              <button
-                onClick={onClose}
-                className="p-2 -mr-2 text-app-hint active:scale-95 transition-transform"
-                aria-label={t('common.close')}
-              >
-                <X size={20} />
-              </button>
-            </div>
+    <BottomSheet isOpen={isOpen} onClose={onClose} maxHeight="75vh">
+      <div className="flex justify-between items-center mb-4 text-app-text">
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-0.5">
+            {t('related.from_lesson')}
+          </div>
+          <h2 className="text-lg font-bold leading-tight">{source ?? '—'}</h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2 -mr-2 text-app-hint active:scale-95 transition-transform"
+          aria-label={t('common.close')}
+        >
+          <X size={20} />
+        </button>
+      </div>
 
-            {isLoading ? (
-              <p className="text-center text-app-hint py-6 text-sm">{t('common.loading')}</p>
-            ) : related.length === 0 ? (
-              <p className="text-center text-app-hint py-6 text-sm">
-                {t('related.empty')}
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {related.map((c) => (
-                  <RelatedRow key={c.id} card={c} />
-                ))}
-              </ul>
-            )}
-
-            <div style={{ height: 'calc(0.5rem + var(--tg-safe-area-inset-bottom, 0px))' }} />
-          </motion.div>
-        </>
+      {isLoading ? (
+        <p className="text-center text-app-hint py-6 text-sm">{t('common.loading')}</p>
+      ) : related.length === 0 ? (
+        <p className="text-center text-app-hint py-6 text-sm">{t('related.empty')}</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {related.map((c) => (
+            <RelatedRow key={c.id} card={c} />
+          ))}
+        </ul>
       )}
-    </AnimatePresence>
+
+      <div style={{ height: 'calc(0.5rem + var(--tg-safe-area-inset-bottom, 0px))' }} />
+    </BottomSheet>
   )
 }
 

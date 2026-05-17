@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { X, Save } from 'lucide-react'
 import type { DueCardDto, VocabPayload, TheoryPayload, PhrasePayload } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
 import { useT } from '../lib/i18n/useT'
+import { BottomSheet } from './BottomSheet'
 
 interface Props {
   card: DueCardDto | null
@@ -115,23 +115,9 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
   }
 
   return (
-    <AnimatePresence>
-      {isOpen && card && (
+    <BottomSheet isOpen={isOpen && card !== null} onClose={onClose}>
+      {card && (
         <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 bg-black/40 z-40"
-          />
-          <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
-            className="fixed bottom-0 inset-x-0 bg-app-bg rounded-t-3xl p-6 z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] flex flex-col max-w-[500px] mx-auto max-h-[90vh] overflow-y-auto"
-          >
             <div className="flex justify-between items-center mb-4 text-app-text">
               <h2 className="text-xl font-bold">{t('edit.title')}</h2>
               <button
@@ -253,11 +239,10 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
               </button>
             </div>
 
-            <div style={{ height: 'calc(0.5rem + var(--tg-safe-area-inset-bottom, 0px))' }} />
-          </motion.div>
+          <div style={{ height: 'calc(0.5rem + var(--tg-safe-area-inset-bottom, 0px))' }} />
         </>
       )}
-    </AnimatePresence>
+    </BottomSheet>
   )
 }
 
