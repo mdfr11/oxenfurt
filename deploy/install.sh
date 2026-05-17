@@ -201,9 +201,6 @@ trap 'rm -f "$ENV_TMP"' EXIT
   printf 'LLM_API_BASE_URL=%s\n' "$LLM_API_BASE_URL"
   printf 'LLM_API_KEY=%s\n'      "$LLM_API_KEY"
   printf 'LLM_MODEL=%s\n\n'      "$LLM_MODEL"
-  printf '# Optional Hermes Agent webhook (HMAC-SHA256). Both required to enable.\n'
-  printf 'HERMES_WEBHOOK_URL=\n'
-  printf 'HERMES_WEBHOOK_SECRET=\n\n'
   printf '# Backup retention (deploy/backup.sh).\n'
   printf 'BACKUP_RETENTION_DAYS=14\n'
   printf 'BACKUP_RCLONE_REMOTE=\n'
