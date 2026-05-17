@@ -206,9 +206,11 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
           <button className="w-full bg-app-primary text-app-primary-text py-3.5 rounded-2xl font-bold text-lg active:scale-95 shadow-lg shadow-app-primary/20" onClick={() => { primeSpeech(); void primeAudio(); onStart(pausedSession ? pausedSession.mode : mode); }}>
             {pausedSession ? t('home.resume_session') : t('home.start_session')}
           </button>
-          <div className="flex flex-col items-center gap-1.5 opacity-60">
-            <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em]">{t('settings.mode_label')}: <span className="text-app-text">{t(modeKey(mode))}</span> {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit}</span>}</p>
-            <p className="text-[7px] text-app-hint font-black uppercase tracking-[0.2em] opacity-40">Oxenfurt System v1.0.0-selfhosted</p>
+          <div className="mt-2 flex flex-col items-center gap-1.5 opacity-60">
+            <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em]">
+              {t('settings.mode_label')}: <span className="text-app-text">{t(modeKey(mode))}</span>
+              {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit}</span>}
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3 mt-1">
             <button onClick={onOpenLibrary} className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-app-border bg-app-surface text-app-text font-semibold active:scale-95 transition-transform shadow-sm">
