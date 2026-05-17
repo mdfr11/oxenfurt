@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
-import { Coffee, X, Info, Pencil, Type, Quote, BookOpen, Layers, HelpCircle } from 'lucide-react';
+import { Coffee, X, Info, Pencil, Type, Quote, BookOpen, Layers, HelpCircle, Volume2 } from 'lucide-react';
 import {
   backButton,
   disableVerticalSwipes,
@@ -782,7 +782,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         className="w-20 h-20 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-3xl active:scale-95 transition-transform"
                         aria-label={t('practice.tap_to_replay')}
                       >
-                        🔊
+                          <Volume2 size={32} strokeWidth={2} className="text-app-primary" />
                       </button>
                       <div onClick={(e) => e.stopPropagation()}>
                         <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
@@ -820,7 +820,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         className="w-20 h-20 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-3xl active:scale-95 transition-transform"
                         aria-label={t('practice.tap_to_replay')}
                       >
-                        🔊
+                          <Volume2 size={32} strokeWidth={2} className="text-app-primary" />
                       </button>
                       <div onClick={(e) => e.stopPropagation()}>
                         <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
@@ -857,7 +857,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                           className="w-10 h-10 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform"
                           aria-label={t('practice.tap_to_replay')}
                         >
-                          🔊
+                          <Volume2 size={20} strokeWidth={2.5} className="text-app-primary" />
                         </button>
                       </div>
                       <div onClick={(e) => e.stopPropagation()}>
@@ -882,7 +882,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                           className="w-9 h-9 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform shrink-0"
                           aria-label={t('practice.tap_to_replay')}
                         >
-                          🔊
+                          <Volume2 size={20} strokeWidth={2.5} className="text-app-primary" />
                         </button>
                       </div>
                       <div onClick={(e) => e.stopPropagation()}>
@@ -1001,7 +1001,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                           className="w-10 h-10 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform"
                           aria-label={t('practice.tap_to_replay')}
                         >
-                          🔊
+                          <Volume2 size={20} strokeWidth={2.5} className="text-app-primary" />
                         </button>
                       </div>
                       <div onClick={(e) => e.stopPropagation()}>
@@ -1033,7 +1033,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                           className="w-9 h-9 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform shrink-0"
                           aria-label={t('practice.tap_to_replay')}
                         >
-                          🔊
+                          <Volume2 size={20} strokeWidth={2.5} className="text-app-primary" />
                         </button>
                       </div>
                       <span className="bg-app-primary/10 text-app-primary px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
