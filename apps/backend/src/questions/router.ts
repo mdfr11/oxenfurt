@@ -46,13 +46,13 @@ export function createUserQuestionsRouter(deps: UserRouterDeps): Hono {
     const cardId = c.req.param('cardId')
     if (!isUuid(cardId)) return c.json({ error: 'invalid_id' }, 400)
 
-    let body: unknown
+    let rawBody: unknown
     try {
-      body = await c.req.json()
+      rawBody = await c.req.json()
     } catch {
       return c.json({ error: 'invalid_body' }, 400)
     }
-    const parsed = v.safeParse(PostQuestionSchema, body)
+    const parsed = v.safeParse(PostQuestionSchema, rawBody)
     if (!parsed.success) {
       return c.json({ error: 'invalid_payload', issues: parsed.issues }, 400)
     }
@@ -64,6 +64,43 @@ export function createUserQuestionsRouter(deps: UserRouterDeps): Hono {
       .insert(cardQuestions)
       .values({ cardId, question: parsed.output.question })
       .returning()
+
+    // Notify Hermes Agent via webhook (fire-and-forget)
+    const webhookPayload = {
+      event_type: 'question_created',
+      payload: {
+        question_id: row!.id,
+        card_id: cardId,
+        question: parsed.output.question,
+        card_type: null,
+        source_quote: null,
+      },
+    }
+    const bodyStr = JSON.stringify(webhookPayload)
+    const secret = '***REMOVED***'
+
+    // Compute HMAC-SHA256 using Web Crypto API
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    )
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(bodyStr))
+    const sigHex = Array.from(new Uint8Array(sig))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
+
+    fetch('http://127.0.0.1:8644/webhooks/oxenfurt-questions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Webhook-Signature': sigHex,
+      },
+      body: bodyStr,
+    }).catch(() => {}) // ignore errors
+
     return c.json({ question: rowToDto(row!) })
   })
 
