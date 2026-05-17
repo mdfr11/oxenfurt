@@ -103,6 +103,20 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
   });
   const unreadCount = unreadData?.unread ?? 0;
 
+  const { data: health } = useQuery({
+    queryKey: ['health'],
+    queryFn: async () => {
+      try {
+        const res = await fetch('/health');
+        if (!res.ok) return { ok: false };
+        return await res.json() as { ok: boolean };
+      } catch {
+        return { ok: false };
+      }
+    },
+    refetchInterval: 30_000,
+  });
+
   const due = stats?.dueCount ?? 0;
   const reviewed = stats?.reviewedToday ?? 0;
   const totalForToday = due + reviewed;
@@ -150,7 +164,17 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
     >
       <div className="flex justify-between items-start z-10 relative text-app-text">
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-xl font-bold mb-0.5 tracking-tight">{getGreeting(t, userFirstName)}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight">{getGreeting(t, userFirstName)}</h1>
+            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest transition-colors ${
+              health?.ok 
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' 
+                : 'bg-rose-500/10 border-rose-500/20 text-rose-500 animate-pulse'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${health?.ok ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'} ${health?.ok ? 'animate-pulse' : ''}`} />
+              Hermes: {health?.ok ? 'Online' : 'Offline'}
+            </div>
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
              {stats && stats.streak > 0 && (
                <motion.div 
@@ -307,10 +331,13 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
             {pausedSession ? t('home.resume_session') : t('home.start_session')}
           </button>
           
-          <div className="mt-3 flex justify-center">
+          <div className="mt-3 flex flex-col items-center gap-1.5">
             <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em] opacity-60">
               {t('settings.mode_label')}: <span className="text-app-text">{t(modeKey(mode))}</span>
               {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit}</span>}
+            </p>
+            <p className="text-[8px] text-app-hint font-black uppercase tracking-[0.2em] opacity-30">
+              Oxenfurt System v1.0.0-selfhosted
             </p>
           </div>
         </div>
