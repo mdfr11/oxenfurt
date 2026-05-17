@@ -136,6 +136,7 @@ export function SettingsSheet({
                     checked={settings.soundEnabled}
                     onChange={(v) => updateSettings({ soundEnabled: v })}
                     onTest={testSound}
+                    testKind="sound"
                   />
                   <SettingToggle
                     icon={Vibrate}
@@ -144,6 +145,7 @@ export function SettingsSheet({
                     checked={settings.hapticsEnabled}
                     onChange={(v) => updateSettings({ hapticsEnabled: v })}
                     onTest={testHaptics}
+                    testKind="haptics"
                   />
                 </div>
               </section>
@@ -304,6 +306,7 @@ function SettingToggle({
   checked,
   onChange,
   onTest,
+  testKind,
 }: {
   icon: React.ElementType;
   label: string;
@@ -311,6 +314,11 @@ function SettingToggle({
   checked: boolean;
   onChange: (v: boolean) => void;
   onTest?: (e: React.MouseEvent) => void;
+  /** Which test label to render on the button. Explicit prop instead of
+   *  the previous `label.includes(t('settings.sound_label'))` heuristic,
+   *  which broke whenever the localised "Sound" string happened to be a
+   *  substring (or non-substring) of the rendered label in another locale. */
+  testKind?: 'sound' | 'haptics';
 }) {
   const t = useT()
   return (
@@ -337,7 +345,7 @@ function SettingToggle({
           onClick={onTest}
           className="mt-2 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg bg-app-bg text-app-hint text-[10px] font-bold uppercase tracking-wider active:scale-95 transition-transform border border-app-border/40"
         >
-          <Play size={10} fill="currentColor" /> {label.includes(t('settings.sound_label')) ? t('settings.test_sound') : t('settings.test_haptics')}
+          <Play size={10} fill="currentColor" /> {testKind === 'sound' ? t('settings.test_sound') : t('settings.test_haptics')}
         </button>
       )}
     </div>

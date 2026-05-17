@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useRawInitData, useLaunchParams, retrieveLaunchParams } from '@telegram-apps/sdk-react';
+import { useRawInitData, useLaunchParams, retrieveRawInitData } from '@telegram-apps/sdk-react';
 import { Spinner } from '@telegram-apps/telegram-ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import { API_BASE, loginWithTelegram, setToken } from './lib/api';
@@ -176,9 +176,14 @@ export default function App() {
 }
 
 function safeRetrieveInitData(): string | undefined {
+  // The previous implementation re-serialised an already-parsed
+  // `tgWebAppData` via `URLSearchParams(Object.entries(...))`. That
+  // dance coerced nested objects (like `user`) to the string
+  // `[object Object]`, producing an init-data payload that always
+  // failed HMAC validation. The SDK's `retrieveRawInitData()` returns
+  // the original signed string — the only form the backend can verify.
   try {
-    const params = retrieveLaunchParams()
-    return params.tgWebAppData ? new URLSearchParams(Object.entries(params.tgWebAppData) as [string, string][]).toString() : undefined
+    return retrieveRawInitData()
   } catch {
     return undefined
   }

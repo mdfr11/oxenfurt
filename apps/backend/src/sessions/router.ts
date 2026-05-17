@@ -215,8 +215,13 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
     heatmap: heatmapRows.map((row) => ({ date: row.day, count: toInt(row.cnt) })),
     recent_sessions: recentRows.map((row) => ({
       id: row.id,
-      started_at: row.startedAt.toISOString(),
-      finished_at: row.finishedAt!.toISOString(),
+      // postgres-js usually hands back timestamptz as Date, but some
+      // driver configurations (CI in particular) return strings — same
+      // tolerance as /cards/sources and /agent/questions/pending. The
+      // `!` on finishedAt is load-bearing: the WHERE isNotNull filter
+      // upstream guarantees it.
+      started_at: toIso(row.startedAt),
+      finished_at: toIso(row.finishedAt!),
       cards_reviewed: row.cardsReviewed,
       cards_correct: row.cardsCorrect,
     })),
@@ -235,6 +240,10 @@ function defaultReviewRow() {
     month_count: '0',
     month_correct: '0',
   }
+}
+
+function toIso(d: Date | string): string {
+  return d instanceof Date ? d.toISOString() : String(d)
 }
 
 function toInt(s: string | number | null | undefined): number {

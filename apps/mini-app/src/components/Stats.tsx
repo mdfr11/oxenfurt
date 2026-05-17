@@ -64,6 +64,13 @@ export function Stats({ onExit }: StatsProps) {
   const todayAcc = accuracy(data.reviews.today)
   const weekAcc = accuracy(data.reviews.last_7d)
   const monthAcc = accuracy(data.reviews.last_30d)
+  // Numeric accuracy for the relic-unlock check below. parseInt('—')
+  // returned NaN before, which compared false against 90 by accident —
+  // worked but fragile. Compute from the source counts directly.
+  const monthAccNum =
+    data.reviews.last_30d.count > 0
+      ? Math.round((data.reviews.last_30d.correct / data.reviews.last_30d.count) * 100)
+      : 0
 
   return (
     <div
@@ -134,7 +141,7 @@ export function Stats({ onExit }: StatsProps) {
                icon={Feather}
                label={t('stats.relic_feather_label')}
                hint={t('stats.relic_feather_hint')}
-               unlocked={parseInt(monthAcc) >= 90}
+               unlocked={monthAccNum >= 90}
              />
           </div>
         </div>
