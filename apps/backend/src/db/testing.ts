@@ -41,5 +41,12 @@ export async function getTestDb(): Promise<DbConnection | null> {
 }
 
 export async function resetTestDb(db: Db): Promise<void> {
-  await db.execute(sql`TRUNCATE TABLE card_reviews, sessions, cards RESTART IDENTITY CASCADE`)
+  // Order matters only insofar as CASCADE handles FK chains. card_questions
+  // and card_reviews both FK into cards; truncating cards with CASCADE
+  // clears them, but listing them explicitly keeps the intent obvious and
+  // protects against future schema changes that drop the cascade.
+  await db.execute(sql`
+    TRUNCATE TABLE card_questions, card_reviews, sessions, cards
+    RESTART IDENTITY CASCADE
+  `)
 }

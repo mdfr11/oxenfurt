@@ -264,7 +264,7 @@ interface CardQuestionDto {
   seen_at: string | null
 }
 
-async function notifyHermes(
+export async function notifyHermes(
   hook: { url: string; secret: string },
   payload: { question_id: string; card_id: string; question: string },
 ): Promise<void> {

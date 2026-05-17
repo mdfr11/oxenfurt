@@ -89,6 +89,22 @@ Oxenfurt is built for **Hermes Agent**. The agent reads your Zoom/Google Meet tr
 
 ---
 
+## 🔒 Security & Threat Model
+
+Oxenfurt is **single-user by design**. Read this before deploying.
+
+- **One operator, one Telegram account.** The backend gates session creation on a single `OWNER_TELEGRAM_USER_ID`. There is no per-user data isolation in the schema, no role system, no tenant boundary. Do not deploy multi-tenant — every authenticated request can read every card.
+- **Loopback-bound backend.** The Bun server binds to `127.0.0.1`. TLS termination is Caddy's job. If you replace Caddy, make sure whatever fronts the backend strips `Forwarded` headers and never re-exposes the backend port directly.
+- **Telegram WebApp HMAC is the only auth at session mint time.** A leaked `BOT_TOKEN` lets an attacker mint sessions for your user ID. Rotate via @BotFather if you ever suspect leak.
+- **`ENABLE_DEV_AUTH` must stay `false` in production.** The backend refuses to boot otherwise, but don't tempt it.
+- **Third-party proxies.** `/translate`, `/tts`, and `/grade` forward user input to MyMemory, Google Translate, and your configured LLM provider respectively. They share your VPS IP — if your JWT secret leaks (15-min TTL), the holder gets free proxy access until the token expires.
+- **Prompt injection in `/grade`.** A user-typed answer is sent verbatim to the LLM with quoted interpolation. Single-user means "you can cheat at your own flashcards" — wontfix. Anyone forking for a multi-user deployment must escape or structure the prompt instead.
+- **Hermes webhook is optional + HMAC-signed** (`HERMES_WEBHOOK_SECRET`). No replay protection — the loopback assumption makes it cheap, but document the constraint if you ever cross a network boundary.
+
+If you find a real security issue, open a private advisory on GitHub rather than a public issue.
+
+---
+
 ## ⚖️ License
 
 [MIT](LICENSE). Build, fork, and learn.
