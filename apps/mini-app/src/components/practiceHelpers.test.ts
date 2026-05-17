@@ -5,6 +5,8 @@ import {
   buildPhraseCloze,
   extractClozeTerm,
   fingerprintCards,
+  pickSpeakable,
+  shouldAutoPronounce,
   shouldReseed,
 } from './practiceHelpers'
 
@@ -131,6 +133,65 @@ describe('fingerprintCards', () => {
     expect(fingerprintCards([dueCard('a'), dueCard('b')])).toBe(
       fingerprintCards([dueCard('a'), dueCard('b')]),
     )
+  })
+})
+
+describe('pickSpeakable', () => {
+  test('returns the vocab term', () => {
+    expect(pickSpeakable(dueCard('a'))).toBe('versatile')
+  })
+
+  test('returns the phrase string for a phrase card', () => {
+    const card: DueCardDto = {
+      ...dueCard('p'),
+      type: 'phrase',
+      payload: { phrase: 'take into account', translation: '...', context_sentence: 'x' },
+    }
+    expect(pickSpeakable(card)).toBe('take into account')
+  })
+
+  test('returns null for theory cards (nothing useful to speak)', () => {
+    const card: DueCardDto = {
+      ...dueCard('t'),
+      type: 'theory',
+      payload: { question: 'Q', answer: 'A' },
+    }
+    expect(pickSpeakable(card)).toBeNull()
+  })
+
+  test('returns null when no card is loaded yet', () => {
+    expect(pickSpeakable(undefined)).toBeNull()
+  })
+})
+
+describe('shouldAutoPronounce', () => {
+  const base = {
+    speakable: 'versatile',
+    variant: 'recognition' as const,
+    autoPronounce: false,
+    isRevealed: false,
+    flipForProduce: false,
+  }
+
+  test('listening variant always speaks (even without autoPronounce setting)', () => {
+    expect(shouldAutoPronounce({ ...base, variant: 'listening' })).toBe(true)
+  })
+
+  test('non-listening variant gates on the autoPronounce setting', () => {
+    expect(shouldAutoPronounce({ ...base, autoPronounce: false })).toBe(false)
+    expect(shouldAutoPronounce({ ...base, autoPronounce: true })).toBe(true)
+  })
+
+  test('silenced once the back is revealed', () => {
+    expect(shouldAutoPronounce({ ...base, variant: 'listening', isRevealed: true })).toBe(false)
+  })
+
+  test('silenced when produce-mode flips the card (term is the answer)', () => {
+    expect(shouldAutoPronounce({ ...base, variant: 'listening', flipForProduce: true })).toBe(false)
+  })
+
+  test('silenced when there is nothing speakable (theory cards)', () => {
+    expect(shouldAutoPronounce({ ...base, variant: 'listening', speakable: null })).toBe(false)
   })
 })
 

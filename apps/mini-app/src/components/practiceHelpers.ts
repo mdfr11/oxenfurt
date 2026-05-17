@@ -7,7 +7,8 @@
 //   * queue-reseed gating (state-machine decision, no setState)
 // JSX-emitting renderers stay in the component until the full split.
 
-import type { DueCardDto, VocabPayload } from '@oxenfurt/shared'
+import type { DueCardDto, PhrasePayload, VocabPayload } from '@oxenfurt/shared'
+import type { ExerciseVariant } from '../lib/practiceMode'
 
 /**
  * Returns the substring of a vocab card's context_sentence covered by
@@ -124,4 +125,45 @@ export function shouldReseed(
  */
 export function fingerprintCards(cards: DueCardDto[]): string {
   return cards.map((c) => c.id).join('|')
+}
+
+/**
+ * Text to feed to TTS for the given card, or `null` if the card has
+ * nothing speakable (theory cards have a question + an explanation but
+ * neither is meant to be read aloud word-by-word). Used by both the
+ * auto-pronounce effect and the manual replay button so the two paths
+ * never disagree about what to say.
+ */
+export function pickSpeakable(card: DueCardDto | undefined): string | null {
+  if (card === undefined) return null
+  if (card.type === 'vocab') return (card.payload as VocabPayload).term
+  if (card.type === 'phrase') return (card.payload as PhrasePayload).phrase
+  return null
+}
+
+/**
+ * Should the card audio fire automatically when the front-side shows?
+ * Yes only when:
+ *   * there's something to say
+ *   * either the variant explicitly tests listening, OR the user
+ *     opted into autoPronounce in settings
+ *   * the back hasn't been revealed yet (we don't want to talk over the
+ *     answer)
+ *   * produce-mode hasn't flipped the card (the term is the *answer*
+ *     there — speaking it would spoil the prompt)
+ * Pure so it can be unit-tested without React.
+ */
+export function shouldAutoPronounce(args: {
+  speakable: string | null
+  variant: ExerciseVariant
+  autoPronounce: boolean
+  isRevealed: boolean
+  flipForProduce: boolean
+}): boolean {
+  return (
+    args.speakable !== null &&
+    (args.variant === 'listening' || args.autoPronounce) &&
+    !args.isRevealed &&
+    !args.flipForProduce
+  )
 }

@@ -30,8 +30,9 @@ import {
   fingerprintCards,
   shouldReseed,
 } from './practiceHelpers';
-import { speak, stopSpeaking } from '../lib/tts';
-import { cycleTtsSpeed, labelForSpeed, loadTtsSpeed, rateForSpeed, saveTtsSpeed, type TtsSpeed } from '../lib/audioSettings';
+import { stopSpeaking } from '../lib/tts';
+import { useCardAudio } from '../hooks/useCardAudio';
+import { labelForSpeed, type TtsSpeed } from '../lib/audioSettings';
 import { Markdown } from './Markdown';
 import { getSettings } from '../lib/settings';
 import { ttsLangTag } from '../lib/languages';
@@ -340,40 +341,16 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // The user taps the input themselves when ready. `inputRef` is forwarded
   // to TypedAnswerField below; it's not focused here on purpose.
 
-  // Persisted TTS speed preference — toggle via the chip below the 🔊 button.
-  const [ttsSpeed, setTtsSpeed] = useState<TtsSpeed>(() => loadTtsSpeed())
-
-  // Listening variant or Auto-pronounce setting: pronounce the term/phrase
-  // on card show. Suppressed when produce-mode flips the card — the term is
-  // the answer there, so speaking it on the front would spoil the prompt.
-  useEffect(() => {
-    const { autoPronounce } = getSettings();
-    const speakable =
-      currentCard?.type === 'vocab'
-        ? (currentCard.payload as VocabPayload).term
-        : currentCard?.type === 'phrase'
-          ? (currentCard.payload as PhrasePayload).phrase
-          : null
-    const shouldSpeak =
-      speakable !== null &&
-      (variant === 'listening' || autoPronounce) &&
-      !isRevealed &&
-      !flipForProduce;
-
-    if (shouldSpeak) {
-      // Small delay so the card animation finishes before audio starts.
-      const t = setTimeout(() => { void speak(speakable, { rate: rateForSpeed(ttsSpeed) }) }, 250)
-      return () => {
-        clearTimeout(t)
-        stopSpeaking()
-      }
-    }
-    return undefined
-    // `currentCard` is intentionally NOT in deps — a background /due
-    // refetch hands us a fresh object with the same id, which would
-    // re-trigger pronunciation. `currentCard?.id` is the real dep.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCard?.id, variant, isRevealed, ttsSpeed, flipForProduce])
+  // TTS surface (auto-pronounce + speed control + manual replay) lives
+  // in a dedicated hook so this file isn't the one place that decides
+  // when to speak. Pure decisions (shouldAutoPronounce / pickSpeakable)
+  // are in practiceHelpers.ts for direct unit testing.
+  const { ttsSpeed, cycleSpeed, replay: handleReplayAudio } = useCardAudio({
+    card: currentCard,
+    variant,
+    isRevealed,
+    flipForProduce,
+  })
 
   // (The screen-leave stopSpeaking() lives in the disableVerticalSwipes
   // cleanup effect above — keeping a second copy here would double-fire.)
@@ -385,13 +362,6 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     setIsRevealed((prev) => !prev)
     haptic('impactOccurred', 'light')
     playPopSound()
-  };
-
-  const cycleSpeed = () => {
-    const next = cycleTtsSpeed(ttsSpeed)
-    setTtsSpeed(next)
-    saveTtsSpeed(next)
-    haptic('selectionChanged')
   };
 
   const handleAnswerSubmit = () => {
@@ -418,18 +388,6 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     if (result.kind === 'exact') { haptic('notificationOccurred', 'success'); playPopSound(); }
     else if (result.kind === 'close') { haptic('impactOccurred', 'medium'); playPopSound(); }
     else { haptic('notificationOccurred', 'error'); playThudSound(); }
-  };
-
-  const handleReplayAudio = () => {
-    const text =
-      currentCard?.type === 'vocab'
-        ? (currentCard.payload as VocabPayload).term
-        : currentCard?.type === 'phrase'
-          ? (currentCard.payload as PhrasePayload).phrase
-          : null
-    if (text === null) return
-    void speak(text, { rate: rateForSpeed(ttsSpeed) })
-    haptic('selectionChanged')
   };
 
   // "I don't know" / "show me the answer" — bypass fuzzy match entirely and
