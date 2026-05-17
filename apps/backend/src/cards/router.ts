@@ -101,7 +101,10 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
       vocab_count: number
       phrase_count: number
       theory_count: number
-      latest: Date
+      // postgres-js usually hands timestamptz back as a Date but some
+      // driver configurations / CI environments return it as a string.
+      // Tolerated below.
+      latest: Date | string
     }>(sql`
       SELECT
         source,
@@ -123,7 +126,8 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
         vocab_count: r.vocab_count,
         phrase_count: r.phrase_count,
         theory_count: r.theory_count,
-        latest: r.latest.toISOString(),
+        latest:
+          r.latest instanceof Date ? r.latest.toISOString() : String(r.latest),
       })),
     })
   })

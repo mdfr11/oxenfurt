@@ -29,6 +29,13 @@
       "when": 1747800000000,
       "tag": "0003_card_questions",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1747900000000,
+      "tag": "0004_simplify_phrase_dedup",
+      "breakpoints": true
     }
   ]
 }

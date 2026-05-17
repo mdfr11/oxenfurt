@@ -466,9 +466,10 @@ describe.skipIf(noDb)('PATCH /:id (inline edit)', () => {
     const p = row!.payload as { term: string; translation: string; context_sentence: string; context_term_start: number; context_term_end: number }
     expect(p.term).toBe('versatile')
     expect(p.translation).toBe('универсальный')
-    // 'versatile' starts at index 12 in 'She is a versatile musician.'
-    expect(p.context_term_start).toBe(12)
-    expect(p.context_term_end).toBe(12 + 'versatile'.length)
+    // 'versatile' starts at index 9 in 'She is a versatile musician.'
+    // ("She is a " is 9 chars including the trailing space).
+    expect(p.context_term_start).toBe(9)
+    expect(p.context_term_end).toBe(9 + 'versatile'.length)
   })
 
   test('vocab: offset recompute is case-insensitive', async () => {

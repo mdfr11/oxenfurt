@@ -168,14 +168,17 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
     expect(summary).toEqual({ created: 2, skipped: 1 })
   })
 
-  test('phrase dedup collapses whitespace differences', async () => {
+  test('phrase dedup does NOT collapse internal whitespace differences', async () => {
+    // The dedup index was originally regexp_replace-based to fold weird
+    // spacing into one. We simplified to plain LOWER(phrase) in migration
+    // 0004 so the ingest path's ON CONFLICT inference would actually
+    // match the index. Internal-whitespace deduplication was the only
+    // thing we gave up — Valibot already trims the outside, and
+    // duplicated internal spaces in practice come from typos that the
+    // operator can clean up via the Library's inline edit.
     const mk = (phrase: string) => ({
       type: 'phrase' as const,
-      payload: {
-        phrase,
-        translation: 't',
-        context_sentence: 'x',
-      },
+      payload: { phrase, translation: 't', context_sentence: 'x' },
     })
     const summary = await ingestCards(
       conn!.db,
@@ -183,7 +186,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
       { cards: [mk('take  into   account'), mk('take into account')] },
       NOW,
     )
-    expect(summary).toEqual({ created: 1, skipped: 1 })
+    expect(summary).toEqual({ created: 2, skipped: 0 })
   })
 
   test('phrase dedup persists across separate ingest batches', async () => {
