@@ -267,6 +267,8 @@ export const en: Record<keyof typeof ru, string> = {
   'question.btn_sending': 'Sending…',
   'question.btn_sent': 'Sent ✓',
   'question.error_send': "Could not send — try again",
+  'question.history_heading': 'Past questions about this card',
+  'question.status_pending': 'Waiting for the agent…',
 
   // --- Answers screen ---
   'answers.title': 'Agent answers',

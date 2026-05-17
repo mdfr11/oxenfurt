@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { backButton } from '@telegram-apps/sdk-react'
-import { ArrowLeft, MessageCircle, Trash2 } from 'lucide-react'
+import { ArrowLeft, MessageCircle, Trash2, Quote, Type, BookOpen } from 'lucide-react'
 import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
 import { useT } from '../lib/i18n/useT'
@@ -11,7 +11,7 @@ interface Props {
   onExit: () => void
 }
 
-interface QuestionDto {
+interface UnreadQuestionDto {
   id: string
   card_id: string
   question: string
@@ -20,6 +20,12 @@ interface QuestionDto {
   created_at: string
   answered_at: string | null
   seen_at: string | null
+  card: {
+    id: string
+    type: 'vocab' | 'theory' | 'phrase'
+    title: string
+    source: string | null
+  }
 }
 
 // Read view for answers from Hermes. Loads everything still unread, lets
@@ -53,7 +59,7 @@ export function AnswersScreen({ onExit }: Props) {
     queryFn: async () => {
       const res = await fetchWithAuth('/questions/unread')
       if (!res.ok) throw new Error('Failed to load')
-      return (await res.json()) as { unread: QuestionDto[] }
+      return (await res.json()) as { unread: UnreadQuestionDto[] }
     },
   })
 
@@ -121,6 +127,25 @@ export function AnswersScreen({ onExit }: Props) {
                 key={q.id}
                 className="p-4 rounded-2xl bg-app-surface border border-app-border"
               >
+                {/* Card preview header — tells the learner which card the
+                    answer is about. The icon mirrors what Library uses for
+                    the same card type so the visual vocabulary is shared. */}
+                <div className="flex items-center gap-2 mb-3 pb-3 border-b border-app-border/60">
+                  <div className="w-7 h-7 rounded-full bg-app-primary/10 text-app-primary flex items-center justify-center shrink-0">
+                    {q.card.type === 'vocab' ? <Type size={13} />
+                      : q.card.type === 'phrase' ? <Quote size={13} />
+                      : <BookOpen size={13} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-app-text truncate">
+                      {q.card.title || t('common.empty')}
+                    </div>
+                    {q.card.source !== null && q.card.source.length > 0 && (
+                      <div className="text-[10px] text-app-hint truncate">{q.card.source}</div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">
                   {t('answers.field_question')}
                 </div>

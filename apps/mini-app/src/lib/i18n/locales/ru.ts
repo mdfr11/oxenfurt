@@ -278,6 +278,8 @@ export const ru = {
   'question.btn_sending': 'Отправляю…',
   'question.btn_sent': 'Отправлено ✓',
   'question.error_send': 'Не удалось отправить — попробуй ещё раз',
+  'question.history_heading': 'История по этой карточке',
+  'question.status_pending': 'Ждёт агента…',
 
   // --- Answers screen ---
   'answers.title': 'Ответы агента',

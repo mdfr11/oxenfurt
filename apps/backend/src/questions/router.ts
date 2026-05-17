@@ -65,15 +65,59 @@ export function createUserQuestionsRouter(deps: UserRouterDeps): Hono {
   })
 
   // GET /unread — count + list of answered-but-not-seen questions.
-  // Used for the Home badge.
+  // Each entry comes with a small card preview so the AnswersScreen can
+  // show "from <card>" without an N+1 chase per row. `title` resolves
+  // to the most identifying field per card type — term for vocab,
+  // phrase for phrase, question for theory.
   app.get('/unread', async (c) => {
-    const rows = await deps.db
-      .select()
-      .from(cardQuestions)
-      .where(and(eq(cardQuestions.status, 'answered'), isNull(cardQuestions.seenAt)))
-      .orderBy(desc(cardQuestions.answeredAt))
-      .limit(50)
-    return c.json({ unread: rows.map(rowToDto) })
+    const rows = await deps.db.execute<{
+      id: string
+      card_id: string
+      question: string
+      status: 'pending' | 'answered' | 'discarded'
+      response: string | null
+      created_at: Date | string
+      answered_at: Date | string | null
+      seen_at: Date | string | null
+      card_type: 'vocab' | 'theory' | 'phrase'
+      card_payload: { term?: string; phrase?: string; question?: string }
+      card_source: string | null
+    }>(sql`
+      SELECT
+        q.id, q.card_id, q.question, q.status, q.response,
+        q.created_at, q.answered_at, q.seen_at,
+        c.type AS card_type,
+        c.payload AS card_payload,
+        c.source AS card_source
+      FROM card_questions q
+      JOIN cards c ON c.id = q.card_id
+      WHERE q.status = 'answered' AND q.seen_at IS NULL
+      ORDER BY q.answered_at DESC
+      LIMIT 50
+    `)
+    return c.json({
+      unread: rows.map((r) => ({
+        id: r.id,
+        card_id: r.card_id,
+        question: r.question,
+        status: r.status,
+        response: r.response,
+        created_at: toIsoOrString(r.created_at),
+        answered_at: r.answered_at === null ? null : toIsoOrString(r.answered_at),
+        seen_at: r.seen_at === null ? null : toIsoOrString(r.seen_at),
+        card: {
+          id: r.card_id,
+          type: r.card_type,
+          title:
+            r.card_type === 'vocab'
+              ? (r.card_payload.term ?? '')
+              : r.card_type === 'phrase'
+                ? (r.card_payload.phrase ?? '')
+                : (r.card_payload.question ?? ''),
+          source: r.card_source,
+        },
+      })),
+    })
   })
 
   // GET /count — just the unread number (cheap, polled by the badge).
@@ -242,6 +286,10 @@ interface CardQuestionDto {
 }
 
 
+
+function toIsoOrString(d: Date | string): string {
+  return d instanceof Date ? d.toISOString() : String(d)
+}
 
 function rowToDto(row: typeof cardQuestions.$inferSelect): CardQuestionDto {
   return {
