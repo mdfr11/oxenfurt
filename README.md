@@ -137,11 +137,46 @@ from the backend in dev mode and skips Telegram HMAC validation — set
 
 ## Production deployment
 
-See [`deploy/README.md`](deploy/README.md) for the operator-facing guide.
-If you're handing the deployment off to an autonomous agent on the VPS,
-point it at [`deploy/AGENT_GUIDE.md`](deploy/AGENT_GUIDE.md) — that file
-is structured as a sequence of stages with verifications and recovery
-branches.
+### One-shot installer (recommended for first-time deploy)
 
-Hermes integration is documented separately in
+On a fresh Ubuntu/Debian VPS, as root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mdfr11/oxenfurt/master/deploy/install.sh | bash
+```
+
+The script asks four questions (bot token, your Telegram user id,
+domain, email) and an optional fifth block for AI provider credentials,
+then:
+
+- installs Bun, pnpm, Postgres, Caddy, ufw
+- generates `JWT_SECRET` and `INGEST_TOKEN`
+- creates the Postgres role + database
+- writes `/etc/oxenfurt/backend.env` with all values
+- templates the Caddyfile with your domain, reloads Caddy
+- installs systemd units + nightly backup timer
+- clones the repo, builds frontend + backend, runs migrations
+- starts the service and prints a healthcheck
+
+For non-interactive runs (CI), set the `OXENFURT_*` env vars listed at
+the top of [`deploy/install.sh`](deploy/install.sh) plus
+`OXENFURT_NON_INTERACTIVE=1`.
+
+### Manual / step-by-step deployment
+
+If you'd rather understand each step (or you're handing the work to an
+autonomous agent on the VPS), see [`deploy/AGENT_GUIDE.md`](deploy/AGENT_GUIDE.md).
+The operator-facing guide is [`deploy/README.md`](deploy/README.md).
+
+### Ongoing updates
+
+After the initial install, dev-side updates (build on laptop, rsync to
+VPS) use [`deploy/deploy.sh`](deploy/deploy.sh). The install script is
+idempotent — re-running it after a `git pull` on the VPS also works,
+just slower.
+
+### Hermes integration
+
+Optional — Oxenfurt works fine without it; you just have to feed cards
+in via `POST /ingest/cards` yourself. See
 [`deploy/hermes/integration.md`](deploy/hermes/integration.md).
