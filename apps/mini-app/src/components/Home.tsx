@@ -182,7 +182,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
             </div>
           )}
 
-          {heatmapData && heatmapData.history.length > 0 && stats?.learnedCount !== 0 && (
+          {heatmapData && heatmapData.history.length > 0 && (
             <div className="w-full">
                <h2 className="text-[9px] uppercase tracking-[0.15em] text-app-hint font-bold mb-2 text-center opacity-40">{t('home.history_heading')}</h2>
                <CompactHeatmap history={heatmapData.history} />

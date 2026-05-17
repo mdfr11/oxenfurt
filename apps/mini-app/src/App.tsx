@@ -140,8 +140,7 @@ export default function App() {
                 window.location.hash = '#summary';
               }}
               onExit={() => {
-                if (window.history.length > 1) window.history.back();
-                else window.location.hash = '#home';
+                window.location.hash = '#home';
               }}
             />
           </motion.div>
@@ -157,8 +156,7 @@ export default function App() {
           <motion.div key="library" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <Library
               onExit={() => {
-                if (window.history.length > 1) window.history.back();
-                else window.location.hash = '#home';
+                window.location.hash = '#home';
               }}
               autoOpenCardId={pendingOpenCardId}
               onAutoOpenConsumed={() => setPendingOpenCardId(null)}
@@ -167,16 +165,14 @@ export default function App() {
         ) : screen === 'stats' ? (
           <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <Stats onExit={() => {
-              if (window.history.length > 1) window.history.back();
-              else window.location.hash = '#home';
+              window.location.hash = '#home';
             }} />
           </motion.div>
         ) : screen === 'answers' ? (
           <motion.div key="answers" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <AnswersScreen
               onExit={() => {
-                if (window.history.length > 1) window.history.back();
-                else window.location.hash = '#home';
+                window.location.hash = '#home';
               }}
               onJumpToCard={(id) => {
                 setPendingOpenCardId(id);
