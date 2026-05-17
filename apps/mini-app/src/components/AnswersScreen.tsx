@@ -5,18 +5,7 @@ import { ArrowLeft, MessageCircle, Trash2 } from 'lucide-react'
 import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
 import { useT } from '../lib/i18n/useT'
-import type { TKey } from '../lib/i18n'
-
-function plurAnswers(n: number, t: ReturnType<typeof useT>): string {
-  const mod100 = n % 100
-  let key: TKey = 'answers.count_many'
-  if (!(mod100 >= 11 && mod100 <= 14)) {
-    const mod10 = n % 10
-    if (mod10 === 1) key = 'answers.count_one'
-    else if (mod10 >= 2 && mod10 <= 4) key = 'answers.count_few'
-  }
-  return t(key, { n })
-}
+import { plurKey } from '../lib/i18n/plural'
 
 interface Props {
   onExit: () => void
@@ -110,7 +99,7 @@ export function AnswersScreen({ onExit }: Props) {
         </button>
         <div className="flex-1">
           <h1 className="text-xl font-bold leading-none">{t('answers.title')}</h1>
-          <p className="text-xs text-app-hint mt-1">{items.length} {plurAnswers(items.length, t)}</p>
+          <p className="text-xs text-app-hint mt-1">{t(plurKey(items.length, 'answers.count_one', 'answers.count_few', 'answers.count_many'), { n: items.length })}</p>
         </div>
       </div>
 

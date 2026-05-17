@@ -5,6 +5,7 @@ import type { StatsResponse } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { sessions } from '../db/schema.ts'
 import { jwtAuth } from '../middleware/auth.ts'
+import { isUuid } from '../lib/uuid.ts'
 
 export interface SessionsRouterDeps {
   db: Db
@@ -16,11 +17,6 @@ const FinishBodySchema = v.object({
   cards_reviewed: v.pipe(v.number(), v.integer(), v.minValue(0)),
   cards_correct: v.pipe(v.number(), v.integer(), v.minValue(0)),
 })
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-function isUuid(s: string): boolean {
-  return UUID_RE.test(s)
-}
 
 export function createSessionsRouter(deps: SessionsRouterDeps): Hono {
   const app = new Hono()

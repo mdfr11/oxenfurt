@@ -13,11 +13,6 @@ import {
 } from 'drizzle-orm/pg-core'
 import type { CardStatus, CardType, PhrasePayload, TheoryPayload, VocabPayload } from '@oxenfurt/shared'
 
-export type CardPayload =
-  | ({ type: 'vocab' } & VocabPayload)
-  | ({ type: 'theory' } & TheoryPayload)
-  | ({ type: 'phrase' } & PhrasePayload)
-
 export const cards = pgTable(
   'cards',
   {
@@ -51,7 +46,6 @@ export const cards = pgTable(
 )
 
 export type CardRow = typeof cards.$inferSelect
-export type NewCardRow = typeof cards.$inferInsert
 
 export const cardReviews = pgTable(
   'card_reviews',
@@ -74,8 +68,6 @@ export const cardReviews = pgTable(
   (t) => [index('idx_reviews_card').on(t.cardId, t.reviewedAt)],
 )
 
-export type CardReviewRow = typeof cardReviews.$inferSelect
-export type NewCardReviewRow = typeof cardReviews.$inferInsert
 
 export const sessions = pgTable('sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -88,7 +80,6 @@ export const sessions = pgTable('sessions', {
 })
 
 export type SessionRow = typeof sessions.$inferSelect
-export type NewSessionRow = typeof sessions.$inferInsert
 
 export type CardQuestionStatus = 'pending' | 'answered' | 'discarded'
 
@@ -107,5 +98,3 @@ export const cardQuestions = pgTable('card_questions', {
   seenAt: timestamp('seen_at', { withTimezone: true, mode: 'date' }),
 })
 
-export type CardQuestionRow = typeof cardQuestions.$inferSelect
-export type NewCardQuestionRow = typeof cardQuestions.$inferInsert

@@ -22,15 +22,12 @@ export interface AppDeps {
   initDataMaxAgeSeconds: number
   jwtTtlSeconds: number
   db: Db
-  fsrs?: FsrsService
   /** Allow-list of origins for the dev CORS middleware. When empty / unset,
    *  no CORS middleware is installed — production stack is same-origin
    *  through the reverse proxy. */
   corsAllowedOrigins?: string[]
   /** Gate for the dev-only `/auth/dev-token` endpoint. Default off. */
   enableDevAuth?: boolean
-  /** TTL for dev-tokens, seconds. Defaults to 3600 (1 h). */
-  devAuthTtlSeconds?: number
   /** Override for tests. Defaults to `() => new Date()`. */
   now?: () => Date
   /** Optional LLM client (OpenAI-compatible). When omitted, falls back to
@@ -44,7 +41,7 @@ export interface AppDeps {
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
-  const fsrs = deps.fsrs ?? new FsrsService()
+  const fsrs = new FsrsService()
   const llm = deps.llm ?? createLlmClient(deps.llmConfig ?? {})
 
   // Print every unhandled error to stderr (journald) before returning a
@@ -88,7 +85,7 @@ export function createApp(deps: AppDeps): Hono {
   // Production blocks ENABLE_DEV_AUTH=true at config-load (config.ts).
   if (deps.enableDevAuth) {
     app.get('/auth/dev-token', async (c) => {
-      const ttl = deps.devAuthTtlSeconds ?? 3600
+      const ttl = 3600
       const token = await signSession(
         { userId: deps.ownerTelegramUserId },
         deps.jwtSecret,

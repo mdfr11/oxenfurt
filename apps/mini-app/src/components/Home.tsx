@@ -12,6 +12,7 @@ import { primeAudio } from '../lib/audio';
 import { useSettings } from '../lib/settings';
 import { clearSession, loadSession, subscribeToSession } from '../lib/sessionPersist';
 import { useT } from '../lib/i18n/useT';
+import { plurKey } from '../lib/i18n/plural';
 import { SettingsSheet } from './SettingsSheet';
 
 import { motion } from 'framer-motion';
@@ -314,15 +315,6 @@ function modeKey(mode: PracticeMode): 'mode.mixed' | 'mode.recognition' | 'mode.
     case 'translation': return 'mode.translation';
     case 'listening': return 'mode.listening';
   }
-}
-
-function plurKey<A extends string, B extends string, C extends string>(n: number, one: A, few: B, many: C): A | B | C {
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return many;
-  const mod10 = n % 10;
-  if (mod10 === 1) return one;
-  if (mod10 >= 2 && mod10 <= 4) return few;
-  return many;
 }
 
 function CompactHeatmap({ history }: { history: { date: string; count: number }[] }) {

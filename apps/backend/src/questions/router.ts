@@ -17,11 +17,7 @@ import type { Db } from '../db/client.ts'
 import { cardQuestions, cards } from '../db/schema.ts'
 import { ingestTokenAuth } from '../middleware/ingest-token.ts'
 import { jwtAuth } from '../middleware/auth.ts'
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-function isUuid(s: string): boolean {
-  return UUID_RE.test(s)
-}
+import { isUuid } from '../lib/uuid.ts'
 
 // Routers ------------------------------------------------------------------
 

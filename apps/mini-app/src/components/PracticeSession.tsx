@@ -6,9 +6,9 @@ import {
   backButton,
   disableVerticalSwipes,
   enableVerticalSwipes,
-  hapticFeedback,
   popup,
 } from '@telegram-apps/sdk-react';
+import { haptic } from '../lib/telegram';
 import {
   RATING,
   matchAnswer,
@@ -39,28 +39,6 @@ interface PracticeSessionProps {
   mode: PracticeMode;
   onComplete: (total: number, correct: number) => void;
   onExit: () => void;
-}
-
-function safeHaptic(method: 'selectionChanged'): void;
-function safeHaptic(method: 'impactOccurred', style: Parameters<typeof hapticFeedback.impactOccurred>[0]): void;
-function safeHaptic(method: 'notificationOccurred', type: Parameters<typeof hapticFeedback.notificationOccurred>[0]): void;
-function safeHaptic(method: string, arg?: unknown): void {
-  try {
-    const { hapticsEnabled } = getSettings();
-    if (!hapticsEnabled) return;
-
-    if (method === 'impactOccurred') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      hapticFeedback.impactOccurred(arg as any);
-    } else if (method === 'notificationOccurred') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      hapticFeedback.notificationOccurred(arg as any);
-    } else if (method === 'selectionChanged') {
-      hapticFeedback.selectionChanged();
-    }
-  } catch {
-    // SDK not initialised (dev outside Telegram) — silently ignore
-  }
 }
 
 export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionProps) {
@@ -398,7 +376,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     if (expectsTypedAnswer) return
     // Recognition: tap toggles reveal — second tap flips back to the front.
     setIsRevealed((prev) => !prev)
-    safeHaptic('impactOccurred', 'light')
+    haptic('impactOccurred', 'light')
     playPopSound()
   };
 
@@ -406,7 +384,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     const next = cycleTtsSpeed(ttsSpeed)
     setTtsSpeed(next)
     saveTtsSpeed(next)
-    safeHaptic('selectionChanged')
+    haptic('selectionChanged')
   };
 
   const handleAnswerSubmit = () => {
@@ -430,9 +408,9 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     const result = matchAnswer(typedAnswer, expected);
     setMatchResult(result);
     setIsRevealed(true);
-    if (result.kind === 'exact') { safeHaptic('notificationOccurred', 'success'); playPopSound(); }
-    else if (result.kind === 'close') { safeHaptic('impactOccurred', 'medium'); playPopSound(); }
-    else { safeHaptic('notificationOccurred', 'error'); playThudSound(); }
+    if (result.kind === 'exact') { haptic('notificationOccurred', 'success'); playPopSound(); }
+    else if (result.kind === 'close') { haptic('impactOccurred', 'medium'); playPopSound(); }
+    else { haptic('notificationOccurred', 'error'); playThudSound(); }
   };
 
   const handleReplayAudio = () => {
@@ -444,7 +422,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
           : null
     if (text === null) return
     void speak(text, { rate: rateForSpeed(ttsSpeed) })
-    safeHaptic('selectionChanged')
+    haptic('selectionChanged')
   };
 
   // "I don't know" / "show me the answer" — bypass fuzzy match entirely and
@@ -455,17 +433,17 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     if (isRevealed || !expectsTypedAnswer || !currentCard) return
     setMatchResult(null)
     setIsRevealed(true)
-    safeHaptic('impactOccurred', 'light')
+    haptic('impactOccurred', 'light')
     playThudSound()
   };
 
   const handleRate = (rating: Rating) => {
     if (!currentCard) return;
 
-    if (rating === RATING.Again) { safeHaptic('notificationOccurred', 'error'); playThudSound(); }
-    else if (rating === RATING.Hard) { safeHaptic('impactOccurred', 'medium'); playPopSound(); }
-    else if (rating === RATING.Good) { safeHaptic('selectionChanged'); playPopSound(); }
-    else { safeHaptic('notificationOccurred', 'success'); playPopSound(); }
+    if (rating === RATING.Again) { haptic('notificationOccurred', 'error'); playThudSound(); }
+    else if (rating === RATING.Hard) { haptic('impactOccurred', 'medium'); playPopSound(); }
+    else if (rating === RATING.Good) { haptic('selectionChanged'); playPopSound(); }
+    else { haptic('notificationOccurred', 'success'); playPopSound(); }
 
     const isCorrect = rating !== RATING.Again;
     const nextStats = {
@@ -523,7 +501,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       setPendingReview(null);
       reviewMutation.mutate({ id: currentCard.id, rating });
 
-      safeHaptic('notificationOccurred', 'success')
+      haptic('notificationOccurred', 'success')
       playSuccessChime()
       finishBackendSession(nextStats.total, nextStats.correct)
       // Mark practice as done BEFORE clearing storage. The save effect
@@ -577,7 +555,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     setSessionStats(pendingReview.previousStats);
     setIsRevealed(true);
     setPendingReview(null);
-    safeHaptic('selectionChanged');
+    haptic('selectionChanged');
   };
 
   const handleWordTap = async (word: string, e: React.MouseEvent) => {

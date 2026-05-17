@@ -3,7 +3,7 @@ import { sendData } from '@telegram-apps/sdk-react';
 import { CheckCircle2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useT } from '../lib/i18n/useT';
-import type { TKey } from '../lib/i18n';
+import { plurKey } from '../lib/i18n/plural';
 
 interface SummaryProps {
   stats: { total: number; correct: number };
@@ -65,7 +65,7 @@ export function Summary({ stats, onFinish, onRepeatHard }: SummaryProps) {
         </div>
         <h1 className="text-2xl font-bold mb-2">{t('summary.title')}</h1>
         <p className="text-app-hint mb-10">
-          {t(plurSummary(stats.total), { n: stats.total })}
+          {t(plurKey(stats.total, 'summary.subtitle_one', 'summary.subtitle_few', 'summary.subtitle_many'), { n: stats.total })}
         </p>
 
         <div className="w-full grid grid-cols-2 gap-4 bg-app-surface border border-app-border p-6 rounded-2xl shadow-sm">
@@ -100,11 +100,3 @@ export function Summary({ stats, onFinish, onRepeatHard }: SummaryProps) {
   );
 }
 
-function plurSummary(n: number): TKey {
-  const mod100 = n % 100
-  if (mod100 >= 11 && mod100 <= 14) return 'summary.subtitle_many'
-  const mod10 = n % 10
-  if (mod10 === 1) return 'summary.subtitle_one'
-  if (mod10 >= 2 && mod10 <= 4) return 'summary.subtitle_few'
-  return 'summary.subtitle_many'
-}

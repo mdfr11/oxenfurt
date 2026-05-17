@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { HeatmapCell, RecentSession, StatsResponse } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
 import { useT } from '../lib/i18n/useT'
-import { getLocale, type TKey } from '../lib/i18n'
+import { getLocale } from '../lib/i18n'
+import { plurKey } from '../lib/i18n/plural'
 
 interface StatsProps {
   onExit: () => void
@@ -254,20 +255,11 @@ function SessionRow({ session }: { session: RecentSession }) {
         <div className="text-[11px] text-app-hint mt-0.5">{formatTime(session.finished_at)}</div>
       </div>
       <div className="text-right">
-        <div className="text-sm font-semibold">{t(plurSessionCards(session.cards_reviewed), { n: session.cards_reviewed })}</div>
+        <div className="text-sm font-semibold">{t(plurKey(session.cards_reviewed, 'stats.session_cards_one', 'stats.session_cards_few', 'stats.session_cards_many'), { n: session.cards_reviewed })}</div>
         <div className="text-[11px] text-app-hint mt-0.5">{t('stats.session_accuracy', { n: acc })}</div>
       </div>
     </div>
   )
-}
-
-function plurSessionCards(n: number): TKey {
-  const mod100 = n % 100
-  if (mod100 >= 11 && mod100 <= 14) return 'stats.session_cards_many'
-  const mod10 = n % 10
-  if (mod10 === 1) return 'stats.session_cards_one'
-  if (mod10 >= 2 && mod10 <= 4) return 'stats.session_cards_few'
-  return 'stats.session_cards_many'
 }
 
 function formatDate(iso: string, t: ReturnType<typeof useT>): string {

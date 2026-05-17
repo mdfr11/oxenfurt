@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { backButton, hapticFeedback } from '@telegram-apps/sdk-react'
+import { backButton } from '@telegram-apps/sdk-react'
+import { haptic } from '../lib/telegram'
 import { Spinner } from '@telegram-apps/telegram-ui'
 import { Archive, ArrowLeft, BookOpen, Search, X, Quote, Type } from 'lucide-react'
 import type {
@@ -13,7 +14,7 @@ import type {
 import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
 import { useT } from '../lib/i18n/useT'
-import { type TKey } from '../lib/i18n'
+import { plurKey } from '../lib/i18n/plural'
 
 interface LibraryProps {
   onExit: () => void
@@ -21,17 +22,6 @@ interface LibraryProps {
 
 type TypeFilter = 'all' | 'vocab' | 'theory' | 'phrase'
 type StatusFilter = 'active' | 'archived'
-
-function safeHaptic<T extends keyof typeof hapticFeedback>(
-  method: T,
-  ...args: Parameters<typeof hapticFeedback[T]>
-): void {
-  try {
-    (hapticFeedback[method] as (...a: typeof args) => void)(...args)
-  } catch {
-    // SDK not mounted — ignore
-  }
-}
 
 interface SourceEntry {
   source: string | null
@@ -117,7 +107,7 @@ export function Library({ onExit }: LibraryProps) {
       return res.json()
     },
     onSuccess: () => {
-      safeHaptic('notificationOccurred', 'success')
+      haptic('notificationOccurred', 'success')
       void queryClient.invalidateQueries({ queryKey: ['cards', 'list'] })
       void queryClient.invalidateQueries({ queryKey: ['cards', 'due'] })
       setOpenCard(null)
@@ -525,19 +515,6 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
   )
 }
 
-// Russian-style plural picker generalised to take three locale keys.
-// In English locales the dictionary points _few_ and _many_ at the same
-// "N items" phrase, so callers don't need to know the locale.
-function plurKey<A extends TKey, B extends TKey, C extends TKey>(
-  n: number, one: A, few: B, many: C,
-): A | B | C {
-  const mod100 = n % 100
-  if (mod100 >= 11 && mod100 <= 14) return many
-  const mod10 = n % 10
-  if (mod10 === 1) return one
-  if (mod10 >= 2 && mod10 <= 4) return few
-  return many
-}
 
 function formatDue(iso: string, t: ReturnType<typeof useT>): string {
   const due = new Date(iso)

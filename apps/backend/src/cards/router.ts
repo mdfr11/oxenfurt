@@ -17,6 +17,7 @@ import {
 import type { Db } from '../db/client.ts'
 import { cardReviews, cards, type CardRow } from '../db/schema.ts'
 import { jwtAuth } from '../middleware/auth.ts'
+import { isUuid } from '../lib/uuid.ts'
 
 export interface CardsRouterDeps {
   db: Db
@@ -409,7 +410,3 @@ function toDueDto(row: CardRow): DueCardDto {
   }
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-function isUuid(s: string): boolean {
-  return UUID_RE.test(s)
-}

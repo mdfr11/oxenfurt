@@ -1,7 +1,7 @@
 import { Settings, Volume2, Vibrate, X, Play, Headphones, ArrowLeftRight, Languages, Sparkles, Layout, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings, type LearningLanguage, type NativeLanguage } from '../lib/settings';
-import { hapticFeedback } from '@telegram-apps/sdk';
+import { hapticFeedback } from '@telegram-apps/sdk-react';
 import { playPopSound } from '../lib/audio';
 import { type PracticeMode, savePracticeMode } from '../lib/practiceMode';
 import { useT } from '../lib/i18n/useT';
