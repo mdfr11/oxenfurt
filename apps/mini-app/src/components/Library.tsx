@@ -12,6 +12,8 @@ import type {
 } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
+import { useT } from '../lib/i18n/useT'
+import { t as tFn, type TKey } from '../lib/i18n'
 
 interface LibraryProps {
   onExit: () => void
@@ -41,6 +43,7 @@ interface SourceEntry {
 }
 
 export function Library({ onExit }: LibraryProps) {
+  const t = useT()
   const queryClient = useQueryClient()
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
@@ -137,13 +140,13 @@ export function Library({ onExit }: LibraryProps) {
         <button
           onClick={onExit}
           className="w-10 h-10 flex items-center justify-center rounded-full bg-app-surface border border-app-border active:scale-90 transition-transform"
-          aria-label="Назад"
+          aria-label={t('common.back')}
         >
           <ArrowLeft size={18} />
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold leading-none">Карточки</h1>
-          <p className="text-xs text-app-hint mt-1">{total} {pluralize(total)}</p>
+          <h1 className="text-xl font-bold leading-none">{t('library.title')}</h1>
+          <p className="text-xs text-app-hint mt-1">{t(plurKey(total, 'library.count_one', 'library.count_few', 'library.count_many'), { n: total })}</p>
         </div>
       </div>
 
@@ -155,7 +158,7 @@ export function Library({ onExit }: LibraryProps) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск по слову или переводу"
+            placeholder={t('library.search_placeholder')}
             className="w-full pl-10 pr-3 py-3 rounded-2xl bg-app-surface border border-app-border text-sm placeholder:text-app-hint focus:outline-none focus:border-app-primary"
           />
         </div>
@@ -164,29 +167,29 @@ export function Library({ onExit }: LibraryProps) {
       {/* Filter chips */}
       <div className="px-4 pb-3 flex gap-2 overflow-x-auto scrollbar-none">
         <FilterChip active={typeFilter === 'all'} onClick={() => setTypeFilter('all')}>
-          Все
+          {t('library.filter_all')}
         </FilterChip>
         <FilterChip active={typeFilter === 'vocab'} onClick={() => setTypeFilter('vocab')}>
-          Слова
+          {t('library.filter_vocab')}
         </FilterChip>
         <FilterChip active={typeFilter === 'phrase'} onClick={() => setTypeFilter('phrase')}>
-          Фразы
+          {t('library.filter_phrase')}
         </FilterChip>
         <FilterChip active={typeFilter === 'theory'} onClick={() => setTypeFilter('theory')}>
-          Теория
+          {t('library.filter_theory')}
         </FilterChip>
         <div className="w-px bg-app-border self-stretch mx-1" />
         <FilterChip
           active={statusFilter === 'active'}
           onClick={() => setStatusFilter('active')}
         >
-          Активные
+          {t('library.filter_active')}
         </FilterChip>
         <FilterChip
           active={statusFilter === 'archived'}
           onClick={() => setStatusFilter('archived')}
         >
-          Архив
+          {t('library.filter_archived')}
         </FilterChip>
         <div className="w-px bg-app-border self-stretch mx-1" />
         <button
@@ -199,16 +202,16 @@ export function Library({ onExit }: LibraryProps) {
         >
           <BookOpen size={12} />
           {sourceFilter === null
-            ? 'По уроку'
+            ? t('library.filter_source_default')
             : sourceFilter === '__none__'
-              ? 'Без источника'
+              ? t('library.filter_source_none')
               : sourceFilter}
         </button>
         {sourceFilter !== null && (
           <button
             onClick={() => setSourceFilter(null)}
             className="px-2 rounded-full bg-app-surface border border-app-border text-app-hint active:scale-95"
-            aria-label="Сбросить фильтр уроков"
+            aria-label={t('library.aria_clear_source')}
           >
             <X size={12} />
           </button>
@@ -223,11 +226,11 @@ export function Library({ onExit }: LibraryProps) {
           </div>
         ) : error ? (
           <div className="text-center text-app-hint py-12 text-sm">
-            Не удалось загрузить
+            {t('library.empty_failed')}
           </div>
         ) : cards.length === 0 ? (
           <div className="text-center text-app-hint py-12 text-sm">
-            Ничего не найдено
+            {t('library.empty_not_found')}
           </div>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -281,6 +284,7 @@ function SourcePickerSheet({
   onPick: (source: string | null) => void
   onClose: () => void
 }) {
+  const t = useT()
   return (
     <div
       className="fixed inset-0 bg-black/40 z-50 flex items-end"
@@ -295,24 +299,24 @@ function SourcePickerSheet({
           <div className="w-10 h-1 rounded-full bg-app-border" />
         </div>
         <div className="px-6 pb-4 flex flex-col gap-2">
-          <h2 className="text-lg font-bold mb-2">Фильтр по уроку</h2>
+          <h2 className="text-lg font-bold mb-2">{t('library.source_picker_title')}</h2>
           <button
             onClick={() => onPick(null)}
             className={`text-left px-4 py-3 rounded-xl border ${
               current === null ? 'bg-app-primary/10 border-app-primary text-app-primary' : 'bg-app-surface border-app-border text-app-text'
             } active:scale-[0.98] transition-transform`}
           >
-            <div className="font-semibold">Все карточки</div>
-            <div className="text-xs text-app-hint mt-0.5">Без ограничения по уроку</div>
+            <div className="font-semibold">{t('library.source_picker_all')}</div>
+            <div className="text-xs text-app-hint mt-0.5">{t('library.source_picker_all_hint')}</div>
           </button>
           {sources.length === 0 ? (
             <p className="text-app-hint text-sm text-center py-6">
-              Пока нет уроков
+              {t('library.source_picker_empty')}
             </p>
           ) : (
             sources.map((s) => {
               const key = s.source ?? '__none__'
-              const label = s.source ?? 'Без источника'
+              const label = s.source ?? t('library.no_source_bucket')
               const isActive = current === key
               return (
                 <button
@@ -344,6 +348,7 @@ function SourcePickerSheet({
 }
 
 function CardListItem({ card, onOpen }: { card: CardListDto; onOpen: () => void }) {
+  const t = useT()
   const title =
     card.type === 'vocab'
       ? (card.payload as VocabPayload).term
@@ -376,7 +381,7 @@ function CardListItem({ card, onOpen }: { card: CardListDto; onOpen: () => void 
       </div>
       {card.reps > 0 && (
         <div className="text-[10px] text-app-hint mt-2 opacity-70">
-          Повторений: {card.reps} · Ошибок: {card.lapses}
+          {t('library.detail_reviews')}: {card.reps} · {t('library.detail_lapses')}: {card.lapses}
         </div>
       )}
     </button>
@@ -396,6 +401,7 @@ function CardDetailSheet({
   archiving: boolean
   onJumpToSource: (source: string | null) => void
 }) {
+  const t = useT()
   const vocab = card.type === 'vocab' ? (card.payload as VocabPayload) : null
   const phrase = card.type === 'phrase' ? (card.payload as PhrasePayload) : null
   const theory = card.type === 'theory' ? (card.payload as TheoryPayload) : null
@@ -417,12 +423,12 @@ function CardDetailSheet({
           {vocab && (
             <>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Слово</div>
+                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_word')}</div>
                 <h2 className="text-2xl font-bold">{vocab.term}</h2>
                 <p className="text-sm text-app-hint mt-1">{vocab.translation}</p>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Из контекста</div>
+                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_context')}</div>
                 <p className="text-sm leading-relaxed">«{vocab.context_sentence}»</p>
               </div>
             </>
@@ -430,7 +436,7 @@ function CardDetailSheet({
           {phrase && (
             <>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Фраза</div>
+                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_phrase')}</div>
                 <h2 className="text-xl font-bold leading-snug">{phrase.phrase}</h2>
                 <p className="text-sm text-app-hint mt-1">{phrase.translation}</p>
                 {phrase.pattern && (
@@ -438,7 +444,7 @@ function CardDetailSheet({
                 )}
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Из контекста</div>
+                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_context')}</div>
                 <p className="text-sm leading-relaxed">«{phrase.context_sentence}»</p>
               </div>
             </>
@@ -446,18 +452,18 @@ function CardDetailSheet({
           {theory && (
             <>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Вопрос</div>
+                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_question')}</div>
                 <Markdown className="text-lg font-bold leading-snug">
                   {theory.question}
                 </Markdown>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Ответ</div>
+                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_answer')}</div>
                 <Markdown className="text-sm leading-relaxed">{theory.answer}</Markdown>
               </div>
               {card.source_quote && (
                 <div>
-                  <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">Из урока</div>
+                  <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_from_lesson')}</div>
                   <Markdown className="text-xs italic text-app-hint leading-relaxed" inline>
                     {`«${card.source_quote}»`}
                   </Markdown>
@@ -467,12 +473,12 @@ function CardDetailSheet({
           )}
 
           <div className="border-t border-app-border pt-4 text-[11px] text-app-hint space-y-1">
-            <div>Повторений: <span className="font-semibold text-app-text">{card.reps}</span></div>
-            <div>Ошибок: <span className="font-semibold text-app-text">{card.lapses}</span></div>
-            <div>Следующее повторение: <span className="font-semibold text-app-text">{formatDue(card.due)}</span></div>
+            <div>{t('library.detail_reviews')}: <span className="font-semibold text-app-text">{card.reps}</span></div>
+            <div>{t('library.detail_lapses')}: <span className="font-semibold text-app-text">{card.lapses}</span></div>
+            <div>{t('library.detail_next_review')}: <span className="font-semibold text-app-text">{formatDue(card.due, t)}</span></div>
             {card.source && (
               <div>
-                Источник:{' '}
+                {t('library.detail_source')}:{' '}
                 <button
                   onClick={() => onJumpToSource(card.source)}
                   className="font-semibold text-app-primary underline underline-offset-2 active:opacity-70"
@@ -490,12 +496,12 @@ function CardDetailSheet({
               className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border border-rose-500/30 text-rose-500 font-semibold active:scale-95 transition-transform disabled:opacity-50"
             >
               <Archive size={18} />
-              {archiving ? 'Архивирую…' : 'В архив'}
+              {archiving ? t('library.btn_archiving') : t('library.btn_archive')}
             </button>
           )}
           {card.status === 'archived' && (
             <div className="text-center text-app-hint text-sm py-2">
-              Карточка в архиве — не показывается в сессиях
+              {t('library.archived_notice')}
             </div>
           )}
         </div>
@@ -519,36 +525,39 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
   )
 }
 
-function pluralize(n: number): string {
+// Russian-style plural picker generalised to take three locale keys.
+// In English locales the dictionary points _few_ and _many_ at the same
+// "N items" phrase, so callers don't need to know the locale.
+function plurKey<A extends TKey, B extends TKey, C extends TKey>(
+  n: number, one: A, few: B, many: C,
+): A | B | C {
   const mod100 = n % 100
-  if (mod100 >= 11 && mod100 <= 14) return 'карточек'
+  if (mod100 >= 11 && mod100 <= 14) return many
   const mod10 = n % 10
-  if (mod10 === 1) return 'карточка'
-  if (mod10 >= 2 && mod10 <= 4) return 'карточки'
-  return 'карточек'
+  if (mod10 === 1) return one
+  if (mod10 >= 2 && mod10 <= 4) return few
+  return many
 }
 
-function formatDue(iso: string): string {
+function formatDue(iso: string, t: ReturnType<typeof useT>): string {
   const due = new Date(iso)
   const now = new Date()
   const diffMs = due.getTime() - now.getTime()
-  if (diffMs <= 0) return 'сейчас'
+  if (diffMs <= 0) return t('date.now')
   const days = Math.round(diffMs / (1000 * 60 * 60 * 24))
   if (days === 0) {
     const hours = Math.round(diffMs / (1000 * 60 * 60))
-    return hours <= 0 ? `${Math.round(diffMs / 60000)}м` : `через ${hours}ч`
+    return hours <= 0
+      ? t('date.in_minutes', { n: Math.round(diffMs / 60_000) })
+      : t('date.in_hours', { n: hours })
   }
-  if (days === 1) return 'завтра'
-  if (days < 30) return `через ${days} ${pluralizeDays(days)}`
-  const months = Math.round(days / 30)
-  return `через ${months}мес`
+  if (days === 1) return t('date.tomorrow')
+  if (days < 30) {
+    return t(plurKey(days, 'date.in_days_one', 'date.in_days_few', 'date.in_days_many'), { n: days })
+  }
+  return t('date.in_months', { n: Math.round(days / 30) })
 }
 
-function pluralizeDays(n: number): string {
-  const mod100 = n % 100
-  if (mod100 >= 11 && mod100 <= 14) return 'дней'
-  const mod10 = n % 10
-  if (mod10 === 1) return 'день'
-  if (mod10 >= 2 && mod10 <= 4) return 'дня'
-  return 'дней'
-}
+// Silence the imported-but-unused alias on the rare path where it's not
+// referenced (kept around for future helpers that might need direct t()).
+void tFn

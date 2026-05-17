@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { sendData } from '@telegram-apps/sdk-react';
 import { CheckCircle2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { useT } from '../lib/i18n/useT';
+import type { TKey } from '../lib/i18n';
 
 interface SummaryProps {
   stats: { total: number; correct: number };
@@ -10,6 +12,7 @@ interface SummaryProps {
 }
 
 export function Summary({ stats, onFinish, onRepeatHard }: SummaryProps) {
+  const t = useT()
   const accuracy = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 100;
   const wrong = stats.total - stats.correct;
   const sentRef = useRef(false)
@@ -60,48 +63,48 @@ export function Summary({ stats, onFinish, onRepeatHard }: SummaryProps) {
         <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 mb-6">
           <CheckCircle2 size={40} />
         </div>
-        <h1 className="text-2xl font-bold mb-2">Сессия завершена</h1>
+        <h1 className="text-2xl font-bold mb-2">{t('summary.title')}</h1>
         <p className="text-app-hint mb-10">
-          Ты повторил {stats.total} {pluralize(stats.total, ['карточку', 'карточки', 'карточек'])}.
+          {t(plurSummary(stats.total), { n: stats.total })}
         </p>
 
         <div className="w-full grid grid-cols-2 gap-4 bg-app-surface border border-app-border p-6 rounded-2xl shadow-sm">
           <div className="flex flex-col">
             <span className="text-2xl font-bold">{accuracy}%</span>
-            <span className="text-[10px] uppercase tracking-wider text-app-hint font-bold mt-1">Точность</span>
+            <span className="text-[10px] uppercase tracking-wider text-app-hint font-bold mt-1">{t('summary.accuracy')}</span>
           </div>
           <div className="flex flex-col">
             <span className="text-2xl font-bold">{wrong}</span>
-            <span className="text-[10px] uppercase tracking-wider text-app-hint font-bold mt-1">Ошибок</span>
+            <span className="text-[10px] uppercase tracking-wider text-app-hint font-bold mt-1">{t('summary.lapses')}</span>
           </div>
         </div>
       </div>
 
       <div className="flex flex-col gap-3">
         {wrong > 0 && (
-          <button 
+          <button
             className="w-full bg-app-surface border border-app-border text-app-text py-4 rounded-2xl font-semibold active:scale-95 transition-transform"
             onClick={onRepeatHard}
           >
-            Повторить трудные
+            {t('summary.btn_repeat_hard')}
           </button>
         )}
-        <button 
+        <button
           className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
           onClick={onFinish}
         >
-          Завершить
+          {t('summary.btn_done')}
         </button>
       </div>
     </div>
   );
 }
 
-function pluralize(n: number, forms: [string, string, string]): string {
+function plurSummary(n: number): TKey {
   const mod100 = n % 100
-  if (mod100 >= 11 && mod100 <= 14) return forms[2]
+  if (mod100 >= 11 && mod100 <= 14) return 'summary.subtitle_many'
   const mod10 = n % 10
-  if (mod10 === 1) return forms[0]
-  if (mod10 >= 2 && mod10 <= 4) return forms[1]
-  return forms[2]
+  if (mod10 === 1) return 'summary.subtitle_one'
+  if (mod10 >= 2 && mod10 <= 4) return 'summary.subtitle_few'
+  return 'summary.subtitle_many'
 }

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Save } from 'lucide-react'
 import type { DueCardDto, VocabPayload, TheoryPayload, PhrasePayload } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
+import { useT } from '../lib/i18n/useT'
 
 interface Props {
   card: DueCardDto | null
@@ -16,6 +17,7 @@ interface Props {
 // stay untouched — purely a payload edit. Term offsets for vocab are
 // recomputed server-side from the new term + sentence.
 export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
+  const t = useT()
   const [term, setTerm] = useState('')
   const [translation, setTranslation] = useState('')
   const [contextSentence, setContextSentence] = useState('')
@@ -106,7 +108,7 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
       onSaved({ ...card, payload: data.card.payload })
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось сохранить')
+      setError(e instanceof Error ? e.message : t('edit.error_failed'))
     } finally {
       setSaving(false)
     }
@@ -131,11 +133,11 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
             className="fixed bottom-0 inset-x-0 bg-app-bg rounded-t-3xl p-6 z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] flex flex-col max-w-[500px] mx-auto max-h-[90vh] overflow-y-auto"
           >
             <div className="flex justify-between items-center mb-4 text-app-text">
-              <h2 className="text-xl font-bold">Редактировать</h2>
+              <h2 className="text-xl font-bold">{t('edit.title')}</h2>
               <button
                 onClick={onClose}
                 className="p-2 -mr-2 text-app-hint active:scale-95 transition-transform"
-                aria-label="Закрыть"
+                aria-label={t('common.close')}
               >
                 <X size={20} />
               </button>
@@ -144,7 +146,7 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
             <div className="flex flex-col gap-3">
               {card.type === 'vocab' ? (
                 <>
-                  <Field label="Слово">
+                  <Field label={t('edit.field_term')}>
                     <input
                       type="text"
                       value={term}
@@ -154,7 +156,7 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                       autoCorrect="off"
                     />
                   </Field>
-                  <Field label="Перевод">
+                  <Field label={t('edit.field_translation')}>
                     <input
                       type="text"
                       value={translation}
@@ -162,7 +164,7 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                       className="w-full bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary"
                     />
                   </Field>
-                  <Field label="Контекст-предложение">
+                  <Field label={t('edit.field_context')}>
                     <textarea
                       value={contextSentence}
                       onChange={(e) => setContextSentence(e.target.value)}
@@ -171,12 +173,12 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                     />
                   </Field>
                   <p className="text-[11px] text-app-hint leading-snug">
-                    Позиция слова в предложении пересчитается автоматически.
+                    {t('edit.hint_offset')}
                   </p>
                 </>
               ) : card.type === 'phrase' ? (
                 <>
-                  <Field label="Фраза">
+                  <Field label={t('edit.field_phrase')}>
                     <textarea
                       value={phraseText}
                       onChange={(e) => setPhraseText(e.target.value)}
@@ -186,7 +188,7 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                       autoCorrect="off"
                     />
                   </Field>
-                  <Field label="Перевод">
+                  <Field label={t('edit.field_translation')}>
                     <input
                       type="text"
                       value={translation}
@@ -194,7 +196,7 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                       className="w-full bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary"
                     />
                   </Field>
-                  <Field label="Контекст-предложение">
+                  <Field label={t('edit.field_context')}>
                     <textarea
                       value={contextSentence}
                       onChange={(e) => setContextSentence(e.target.value)}
@@ -202,12 +204,12 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                       className="w-full bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary resize-none"
                     />
                   </Field>
-                  <Field label="Шаблон (опционально)">
+                  <Field label={t('edit.field_pattern')}>
                     <input
                       type="text"
                       value={pattern}
                       onChange={(e) => setPattern(e.target.value)}
-                      placeholder="напр. to take {sth} into account"
+                      placeholder={t('edit.field_pattern_placeholder')}
                       className="w-full bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 font-mono text-sm focus:outline-none focus:border-app-primary"
                       autoCapitalize="off"
                       autoCorrect="off"
@@ -216,7 +218,7 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                 </>
               ) : (
                 <>
-                  <Field label="Вопрос">
+                  <Field label={t('edit.field_question')}>
                     <textarea
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
@@ -224,7 +226,7 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                       className="w-full bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary resize-none"
                     />
                   </Field>
-                  <Field label="Ответ (markdown)">
+                  <Field label={t('edit.field_answer')}>
                     <textarea
                       value={answer}
                       onChange={(e) => setAnswer(e.target.value)}
@@ -247,7 +249,7 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
                 className="mt-2 flex items-center justify-center gap-2 py-3 rounded-2xl bg-app-primary text-app-primary-text font-semibold active:scale-95 transition-transform disabled:opacity-50"
               >
                 <Save size={16} />
-                {saving ? 'Сохраняю…' : 'Сохранить'}
+                {saving ? t('edit.btn_saving') : t('edit.btn_save')}
               </button>
             </div>
 

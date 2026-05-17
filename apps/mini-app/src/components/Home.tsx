@@ -171,7 +171,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
         <button 
           onClick={() => setIsSettingsOpen(true)}
           className="p-2 text-app-hint active:opacity-60 transition-opacity bg-app-surface/50 border border-app-border rounded-xl shadow-sm"
-          aria-label="Настройки"
+          aria-label={t('home.aria_settings')}
         >
           <Settings size={22} />
         </button>
@@ -232,7 +232,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
                   }`}>
                     {reviewed}
                   </span>
-                  <span className="text-[11px] font-black uppercase tracking-[0.25em] text-app-hint mt-3 opacity-60">Выполнено</span>
+                  <span className="text-[11px] font-black uppercase tracking-[0.25em] text-app-hint mt-3 opacity-60">{t('home.ring_done_label')}</span>
                 </motion.div>
               </>
             ) : (

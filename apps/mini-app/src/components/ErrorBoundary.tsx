@@ -30,10 +30,13 @@ export class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) return this.props.fallback(error, this.reset)
       return (
         <div className="h-screen flex flex-col items-center justify-center p-6 text-center bg-tg-bg">
-          <h2 className="text-xl font-bold mb-2">Что-то пошло не так</h2>
+          {/* ErrorBoundary intentionally bypasses i18n: it can fire before
+              the locale subsystem is ready (or because of it). Bilingual
+              labels keep it readable to both Russian and English users. */}
+          <h2 className="text-xl font-bold mb-2">Something went wrong / Что-то пошло не так</h2>
           <pre className="text-xs text-tg-hint mb-6 max-w-full overflow-x-auto">{error.message}</pre>
           <button onClick={this.reset} className="text-tg-link font-semibold">
-            Перезагрузить
+            Reload / Перезагрузить
           </button>
         </div>
       )

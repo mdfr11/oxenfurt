@@ -32,6 +32,7 @@ import { clearSession, loadSession, saveSession } from '../lib/sessionPersist';
 import { EditCardSheet } from './EditCardSheet';
 import { RelatedCardsSheet } from './RelatedCardsSheet';
 import { QuestionSheet } from './QuestionSheet';
+import { useT } from '../lib/i18n/useT';
 
 interface PracticeSessionProps {
   mode: PracticeMode;
@@ -62,6 +63,7 @@ function safeHaptic(method: string, arg?: unknown): void {
 }
 
 export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionProps) {
+  const t = useT();
   // Prevent double-exit or lingering handlers during transition
   const [isExiting, setIsExiting] = useState(false);
   const [isSrsHelpOpen, setIsSrsHelpOpen] = useState(false);
@@ -213,11 +215,11 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         if (isExiting) return;
         try {
           const result = await popup.open({
-            title: 'Завершить сессию?',
-            message: 'Прогресс сохранён. Можно вернуться позже.',
+            title: t('practice.exit_title'),
+            message: t('practice.exit_message'),
             buttons: [
               { id: 'stay', type: 'cancel' },
-              { id: 'leave', type: 'destructive', text: 'Выйти' },
+              { id: 'leave', type: 'destructive', text: t('practice.exit_leave') },
             ],
           })
           if (result === 'leave') handleExit()
@@ -658,18 +660,18 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         <div className="w-20 h-20 bg-rose-500/10 border border-rose-500/30 rounded-full flex items-center justify-center text-rose-500 shadow-sm mb-6 text-3xl">
           ⚠
         </div>
-        <h2 className="text-2xl font-bold mb-2">Не удалось загрузить</h2>
+        <h2 className="text-2xl font-bold mb-2">{t('practice.error_load_title')}</h2>
         <p className="text-app-hint mb-2 max-w-[260px] text-sm">
           {error instanceof Error ? error.message : String(error)}
         </p>
         <p className="text-app-hint mb-10 max-w-[260px] text-xs opacity-60">
-          Проверь подключение или попробуй ещё раз.
+          {t('practice.error_load_hint')}
         </p>
         <button
           onClick={handleExit}
           className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
         >
-          На главную
+          {t('practice.btn_to_home')}
         </button>
       </div>
     );
@@ -682,12 +684,10 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
           <Coffee size={36} strokeWidth={1.5} />
         </div>
         <h2 className="text-2xl font-bold mb-2">
-          {bypassDue ? 'Совсем пусто' : 'На сегодня всё'}
+          {bypassDue ? t('practice.empty_title_zero') : t('practice.empty_title_done')}
         </h2>
         <p className="text-app-hint mb-10 max-w-[260px]">
-          {bypassDue
-            ? 'Активных карточек нет — загрузи новый транскрипт в бот.'
-            : 'FSRS перенёс остальные карточки на потом. Можно отдохнуть — а можно потренироваться вне расписания.'}
+          {bypassDue ? t('practice.empty_hint_zero') : t('practice.empty_hint_done')}
         </p>
         <div className="flex flex-col gap-3 w-full">
           {!bypassDue && (
@@ -699,7 +699,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
               }}
               className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
             >
-              Тренировать вне расписания
+              {t('practice.empty_btn_bypass')}
             </button>
           )}
           <button
@@ -710,7 +710,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                 : 'border border-app-border bg-app-surface text-app-text'
             }`}
           >
-            На главную
+            {t('practice.empty_btn_home')}
           </button>
         </div>
       </div>
@@ -771,27 +771,27 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       </div>
 
       <div className="p-4 flex justify-between items-center text-[10px] text-app-hint uppercase tracking-wider font-bold">
-        <span>Карточка {currentIndex + 1} / {queue.length}</span>
+        <span>{t('practice.card_n_of_m', { current: currentIndex + 1, total: queue.length })}</span>
         <div className="flex items-center gap-3">
           {currentCard!.type === 'vocab' && (
             <span className="text-app-primary flex items-center gap-1">
-              <Type size={12} strokeWidth={2.5} /> Word
+              <Type size={12} strokeWidth={2.5} /> {t('practice.word_badge')}
             </span>
           )}
           {currentCard!.type === 'phrase' && (
             <span className="text-app-primary flex items-center gap-1">
-              <Quote size={12} strokeWidth={2.5} /> Phrase
+              <Quote size={12} strokeWidth={2.5} /> {t('practice.phrase_badge_short')}
             </span>
           )}
           {currentCard!.type === 'theory' && (
             <span className="text-app-primary flex items-center gap-1">
-              <BookOpen size={12} strokeWidth={2.5} /> Theory
+              <BookOpen size={12} strokeWidth={2.5} /> {t('practice.theory_badge_short')}
             </span>
           )}
           <button
             onClick={handleExit}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-app-surface border border-app-border text-app-hint shadow-sm active:scale-95 transition-transform"
-            aria-label="Завершить сессию"
+            aria-label={t('practice.exit_button')}
           >
             <X size={16} strokeWidth={2.5} />
           </button>
@@ -871,13 +871,13 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         onChange={setTypedAnswer}
                         onSubmit={handleAnswerSubmit}
                         onGiveUp={handleGiveUp}
-                        placeholder="Введи пропущенное слово"
+                        placeholder={t('practice.placeholder_cloze')}
                         matchResult={matchResult}
                       />
                     </>
                   ) : variant === 'cloze' && phrase && phraseCloze ? (
                     <>
-                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Допиши фразу</div>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_fill_phrase')}</div>
                       <p className="text-2xl text-app-text leading-snug font-semibold text-center">
                         {phraseCloze.before}
                         {phraseCloze.before && ' '}
@@ -894,13 +894,13 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         onChange={setTypedAnswer}
                         onSubmit={handleAnswerSubmit}
                         onGiveUp={handleGiveUp}
-                        placeholder="Введи пропущенное слово"
+                        placeholder={t('practice.placeholder_cloze')}
                         matchResult={matchResult}
                       />
                     </>
                   ) : variant === 'translation' && phrase ? (
                     <>
-                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Скажи фразу</div>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_translate_to', { lang: t(`lang.${getSettings().learningLanguage}_short`) })}</div>
                       <h2 className="text-xl font-bold leading-snug text-center">{phrase.translation}</h2>
                       <TypedAnswerField
                         inputRef={inputRef}
@@ -908,37 +908,37 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         onChange={setTypedAnswer}
                         onSubmit={handleAnswerSubmit}
                         onGiveUp={handleGiveUp}
-                        placeholder="Напиши по-английски"
+                        placeholder={t('practice.placeholder_typed', { lang: t(`lang.${getSettings().learningLanguage}_short`) })}
                         matchResult={matchResult}
                       />
                     </>
                   ) : variant === 'listening' && phrase ? (
                     <>
-                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Слушай фразу</div>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_listen_phrase')}</div>
                       <button
                         onClick={handleReplayAudio}
                         className="w-20 h-20 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-3xl active:scale-95 transition-transform"
-                        aria-label="Replay"
+                        aria-label={t('practice.tap_to_replay')}
                       >
                         🔊
                       </button>
                       <div onClick={(e) => e.stopPropagation()}>
                         <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
                       </div>
-                      <p className="text-[11px] text-app-hint mt-2">Тап чтобы повторить</p>
+                      <p className="text-[11px] text-app-hint mt-2">{t('practice.tap_to_replay')}</p>
                       <TypedAnswerField
                         inputRef={inputRef}
                         value={typedAnswer}
                         onChange={setTypedAnswer}
                         onSubmit={handleAnswerSubmit}
                         onGiveUp={handleGiveUp}
-                        placeholder="Напиши что услышал"
+                        placeholder={t('practice.placeholder_listening')}
                         matchResult={matchResult}
                       />
                     </>
                   ) : variant === 'translation' && vocab ? (
                     <>
-                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Перевод</div>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_translation')}</div>
                       <h2 className="text-2xl font-bold leading-snug">{vocab.translation}</h2>
                       <TypedAnswerField
                         inputRef={inputRef}
@@ -946,37 +946,37 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         onChange={setTypedAnswer}
                         onSubmit={handleAnswerSubmit}
                         onGiveUp={handleGiveUp}
-                        placeholder="Напиши по-английски"
+                        placeholder={t('practice.placeholder_typed', { lang: t(`lang.${getSettings().learningLanguage}_short`) })}
                         matchResult={matchResult}
                       />
                     </>
                   ) : variant === 'listening' && vocab ? (
                     <>
-                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Слушай</div>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_listen')}</div>
                       <button
                         onClick={handleReplayAudio}
                         className="w-20 h-20 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-3xl active:scale-95 transition-transform"
-                        aria-label="Replay"
+                        aria-label={t('practice.tap_to_replay')}
                       >
                         🔊
                       </button>
                       <div onClick={(e) => e.stopPropagation()}>
                         <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
                       </div>
-                      <p className="text-[11px] text-app-hint mt-2">Тап чтобы повторить</p>
+                      <p className="text-[11px] text-app-hint mt-2">{t('practice.tap_to_replay')}</p>
                       <TypedAnswerField
                         inputRef={inputRef}
                         value={typedAnswer}
                         onChange={setTypedAnswer}
                         onSubmit={handleAnswerSubmit}
                         onGiveUp={handleGiveUp}
-                        placeholder="Напиши что услышал"
+                        placeholder={t('practice.placeholder_listening')}
                         matchResult={matchResult}
                       />
                     </>
                   ) : vocab && flipForProduce ? (
                     <>
-                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Скажи по-английски</div>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_produce_label', { lang: t(`lang.${getSettings().learningLanguage}_short`) })}</div>
                       <h2 className="text-3xl font-bold tracking-tight text-app-text leading-snug text-center">
                         {vocab.translation}
                       </h2>
@@ -993,7 +993,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                             handleReplayAudio()
                           }}
                           className="w-10 h-10 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform"
-                          aria-label="Произнести слово"
+                          aria-label={t('practice.tap_to_replay')}
                         >
                           🔊
                         </button>
@@ -1007,7 +1007,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                     </>
                   ) : phrase ? (
                     <>
-                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">Фраза</div>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_phrase')}</div>
                       <div className="flex items-center gap-3 flex-wrap justify-center">
                         <h2 className="text-2xl font-bold tracking-tight leading-snug text-center">
                           {phrase.phrase}
@@ -1018,7 +1018,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                             handleReplayAudio()
                           }}
                           className="w-9 h-9 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform shrink-0"
-                          aria-label="Произнести фразу"
+                          aria-label={t('practice.tap_to_replay')}
                         >
                           🔊
                         </button>
@@ -1052,7 +1052,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
                   {!expectsTypedAnswer && (
                     <div className="absolute inset-x-0 bottom-4 text-[9px] text-app-hint opacity-30 uppercase font-bold tracking-[0.3em] pointer-events-none text-center">
-                      Тап чтобы открыть
+                      {t('practice.tap_to_reveal')}
                     </div>
                   )}
                 </motion.div>
@@ -1072,7 +1072,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         setIsEditOpen(true)
                       }}
                       className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
-                      aria-label="Редактировать карточку"
+                      aria-label={t('practice.action_edit')}
                     >
                       <Pencil size={14} />
                     </button>
@@ -1083,7 +1083,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                           setIsRelatedOpen(true)
                         }}
                         className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
-                        aria-label="Карточки из того же урока"
+                        aria-label={t('practice.action_related')}
                       >
                         <Layers size={14} />
                       </button>
@@ -1094,7 +1094,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                         setIsQuestionOpen(true)
                       }}
                       className="w-8 h-8 rounded-full bg-app-surface text-app-hint border border-app-border flex items-center justify-center active:scale-90 transition-transform"
-                      aria-label="Задать вопрос агенту"
+                      aria-label={t('practice.action_question')}
                     >
                       <HelpCircle size={14} />
                     </button>
@@ -1129,7 +1129,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                             handleReplayAudio()
                           }}
                           className="w-10 h-10 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform"
-                          aria-label="Произнести слово"
+                          aria-label={t('practice.tap_to_replay')}
                         >
                           🔊
                         </button>
@@ -1161,7 +1161,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                             handleReplayAudio()
                           }}
                           className="w-9 h-9 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-base active:scale-90 transition-transform shrink-0"
-                          aria-label="Произнести фразу"
+                          aria-label={t('practice.tap_to_replay')}
                         >
                           🔊
                         </button>
@@ -1182,7 +1182,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       {currentCard!.source_quote && (
                         <div className="mt-4 pt-3 border-t border-app-border">
                           <p className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">
-                            Из урока
+                            {t('library.detail_from_lesson')}
                           </p>
                           <Markdown
                             className="text-sm text-app-hint italic leading-relaxed"
@@ -1212,21 +1212,21 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
             their typed answer. Empirically the most common confusion. */}
         <div className="flex items-center justify-center gap-1.5 pb-2 px-3">
           <p className="text-[10px] text-app-hint uppercase tracking-widest font-bold">
-            Как легко вспомнил? · тап = далее
+            {t('practice.rating_hint')}
           </p>
           <button 
             onClick={() => setIsSrsHelpOpen(true)}
             className="text-app-hint active:text-app-primary transition-colors"
-            aria-label="Что значат числа?"
+            aria-label={t('practice.intervals_help')}
           >
             <Info size={14} />
           </button>
         </div>
         <div className="flex gap-2 h-16 relative">
-          <RatingButton label="Снова" sub={intervalLabels?.[RATING.Again] ?? '…'} bg="bg-rose-500/10" color="text-rose-600 dark:text-rose-400" onClick={() => handleRate(RATING.Again)} />
-          <RatingButton label="Трудно" sub={intervalLabels?.[RATING.Hard] ?? '…'} bg="bg-orange-500/10" color="text-orange-600 dark:text-orange-400" onClick={() => handleRate(RATING.Hard)} />
-          <RatingButton label="Хорошо" sub={intervalLabels?.[RATING.Good] ?? '…'} bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" onClick={() => handleRate(RATING.Good)} />
-          <RatingButton label="Легко" sub={intervalLabels?.[RATING.Easy] ?? '…'} bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" onClick={() => handleRate(RATING.Easy)} />
+          <RatingButton label={t('practice.rating_again')} sub={intervalLabels?.[RATING.Again] ?? '…'} bg="bg-rose-500/10" color="text-rose-600 dark:text-rose-400" onClick={() => handleRate(RATING.Again)} />
+          <RatingButton label={t('practice.rating_hard')} sub={intervalLabels?.[RATING.Hard] ?? '…'} bg="bg-orange-500/10" color="text-orange-600 dark:text-orange-400" onClick={() => handleRate(RATING.Hard)} />
+          <RatingButton label={t('practice.rating_good')} sub={intervalLabels?.[RATING.Good] ?? '…'} bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" onClick={() => handleRate(RATING.Good)} />
+          <RatingButton label={t('practice.rating_easy')} sub={intervalLabels?.[RATING.Easy] ?? '…'} bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" onClick={() => handleRate(RATING.Easy)} />
 
           <AnimatePresence>
             {pendingReview && (
@@ -1237,11 +1237,11 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                 className="absolute inset-x-2 -top-[4.5rem] flex items-center justify-between bg-app-text text-app-bg px-4 py-3 rounded-xl shadow-lg z-20 pointer-events-auto"
               >
                 <span className="text-sm font-medium">
-                  Оценено: <span className="font-bold">
-                    {pendingReview.rating === RATING.Again && 'Снова'}
-                    {pendingReview.rating === RATING.Hard && 'Трудно'}
-                    {pendingReview.rating === RATING.Good && 'Хорошо'}
-                    {pendingReview.rating === RATING.Easy && 'Легко'}
+                  {t('practice.rated_label')}: <span className="font-bold">
+                    {pendingReview.rating === RATING.Again && t('practice.rating_again')}
+                    {pendingReview.rating === RATING.Hard && t('practice.rating_hard')}
+                    {pendingReview.rating === RATING.Good && t('practice.rating_good')}
+                    {pendingReview.rating === RATING.Easy && t('practice.rating_easy')}
                   </span>
                 </span>
                 <button
@@ -1251,7 +1251,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   }}
                   className="text-sm font-bold text-app-bg bg-white/20 px-3 py-1 rounded-lg active:bg-white/30 transition-colors"
                 >
-                  Отменить
+                  {t('practice.undo')}
                 </button>
               </motion.div>
             )}
@@ -1312,6 +1312,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 }
 
 function SrsHelpSheet({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const t = useT()
   return (
     <AnimatePresence>
       {isOpen && (
@@ -1332,40 +1333,36 @@ function SrsHelpSheet({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
           >
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold flex items-center gap-2">
-                <Sparkles size={20} className="text-amber-500" fill="currentColor" /> Оценки и интервалы
+                <Sparkles size={20} className="text-amber-500" fill="currentColor" /> {t('practice.intervals_title')}
               </h2>
-              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-app-surface border border-app-border text-app-hint shadow-sm active:scale-95 transition-transform">
+              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-app-surface border border-app-border text-app-hint shadow-sm active:scale-95 transition-transform" aria-label={t('common.close')}>
                 <X size={18} />
               </button>
             </div>
 
             <div className="space-y-4 text-sm leading-relaxed">
-              <p>
-                Числа под кнопками (например, <span className="font-bold text-app-primary">10м</span> или <span className="font-bold text-app-primary">4д</span>) — это время, через которое карточка появится снова.
-              </p>
+              <p>{t('practice.intervals_intro')}</p>
               <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-3 bg-app-surface border border-app-border p-4 rounded-2xl">
-                <span className="font-bold text-rose-600 dark:text-rose-400">Снова</span>
-                <span>Ты не вспомнил слово. Оно вернется очень скоро, чтобы закрепить его в памяти.</span>
-                
-                <span className="font-bold text-orange-600 dark:text-orange-400">Трудно</span>
-                <span>Вспомнил с большим трудом. Интервал увеличится лишь немного.</span>
-                
-                <span className="font-bold text-blue-600 dark:text-blue-400">Хорошо</span>
-                <span>Вспомнил после небольшой паузы. Идеальный баланс для обучения.</span>
-                
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">Легко</span>
-                <span>Вспомнил мгновенно. Слово отправится в долгий ящик — интервал вырастет максимально.</span>
+                <span className="font-bold text-rose-600 dark:text-rose-400">{t('practice.rating_again')}</span>
+                <span>{t('practice.intervals_again_desc')}</span>
+
+                <span className="font-bold text-orange-600 dark:text-orange-400">{t('practice.rating_hard')}</span>
+                <span>{t('practice.intervals_hard_desc')}</span>
+
+                <span className="font-bold text-blue-600 dark:text-blue-400">{t('practice.rating_good')}</span>
+                <span>{t('practice.intervals_good_desc')}</span>
+
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{t('practice.rating_easy')}</span>
+                <span>{t('practice.intervals_easy_desc')}</span>
               </div>
-              <p className="text-app-hint text-xs italic mt-2">
-                Алгоритм FSRS подбирает эти интервалы индивидуально для каждой карточки, чтобы ты тратил минимум времени на повторение.
-              </p>
+              <p className="text-app-hint text-xs italic mt-2">{t('practice.intervals_footer')}</p>
             </div>
-            
-            <button 
+
+            <button
               onClick={onClose}
               className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-bold mt-6 active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
             >
-              Понятно
+              {t('practice.intervals_btn_ok')}
             </button>
 
             <div style={{ height: 'calc(1rem + var(--tg-safe-area-inset-bottom, 0px))' }}></div>
@@ -1393,6 +1390,7 @@ function TypedAnswerField({
   placeholder: string
   matchResult: MatchResult | null
 }) {
+  const t = useT();
   const isError = matchResult && matchResult.kind === 'miss';
   const isSuccess = matchResult && (matchResult.kind === 'exact' || matchResult.kind === 'close');
 
@@ -1432,15 +1430,15 @@ function TypedAnswerField({
         // the user try again.
         if (code === 'not-allowed' || code === 'service-not-allowed') {
           setVoiceUnavailable(true);
-          setVoiceHint('Микрофон запрещён. Проверь разрешения Telegram → Микрофон в настройках телефона.');
+          setVoiceHint(t('practice.voice_no_mic'));
         } else if (code === 'network') {
-          setVoiceHint('Нет связи с сервисом распознавания. Проверь интернет.');
+          setVoiceHint(t('practice.voice_no_network'));
         } else if (code === 'no-audio') {
-          setVoiceHint('Микрофон не передал звук. В Telegram WebView это бывает — попробуй открыть приложение через 🌐 в браузере.');
+          setVoiceHint(t('practice.voice_no_audio'));
         } else if (code === 'no-speech' || code === 'no-match') {
-          setVoiceHint('Ничего не услышал. Говори ближе к микрофону.');
+          setVoiceHint(t('practice.voice_no_speech'));
         } else {
-          setVoiceHint('Не получилось: ' + code);
+          setVoiceHint(t('practice.ai_failed') + ': ' + code);
         }
       },
       onEnd: () => {
@@ -1450,7 +1448,7 @@ function TypedAnswerField({
     });
     if (handle === null) {
       setVoiceUnavailable(true);
-      setVoiceHint('Голосовой ввод недоступен в этом браузере.');
+      setVoiceHint(t('practice.voice_unavailable'));
       return;
     }
     recognitionRef.current = handle;
@@ -1500,7 +1498,7 @@ function TypedAnswerField({
                 ? 'bg-rose-500/15 text-rose-500'
                 : 'bg-app-surface text-app-hint active:scale-95'
             }`}
-            aria-label={isListening ? 'Остановить запись' : 'Сказать голосом'}
+            aria-label={isListening ? t('practice.voice_stop') : t('practice.voice_listen')}
           >
             {isListening ? <MicOff size={16} /> : <Mic size={16} />}
           </motion.button>
@@ -1515,24 +1513,25 @@ function TypedAnswerField({
         onClick={onSubmit}
         className="w-full max-w-[240px] py-3 rounded-xl bg-app-primary text-app-primary-text font-semibold active:scale-95 transition-transform"
       >
-        Готово
+        {t('practice.btn_submit')}
       </button>
       <button
         onClick={onGiveUp}
         className="text-[12px] text-app-hint underline underline-offset-4 decoration-app-hint/50 active:opacity-60"
       >
-        Не знаю — показать ответ
+        {t('practice.btn_give_up')}
       </button>
     </>
   )
 }
 
 function SpeedChip({ speed, onCycle }: { speed: TtsSpeed; onCycle: () => void }) {
+  const t = useT()
   return (
     <button
       onClick={onCycle}
       className="text-[10px] uppercase tracking-widest font-bold px-3 py-1 rounded-full border border-app-border text-app-hint active:bg-app-surface active:scale-95 transition-all"
-      aria-label="Скорость произношения"
+      aria-label={t('settings.accent_label')}
     >
       {labelForSpeed(speed)}
     </button>
@@ -1582,10 +1581,11 @@ function ClozeFeedback({
   expected?: string
   hint?: string
 }) {
+  const t = useT()
   if (result.kind === 'exact') {
     return (
       <span className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest">
-        ✓ Точно
+        {t('practice.feedback_exact')}
       </span>
     )
   }
@@ -1593,19 +1593,19 @@ function ClozeFeedback({
     return (
       <div className="flex flex-col items-center gap-1.5">
         <span className="bg-amber-500/15 text-amber-600 dark:text-amber-400 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest">
-          ≈ Близко
+          {t('practice.feedback_close')}
         </span>
-        <span className="text-xs text-app-hint">ты написал: {typedAnswer.trim() || '—'}</span>
+        <span className="text-xs text-app-hint">{t('practice.feedback_you_wrote', { answer: typedAnswer.trim() || '—' })}</span>
       </div>
     )
   }
   return (
     <div className="flex flex-col items-center gap-1.5">
       <span className="bg-rose-500/15 text-rose-600 dark:text-rose-400 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest">
-        ✗ Не то
+        {t('practice.feedback_miss')}
       </span>
       {typedAnswer.trim() && (
-        <span className="text-xs text-app-hint">ты написал: {typedAnswer.trim()}</span>
+        <span className="text-xs text-app-hint">{t('practice.feedback_you_wrote', { answer: typedAnswer.trim() })}</span>
       )}
       {expected !== undefined && typedAnswer.trim() && getSettings().aiGradingEnabled && (
         <SemanticGradeButton userAnswer={typedAnswer.trim()} expected={expected} hint={hint} />
@@ -1628,6 +1628,7 @@ function SemanticGradeButton({
   expected: string
   hint?: string
 }) {
+  const t = useT()
   const [state, setState] = useState<
     | { kind: 'idle' }
     | { kind: 'loading' }
@@ -1646,16 +1647,16 @@ function SemanticGradeButton({
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string }
         if (body.error === 'llm_not_configured') {
-          setState({ kind: 'error', message: 'AI-проверка не настроена на сервере' })
+          setState({ kind: 'error', message: t('practice.ai_not_configured') })
         } else {
-          setState({ kind: 'error', message: 'Не получилось проверить' })
+          setState({ kind: 'error', message: t('practice.ai_failed') })
         }
         return
       }
       const data = (await res.json()) as { verdict: 'correct' | 'close' | 'wrong'; reason: string }
       setState({ kind: 'done', ...data })
     } catch {
-      setState({ kind: 'error', message: 'Сеть подвела' })
+      setState({ kind: 'error', message: t('practice.ai_no_network') })
     }
   }
 
@@ -1668,21 +1669,21 @@ function SemanticGradeButton({
         <div className="w-5 h-5 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center">
           <Sparkles size={10} fill="currentColor" />
         </div>
-        <span>Проверить смыслом</span>
+        <span>{t('practice.btn_ai_grade')}</span>
       </button>
     )
   }
   if (state.kind === 'loading') {
     return (
       <div className="flex items-center gap-2 mt-1">
-        <motion.div 
+        <motion.div
           animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
           transition={{ duration: 1.5, repeat: Infinity }}
           className="text-amber-500"
         >
           <Sparkles size={14} fill="currentColor" />
         </motion.div>
-        <span className="text-[11px] text-app-hint italic font-medium text-center">Регис думает…</span>
+        <span className="text-[11px] text-app-hint italic font-medium text-center">{t('practice.ai_thinking')}</span>
       </div>
     )
   }
@@ -1696,7 +1697,11 @@ function SemanticGradeButton({
         ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
         : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
   const verdictLabel =
-    state.verdict === 'correct' ? 'AI: верно' : state.verdict === 'close' ? 'AI: близко' : 'AI: мимо'
+    state.verdict === 'correct'
+      ? t('practice.ai_verdict_correct')
+      : state.verdict === 'close'
+        ? t('practice.ai_verdict_close')
+        : t('practice.ai_verdict_wrong')
   return (
     <div className="flex flex-col items-center gap-1 max-w-[260px]">
       <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest ${colorClass}`}>

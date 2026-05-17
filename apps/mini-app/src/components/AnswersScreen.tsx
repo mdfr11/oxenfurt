@@ -4,6 +4,19 @@ import { backButton } from '@telegram-apps/sdk-react'
 import { ArrowLeft, MessageCircle, Trash2 } from 'lucide-react'
 import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
+import { useT } from '../lib/i18n/useT'
+import type { TKey } from '../lib/i18n'
+
+function plurAnswers(n: number, t: ReturnType<typeof useT>): string {
+  const mod100 = n % 100
+  let key: TKey = 'answers.count_many'
+  if (!(mod100 >= 11 && mod100 <= 14)) {
+    const mod10 = n % 10
+    if (mod10 === 1) key = 'answers.count_one'
+    else if (mod10 >= 2 && mod10 <= 4) key = 'answers.count_few'
+  }
+  return t(key, { n })
+}
 
 interface Props {
   onExit: () => void
@@ -25,6 +38,7 @@ interface QuestionDto {
 // generated; if the user wants to ask follow-ups, they go back to the
 // card itself.
 export function AnswersScreen({ onExit }: Props) {
+  const t = useT()
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -90,25 +104,25 @@ export function AnswersScreen({ onExit }: Props) {
         <button
           onClick={onExit}
           className="w-10 h-10 flex items-center justify-center rounded-full bg-app-surface border border-app-border active:scale-90 transition-transform"
-          aria-label="Назад"
+          aria-label={t('common.back')}
         >
           <ArrowLeft size={18} />
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold leading-none">Ответы агента</h1>
-          <p className="text-xs text-app-hint mt-1">{items.length} непрочитанных</p>
+          <h1 className="text-xl font-bold leading-none">{t('answers.title')}</h1>
+          <p className="text-xs text-app-hint mt-1">{items.length} {plurAnswers(items.length, t)}</p>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         {isLoading ? (
-          <p className="text-center text-app-hint py-12 text-sm">Загружаю…</p>
+          <p className="text-center text-app-hint py-12 text-sm">{t('common.loading')}</p>
         ) : items.length === 0 ? (
           <div className="text-center text-app-hint py-12 text-sm">
             <MessageCircle size={32} className="mx-auto mb-3 opacity-40" />
-            <p>Новых ответов пока нет</p>
+            <p>{t('answers.empty_title')}</p>
             <p className="mt-2 text-[11px] opacity-70">
-              Агент отвечает после своей обработки. Загляни позже.
+              {t('answers.empty_hint')}
             </p>
           </div>
         ) : (
@@ -119,20 +133,20 @@ export function AnswersScreen({ onExit }: Props) {
                 className="p-4 rounded-2xl bg-app-surface border border-app-border"
               >
                 <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">
-                  Вопрос
+                  {t('answers.field_question')}
                 </div>
                 <p className="text-sm text-app-text leading-snug whitespace-pre-wrap">
                   {q.question}
                 </p>
                 <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mt-4 mb-1">
-                  Ответ
+                  {t('answers.field_response')}
                 </div>
                 {q.response !== null ? (
                   <Markdown className="text-sm leading-relaxed text-app-text">
                     {q.response}
                   </Markdown>
                 ) : (
-                  <p className="text-sm text-app-hint italic">пусто</p>
+                  <p className="text-sm text-app-hint italic">{t('answers.empty_response')}</p>
                 )}
                 <div className="flex gap-2 mt-4">
                   <button
@@ -140,13 +154,13 @@ export function AnswersScreen({ onExit }: Props) {
                     disabled={markSeen.isPending}
                     className="flex-1 py-2 rounded-xl bg-app-primary text-app-primary-text text-sm font-semibold active:scale-95 transition-transform disabled:opacity-50"
                   >
-                    Прочитано
+                    {t('answers.btn_mark_read')}
                   </button>
                   <button
                     onClick={() => discard.mutate(q.id)}
                     disabled={discard.isPending}
                     className="px-3 py-2 rounded-xl bg-app-bg border border-app-border text-app-hint text-sm active:scale-95 transition-transform"
-                    aria-label="Скрыть"
+                    aria-label={t('common.discard')}
                   >
                     <Trash2 size={14} />
                   </button>

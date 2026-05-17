@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, BookOpen, Quote, Type } from 'lucide-react'
 import type { CardListDto, PhrasePayload, TheoryPayload, VocabPayload } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
+import { useT } from '../lib/i18n/useT'
 
 interface Props {
   cardId: string | null
@@ -16,6 +17,7 @@ interface Props {
 // in mid-session (would derail the FSRS flow). For deep work, jump to the
 // Library which already supports filtering by source.
 export function RelatedCardsSheet({ cardId, source, isOpen, onClose }: Props) {
+  const t = useT()
   const { data, isLoading } = useQuery({
     queryKey: ['cards', cardId, 'related'],
     enabled: isOpen && cardId !== null && source !== null,
@@ -49,24 +51,24 @@ export function RelatedCardsSheet({ cardId, source, isOpen, onClose }: Props) {
             <div className="flex justify-between items-center mb-4 text-app-text">
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-0.5">
-                  Из этого урока
+                  {t('related.from_lesson')}
                 </div>
                 <h2 className="text-lg font-bold leading-tight">{source ?? '—'}</h2>
               </div>
               <button
                 onClick={onClose}
                 className="p-2 -mr-2 text-app-hint active:scale-95 transition-transform"
-                aria-label="Закрыть"
+                aria-label={t('common.close')}
               >
                 <X size={20} />
               </button>
             </div>
 
             {isLoading ? (
-              <p className="text-center text-app-hint py-6 text-sm">Загружаю…</p>
+              <p className="text-center text-app-hint py-6 text-sm">{t('common.loading')}</p>
             ) : related.length === 0 ? (
               <p className="text-center text-app-hint py-6 text-sm">
-                Других активных карточек из этого урока нет
+                {t('related.empty')}
               </p>
             ) : (
               <ul className="flex flex-col gap-2">

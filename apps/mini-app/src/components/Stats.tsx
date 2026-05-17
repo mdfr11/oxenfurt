@@ -6,12 +6,15 @@ import { ArrowLeft, Scroll, Trophy, Key, FlaskConical, Feather } from 'lucide-re
 import { motion, AnimatePresence } from 'framer-motion'
 import type { HeatmapCell, RecentSession, StatsResponse } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
+import { useT } from '../lib/i18n/useT'
+import { getLocale, type TKey } from '../lib/i18n'
 
 interface StatsProps {
   onExit: () => void
 }
 
 export function Stats({ onExit }: StatsProps) {
+  const t = useT()
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
     try {
@@ -50,9 +53,9 @@ export function Stats({ onExit }: StatsProps) {
   if (error || !data) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-app-bg text-app-text">
-        <h2 className="text-xl font-bold mb-2">Не удалось загрузить</h2>
+        <h2 className="text-xl font-bold mb-2">{t('stats.empty_failed')}</h2>
         <p className="text-xs text-app-hint mb-6">{error instanceof Error ? error.message : 'unknown'}</p>
-        <button onClick={onExit} className="text-app-link font-semibold">Назад</button>
+        <button onClick={onExit} className="text-app-link font-semibold">{t('common.back')}</button>
       </div>
     )
   }
@@ -74,63 +77,63 @@ export function Stats({ onExit }: StatsProps) {
         <button
           onClick={onExit}
           className="w-10 h-10 flex items-center justify-center rounded-full bg-app-surface border border-app-border active:scale-90 transition-transform"
-          aria-label="Назад"
+          aria-label={t('common.back')}
         >
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-xl font-bold leading-none flex-1">Статистика</h1>
+        <h1 className="text-xl font-bold leading-none flex-1">{t('stats.title')}</h1>
       </div>
 
       <div className="px-4 flex flex-col gap-5">
         {/* Top numbers */}
         <div className="grid grid-cols-3 gap-2">
-          <StatCard label="Сегодня" count={data.reviews.today.count} sub={todayAcc} />
-          <StatCard label="За 7 дней" count={data.reviews.last_7d.count} sub={weekAcc} />
-          <StatCard label="За 30 дней" count={data.reviews.last_30d.count} sub={monthAcc} />
+          <StatCard label={t('stats.today')} count={data.reviews.today.count} sub={todayAcc} />
+          <StatCard label={t('stats.week')} count={data.reviews.last_7d.count} sub={weekAcc} />
+          <StatCard label={t('stats.month')} count={data.reviews.last_30d.count} sub={monthAcc} />
         </div>
 
         {/* Forecast */}
         <div className="bg-app-surface border border-app-border rounded-2xl p-4 flex justify-around shadow-sm">
-          <ForecastCell label="Готовы сейчас" value={data.forecast.due_now} accent />
-          <ForecastCell label="В ближайшие 24ч" value={data.forecast.due_next_24h} />
-          <ForecastCell label="Всего активных" value={data.forecast.active_total} />
+          <ForecastCell label={t('stats.forecast_due_now')} value={data.forecast.due_now} accent />
+          <ForecastCell label={t('stats.forecast_next_24h')} value={data.forecast.due_next_24h} />
+          <ForecastCell label={t('stats.forecast_active_total')} value={data.forecast.active_total} />
         </div>
 
         {/* Relics Section */}
         <div>
           <h2 className="text-[11px] uppercase tracking-widest text-app-hint font-bold mb-3 px-1">
-            Реликвии Академии
+            {t('stats.relics_heading')}
           </h2>
           <div className="grid grid-cols-5 gap-2 px-1">
-             <RelicIcon 
-               icon={Scroll} 
-               label="Свиток Академии" 
-               hint="Заверши первую сессию" 
-               unlocked={data.recent_sessions.length > 0} 
+             <RelicIcon
+               icon={Scroll}
+               label={t('stats.relic_scroll_label')}
+               hint={t('stats.relic_scroll_hint')}
+               unlocked={data.recent_sessions.length > 0}
              />
-             <RelicIcon 
-               icon={Trophy} 
-               label="Кубок Оксенфурта" 
-               hint="Выучи первые 100 слов" 
-               unlocked={data.learned_count >= 100} 
+             <RelicIcon
+               icon={Trophy}
+               label={t('stats.relic_trophy_label')}
+               hint={t('stats.relic_trophy_hint')}
+               unlocked={data.learned_count >= 100}
              />
-             <RelicIcon 
-               icon={Key} 
-               label="Ключ Библиотекаря" 
-               hint="Более 500 повторений" 
-               unlocked={data.heatmap.reduce((acc, c) => acc + c.count, 0) >= 500} 
+             <RelicIcon
+               icon={Key}
+               label={t('stats.relic_key_label')}
+               hint={t('stats.relic_key_hint')}
+               unlocked={data.heatmap.reduce((acc, c) => acc + c.count, 0) >= 500}
              />
-             <RelicIcon 
-               icon={FlaskConical} 
-               label="Эликсир Региса" 
-               hint="7 дней ударного режима" 
-               unlocked={data.streak >= 7} 
+             <RelicIcon
+               icon={FlaskConical}
+               label={t('stats.relic_flask_label')}
+               hint={t('stats.relic_flask_hint')}
+               unlocked={data.streak >= 7}
              />
-             <RelicIcon 
-               icon={Feather} 
-               label="Перо Магистра" 
-               hint="Точность >90% за месяц" 
-               unlocked={parseInt(monthAcc) >= 90} 
+             <RelicIcon
+               icon={Feather}
+               label={t('stats.relic_feather_label')}
+               hint={t('stats.relic_feather_hint')}
+               unlocked={parseInt(monthAcc) >= 90}
              />
           </div>
         </div>
@@ -138,7 +141,7 @@ export function Stats({ onExit }: StatsProps) {
         {/* Heatmap */}
         <div>
           <h2 className="text-[11px] uppercase tracking-widest text-app-hint font-bold mb-2 px-1">
-            Активность
+            {t('stats.heatmap_heading')}
           </h2>
           <Heatmap heatmap={data.heatmap} generatedAt={data.generated_at} />
         </div>
@@ -146,10 +149,10 @@ export function Stats({ onExit }: StatsProps) {
         {/* Recent sessions */}
         <div>
           <h2 className="text-[11px] uppercase tracking-widest text-app-hint font-bold mb-2 px-1">
-            Последние сессии
+            {t('stats.recent_heading')}
           </h2>
           {data.recent_sessions.length === 0 ? (
-            <p className="text-xs text-app-hint px-1 italic">Сессий пока не было</p>
+            <p className="text-xs text-app-hint px-1 italic">{t('stats.recent_empty')}</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {data.recent_sessions.map((s) => (
@@ -171,11 +174,12 @@ function accuracy({ count, correct }: { count: number; correct: number }): strin
 }
 
 function StatCard({ label, count, sub }: { label: string; count: number; sub: string }) {
+  const t = useT()
   return (
     <div className="bg-app-surface border border-app-border rounded-2xl p-3 flex flex-col shadow-sm">
       <div className="text-[9px] uppercase tracking-wider text-app-hint font-bold">{label}</div>
       <div className="text-2xl font-bold mt-0.5">{count}</div>
-      <div className="text-[10px] text-app-hint mt-0.5">точность {sub}</div>
+      <div className="text-[10px] text-app-hint mt-0.5">{t('stats.accuracy_label', { value: sub })}</div>
     </div>
   )
 }
@@ -239,34 +243,47 @@ function RelicIcon({ icon: Icon, label, hint, unlocked }: { icon: React.ElementT
 }
 
 function SessionRow({ session }: { session: RecentSession }) {
+  const t = useT()
   const acc = session.cards_reviewed > 0
     ? Math.round((session.cards_correct / session.cards_reviewed) * 100)
     : 0
   return (
     <div className="bg-app-surface border border-app-border rounded-xl px-4 py-2.5 flex items-center justify-between shadow-sm">
       <div className="text-sm">
-        <div className="font-semibold">{formatDate(session.finished_at)}</div>
+        <div className="font-semibold">{formatDate(session.finished_at, t)}</div>
         <div className="text-[11px] text-app-hint mt-0.5">{formatTime(session.finished_at)}</div>
       </div>
       <div className="text-right">
-        <div className="text-sm font-semibold">{session.cards_reviewed} карточек</div>
-        <div className="text-[11px] text-app-hint mt-0.5">{acc}% точности</div>
+        <div className="text-sm font-semibold">{t(plurSessionCards(session.cards_reviewed), { n: session.cards_reviewed })}</div>
+        <div className="text-[11px] text-app-hint mt-0.5">{t('stats.session_accuracy', { n: acc })}</div>
       </div>
     </div>
   )
 }
 
-function formatDate(iso: string): string {
+function plurSessionCards(n: number): TKey {
+  const mod100 = n % 100
+  if (mod100 >= 11 && mod100 <= 14) return 'stats.session_cards_many'
+  const mod10 = n % 10
+  if (mod10 === 1) return 'stats.session_cards_one'
+  if (mod10 >= 2 && mod10 <= 4) return 'stats.session_cards_few'
+  return 'stats.session_cards_many'
+}
+
+function formatDate(iso: string, t: ReturnType<typeof useT>): string {
   const d = new Date(iso)
   const today = new Date()
   const yesterday = new Date(today.getTime() - 24 * 3600 * 1000)
-  if (sameDay(d, today)) return 'Сегодня'
-  if (sameDay(d, yesterday)) return 'Вчера'
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+  if (sameDay(d, today)) return t('stats.date_today')
+  if (sameDay(d, yesterday)) return t('stats.date_yesterday')
+  // Use the current i18n locale's BCP-47 tag so the month renders natively.
+  const localeTag = getLocale() === 'ru' ? 'ru-RU' : 'en-US'
+  return d.toLocaleDateString(localeTag, { day: 'numeric', month: 'short' })
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  const localeTag = getLocale() === 'ru' ? 'ru-RU' : 'en-US'
+  return new Date(iso).toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' })
 }
 
 function sameDay(a: Date, b: Date): boolean {
@@ -331,7 +348,7 @@ function Heatmap({ heatmap, generatedAt }: { heatmap: HeatmapCell[]; generatedAt
         {cells.map((cell) => (
           <div
             key={cell.date}
-            title={`${cell.date}: ${cell.count} карточек`}
+            title={`${cell.date}: ${cell.count}`}
             className={`rounded-[2px] ${heatmapColor(cell.count, cell.isFuture)}`}
             style={{ width: CELL_PX, height: CELL_PX }}
           />

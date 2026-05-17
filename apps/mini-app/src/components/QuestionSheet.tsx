@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Send } from 'lucide-react'
 import { fetchWithAuth } from '../lib/api'
+import { useT } from '../lib/i18n/useT'
 
 interface Props {
   cardId: string | null
@@ -14,6 +15,7 @@ interface Props {
 // async. No spinner waiting on an LLM in-session — the user can return to
 // it later via the Home badge.
 export function QuestionSheet({ cardId, isOpen, onClose }: Props) {
+  const t = useT()
   const [text, setText] = useState('')
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
 
@@ -57,15 +59,15 @@ export function QuestionSheet({ cardId, isOpen, onClose }: Props) {
           >
             <div className="flex justify-between items-start mb-3 text-app-text">
               <div>
-                <h2 className="text-lg font-bold leading-tight">❓ Что непонятно?</h2>
+                <h2 className="text-lg font-bold leading-tight">{t('question.title')}</h2>
                 <p className="text-[11px] text-app-hint mt-0.5">
-                  Агент разберёт после сессии и пришлёт ответ
+                  {t('question.subtitle')}
                 </p>
               </div>
               <button
                 onClick={onClose}
                 className="p-2 -mr-2 text-app-hint active:scale-95 transition-transform"
-                aria-label="Закрыть"
+                aria-label={t('common.close')}
               >
                 <X size={20} />
               </button>
@@ -76,7 +78,7 @@ export function QuestionSheet({ cardId, isOpen, onClose }: Props) {
               onChange={(e) => setText(e.target.value)}
               rows={5}
               autoFocus
-              placeholder="Напр. «не понимаю разницу с look at» или «когда уместно?»"
+              placeholder={t('question.placeholder')}
               className="w-full bg-app-surface text-app-text border border-app-border rounded-xl py-3 px-4 focus:outline-none focus:border-app-primary resize-none text-sm"
               disabled={state === 'sending' || state === 'sent'}
             />
@@ -87,12 +89,12 @@ export function QuestionSheet({ cardId, isOpen, onClose }: Props) {
               className="mt-3 flex items-center justify-center gap-2 py-3 rounded-2xl bg-app-primary text-app-primary-text font-semibold active:scale-95 transition-transform disabled:opacity-50"
             >
               <Send size={16} />
-              {state === 'sending' ? 'Отправляю…' : state === 'sent' ? 'Отправлено ✓' : 'Спросить'}
+              {state === 'sending' ? t('question.btn_sending') : state === 'sent' ? t('question.btn_sent') : t('question.btn_send')}
             </button>
 
             {state === 'error' && (
               <p className="text-xs text-rose-500 mt-2 text-center">
-                Не удалось отправить — попробуй ещё раз
+                {t('question.error_send')}
               </p>
             )}
 
