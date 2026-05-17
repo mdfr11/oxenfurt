@@ -153,6 +153,8 @@ export const ru = {
   'practice.undo': 'Отменить',
   'home.aria_settings': 'Настройки',
   'home.ring_done_label': 'Выполнено',
+  'home.backend_online': 'Онлайн',
+  'home.backend_offline': 'Офлайн',
   'library.aria_clear_source': 'Сбросить фильтр уроков',
   'errors.boundary_title': 'Что-то пошло не так',
   'errors.boundary_reload': 'Перезагрузить',
@@ -319,6 +321,8 @@ export const ru = {
   'stats.session_accuracy': '{n}% точности',
   'stats.date_today': 'Сегодня',
   'stats.date_yesterday': 'Вчера',
+  'stats.heatmap_less': 'меньше',
+  'stats.heatmap_more': 'больше',
 
   // --- Language names (used in microcopy like "Скажи на {lang}") ---
   'lang.en': 'английском',

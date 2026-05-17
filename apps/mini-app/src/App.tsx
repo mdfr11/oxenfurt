@@ -38,6 +38,7 @@ export default function App() {
       if (h === '#library') setScreen('library')
       else if (h === '#stats') setScreen('stats')
       else if (h === '#answers') setScreen('answers')
+      else if (h === '#practice') setScreen('practice')
       else if (h === '#home' || h === '') setScreen('home')
     }
     handleHash()

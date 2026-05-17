@@ -884,7 +884,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                     </>
                   ) : variant === 'cloze' && phrase && phraseCloze ? (
                     <>
-                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_fill_phrase')}</div>
+                      <div data-testid="card-term" className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_fill_phrase')}</div>
                       <p className="text-2xl text-app-text leading-snug font-semibold text-center">
                         {phraseCloze.before}
                         {phraseCloze.before && ' '}
@@ -959,7 +959,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                     </>
                   ) : variant === 'listening' && vocab ? (
                     <>
-                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_listen')}</div>
+                      <div data-testid="card-term" className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_listen')}</div>
                       <button
                         onClick={handleReplayAudio}
                         className="w-20 h-20 rounded-full bg-app-primary/10 border border-app-primary/30 flex items-center justify-center text-3xl active:scale-95 transition-transform"
@@ -983,7 +983,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                     </>
                   ) : vocab && flipForProduce ? (
                     <>
-                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_produce_label', { lang: t(`lang.${getSettings().learningLanguage}_short`) })}</div>
+                      <div data-testid="card-term" className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_produce_label', { lang: t(`lang.${getSettings().learningLanguage}_short`) })}</div>
                       <h2 className="text-3xl font-bold tracking-tight text-app-text leading-snug text-center">
                         {vocab.translation}
                       </h2>
@@ -1014,9 +1014,9 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                     </>
                   ) : phrase ? (
                     <>
-                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_phrase')}</div>
+                      <div data-testid="card-term" className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_phrase')}</div>
                       <div className="flex items-center gap-3 flex-wrap justify-center">
-                        <h2 className="text-2xl font-bold tracking-tight leading-snug text-center">
+                        <h2 data-testid="card-term" className="text-2xl font-bold tracking-tight leading-snug text-center">
                           {phrase.phrase}
                         </h2>
                         <button
@@ -1038,7 +1038,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       )}
                     </>
                   ) : theory ? (
-                    <div className="overflow-y-auto max-h-full w-full px-2 text-center">
+                    <div data-testid="card-term" className="overflow-y-auto max-h-full w-full px-2 text-center">
                       <Markdown className="text-xl font-bold leading-snug">
                         {theory.question}
                       </Markdown>
@@ -1159,7 +1159,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                   ) : phrase ? (
                     <>
                       <div className="flex items-center gap-2 flex-wrap justify-center">
-                        <h2 className="text-2xl font-bold tracking-tight leading-snug text-center">
+                        <h2 data-testid="card-term" className="text-2xl font-bold tracking-tight leading-snug text-center">
                           {phrase.phrase}
                         </h2>
                         <button

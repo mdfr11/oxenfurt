@@ -299,6 +299,7 @@ const CELL_PX = 12
 const GAP_PX = 2
 
 function Heatmap({ heatmap, generatedAt }: { heatmap: HeatmapCell[]; generatedAt: string }) {
+  const t = useT()
   // Build a Map for O(1) lookup, then iterate calendar days.
   const counts = useMemo(() => {
     const m = new Map<string, number>()
@@ -355,7 +356,7 @@ function Heatmap({ heatmap, generatedAt }: { heatmap: HeatmapCell[]; generatedAt
         ))}
       </div>
       <div className="flex justify-between items-center mt-2 px-1 text-[10px] text-app-hint">
-        <span>меньше</span>
+        <span>{t('stats.heatmap_less')}</span>
         <div className="flex gap-1">
           <div className={`w-3 h-3 rounded-[2px] ${heatmapColor(0, false)}`} />
           <div className={`w-3 h-3 rounded-[2px] ${heatmapColor(1, false)}`} />
@@ -363,7 +364,7 @@ function Heatmap({ heatmap, generatedAt }: { heatmap: HeatmapCell[]; generatedAt
           <div className={`w-3 h-3 rounded-[2px] ${heatmapColor(20, false)}`} />
           <div className={`w-3 h-3 rounded-[2px] ${heatmapColor(40, false)}`} />
         </div>
-        <span>больше</span>
+        <span>{t('stats.heatmap_more')}</span>
       </div>
     </div>
   )

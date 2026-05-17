@@ -144,6 +144,8 @@ export const en: Record<keyof typeof ru, string> = {
   'practice.undo': 'Undo',
   'home.aria_settings': 'Settings',
   'home.ring_done_label': 'Done',
+  'home.backend_online': 'Online',
+  'home.backend_offline': 'Offline',
   'library.aria_clear_source': 'Clear lesson filter',
   'errors.boundary_title': 'Something went wrong',
   'errors.boundary_reload': 'Reload',
@@ -312,6 +314,8 @@ export const en: Record<keyof typeof ru, string> = {
   'stats.session_accuracy': '{n}% accuracy',
   'stats.date_today': 'Today',
   'stats.date_yesterday': 'Yesterday',
+  'stats.heatmap_less': 'less',
+  'stats.heatmap_more': 'more',
 
   // --- Language names ---
   'lang.en': 'English',
