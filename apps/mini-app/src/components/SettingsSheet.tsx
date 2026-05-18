@@ -1,6 +1,6 @@
-import { Settings, Volume2, Vibrate, X, Play, Headphones, ArrowLeftRight, Languages, Sparkles, Layout, Globe } from 'lucide-react';
+import { Settings, Volume2, Vibrate, X, Play, Headphones, ArrowLeftRight, Languages, Sparkles, Layout, Globe, Mic2, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSettings, type LearningLanguage, type NativeLanguage } from '../lib/settings';
+import { useSettings } from '../lib/settings';
 import { hapticFeedback } from '@telegram-apps/sdk-react';
 import { playPopSound } from '../lib/audio';
 import { type PracticeMode, savePracticeMode } from '../lib/practiceMode';
@@ -62,7 +62,7 @@ export function SettingsSheet({
             transition={{ type: 'spring', bounce: 0, duration: 0.35 }}
             className="fixed bottom-0 inset-x-0 bg-app-bg rounded-t-[2rem] z-[101] shadow-[0_-10px_40px_rgba(0,0,0,0.2)] flex flex-col max-w-[500px] mx-auto max-h-[92vh] overflow-hidden"
           >
-            {/* Header with Safe Area */}
+            {/* Header */}
             <div 
               className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-app-border text-app-text bg-app-bg"
               style={{ paddingTop: `calc(1.25rem + var(--tg-safe-area-inset-top, 0px))` }}
@@ -80,17 +80,17 @@ export function SettingsSheet({
             </div>
 
             {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Practice Section */}
-              <section className="space-y-3">
-                <h3 className="text-[10px] uppercase tracking-widest text-app-hint font-black px-1 flex items-center gap-1.5">
-                  <Layout size={12} /> {t('settings.section_practice')}
-                </h3>
-
-                <div className="bg-app-surface border border-app-border rounded-2xl p-4 space-y-4 text-app-text">
-                  <div className="space-y-2">
-                    <div className="text-xs font-bold">{t('settings.mode_label')}</div>
-                    <div className="grid grid-cols-2 gap-1.5">
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar">
+              
+              {/* PRACTICE SECTION */}
+              <section className="space-y-4">
+                <SectionHeader icon={Layout} label={t('settings.section_practice')} />
+                
+                <div className="bg-app-surface border border-app-border rounded-2xl overflow-hidden divide-y divide-app-border">
+                  {/* Mode Picker */}
+                  <div className="p-4 space-y-3">
+                    <div className="text-xs font-bold text-app-text">{t('settings.mode_label')}</div>
+                    <div className="grid grid-cols-2 gap-2">
                       <ModeOption active={currentMode === 'mixed'} onClick={() => selectMode('mixed')}>{t('mode.mixed')}</ModeOption>
                       <ModeOption active={currentMode === 'recognition'} onClick={() => selectMode('recognition')}>{t('mode.recognition')}</ModeOption>
                       <ModeOption active={currentMode === 'cloze'} onClick={() => selectMode('cloze')}>{t('mode.cloze')}</ModeOption>
@@ -99,21 +99,20 @@ export function SettingsSheet({
                     </div>
                   </div>
 
-                  <div className="h-px bg-app-border mx-[-1rem]" />
-
-                  <div className="space-y-2">
+                  {/* Session Size */}
+                  <div className="p-4 space-y-3">
                     <div className="flex justify-between items-center">
-                      <div className="text-xs font-bold">{t('settings.size_label')}</div>
-                      <div className="text-[10px] text-app-hint font-medium tracking-tight">{t('settings.size_hint')}</div>
+                      <div className="text-xs font-bold text-app-text">{t('settings.size_label')}</div>
+                      <div className="text-[10px] text-app-hint font-medium uppercase tracking-wider">{t('settings.size_hint')}</div>
                     </div>
                     <div className="flex gap-2">
                       {([null, 10, 20, 30] as const).map((n) => (
                         <button
                           key={n ?? 'all'}
                           onClick={() => selectSessionLimit(n)}
-                          className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all active:scale-95 ${
+                          className={`flex-1 py-2.5 rounded-xl border text-xs font-black transition-all active:scale-95 ${
                             settings.sessionLimit === n
-                              ? 'bg-app-primary text-app-primary-text border-app-primary shadow-sm'
+                              ? 'bg-app-primary text-app-primary-text border-app-primary shadow-md'
                               : 'bg-app-bg text-app-hint border-app-border'
                           }`}
                         >
@@ -123,26 +122,20 @@ export function SettingsSheet({
                     </div>
                   </div>
 
-                  <div className="h-px bg-app-border mx-[-1rem]" />
-
-                  {/* Card-type filter — focused-practice picker. Default
-                      'all' keeps the queue mixed; selecting one type
-                      restricts /due to that type only. Theory + a typed-
-                      answer mode auto-degrades the mode to recognition
-                      (a theory card has nothing to type). */}
-                  <div className="space-y-2">
+                  {/* Card Type Filter */}
+                  <div className="p-4 space-y-3">
                     <div className="flex justify-between items-center">
-                      <div className="text-xs font-bold">{t('settings.card_type_label')}</div>
-                      <div className="text-[10px] text-app-hint font-medium tracking-tight">{t('settings.card_type_hint')}</div>
+                      <div className="text-xs font-bold text-app-text">{t('settings.card_type_label')}</div>
+                      <div className="text-[10px] text-app-hint font-medium uppercase tracking-wider">{t('settings.card_type_hint')}</div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                       {(['all', 'vocab', 'phrase', 'theory'] as const).map((kind) => (
                         <button
                           key={kind}
                           onClick={() => updateSettings({ cardTypeFilter: kind })}
-                          className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all active:scale-95 ${
+                          className={`py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-tight transition-all active:scale-95 ${
                             settings.cardTypeFilter === kind
-                              ? 'bg-app-primary text-app-primary-text border-app-primary shadow-sm'
+                              ? 'bg-app-primary text-app-primary-text border-app-primary shadow-md'
                               : 'bg-app-bg text-app-hint border-app-border'
                           }`}
                         >
@@ -154,154 +147,151 @@ export function SettingsSheet({
                 </div>
               </section>
 
-              {/* Preferences Section */}
-              <section className="space-y-3">
-                <h3 className="text-[10px] uppercase tracking-widest text-app-hint font-black px-1">{t('settings.section_feedback')}</h3>
-                <div className="flex flex-col gap-3">
-                  <SettingToggle
+              {/* LANGUAGES SECTION */}
+              <section className="space-y-4">
+                <SectionHeader icon={Globe} label={t('settings.section_languages')} />
+                
+                <div className="bg-app-surface border border-app-border rounded-2xl overflow-hidden divide-y divide-app-border">
+                  {/* Native Language */}
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+                        <Globe size={14} />
+                      </div>
+                      <div className="text-xs font-bold text-app-text">{t('settings.native_lang_label')}</div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(['ru', 'en'] as const).map((code) => (
+                        <button
+                          key={code}
+                          onClick={() => { updateSettings({ nativeLanguage: code }); setLocale(code); }}
+                          className={`py-2.5 rounded-xl text-xs font-bold border transition-all ${
+                            settings.nativeLanguage === code
+                              ? 'bg-app-primary text-app-primary-text border-app-primary shadow-sm'
+                              : 'bg-app-bg text-app-hint border-app-border'
+                          }`}
+                        >
+                          {t(`lang.${code}_short`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Learning Language */}
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                        <Languages size={14} />
+                      </div>
+                      <div className="text-xs font-bold text-app-text">{t('settings.learning_lang_label')}</div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['en', 'es', 'de', 'fr', 'it', 'pt', 'ja', 'zh', 'ko'] as const).map((code) => (
+                        <button
+                          key={code}
+                          onClick={() => updateSettings({ learningLanguage: code })}
+                          className={`py-2 rounded-xl text-[10px] font-black border transition-all ${
+                            settings.learningLanguage === code
+                              ? 'bg-app-primary text-app-primary-text border-app-primary shadow-sm'
+                              : 'bg-app-bg text-app-hint border-app-border'
+                          }`}
+                        >
+                          {t(`lang.${code}_short`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* FEEDBACK SECTION */}
+              <section className="space-y-4">
+                <SectionHeader icon={Sparkles} label={t('settings.section_feedback')} />
+                <div className="bg-app-surface border border-app-border rounded-2xl overflow-hidden divide-y divide-app-border">
+                  <SettingToggleRow
                     icon={Volume2}
                     label={t('settings.sound_label')}
                     hint={t('settings.sound_hint')}
                     checked={settings.soundEnabled}
                     onChange={(v) => updateSettings({ soundEnabled: v })}
                     onTest={testSound}
-                    testKind="sound"
+                    testLabel={t('settings.test_sound')}
                   />
-                  <SettingToggle
+                  <SettingToggleRow
                     icon={Vibrate}
                     label={t('settings.haptics_label')}
                     hint={t('settings.haptics_hint')}
                     checked={settings.hapticsEnabled}
                     onChange={(v) => updateSettings({ hapticsEnabled: v })}
                     onTest={testHaptics}
-                    testKind="haptics"
+                    testLabel={t('settings.test_haptics')}
                   />
                 </div>
               </section>
 
-              {/* Languages section — distinguishes UI language from the
-                  language the user is learning. */}
-              <section className="space-y-3">
-                <h3 className="text-[10px] uppercase tracking-widest text-app-hint font-black px-1">{t('settings.section_languages')}</h3>
-                <div className="bg-app-surface border border-app-border rounded-2xl p-4 space-y-4 text-app-text">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Globe size={14} className="text-app-hint" />
-                      <div>
-                        <div className="text-xs font-bold">{t('settings.native_lang_label')}</div>
-                        <div className="text-[10px] text-app-hint font-medium leading-tight">{t('settings.native_lang_hint')}</div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {(['ru', 'en'] as const satisfies readonly NativeLanguage[]).map((code) => (
-                        <button
-                          key={code}
-                          onClick={() => {
-                            updateSettings({ nativeLanguage: code })
-                            setLocale(code)
-                          }}
-                          className={`py-2 rounded-lg text-[11px] font-bold transition-all ${
-                            settings.nativeLanguage === code
-                              ? 'bg-app-primary text-app-primary-text shadow-sm'
-                              : 'bg-app-bg text-app-hint border border-app-border'
-                          }`}
-                        >
-                          {t(`lang.${code}_short`)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="h-px bg-app-border mx-[-1rem]" />
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Languages size={14} className="text-app-hint" />
-                      <div>
-                        <div className="text-xs font-bold">{t('settings.learning_lang_label')}</div>
-                        <div className="text-[10px] text-app-hint font-medium leading-tight">{t('settings.learning_lang_hint')}</div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {(['en', 'es', 'de', 'fr', 'it', 'pt', 'ja', 'zh', 'ko'] as const satisfies readonly LearningLanguage[]).map((code) => (
-                        <button
-                          key={code}
-                          onClick={() => updateSettings({ learningLanguage: code })}
-                          className={`py-2 rounded-lg text-[11px] font-bold transition-all ${
-                            settings.learningLanguage === code
-                              ? 'bg-app-primary text-app-primary-text shadow-sm'
-                              : 'bg-app-bg text-app-hint border border-app-border'
-                          }`}
-                        >
-                          {t(`lang.${code}_short`)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* Advanced Section */}
-              <section className="space-y-3">
-                <h3 className="text-[10px] uppercase tracking-widest text-app-hint font-black px-1">{t('settings.section_advanced')}</h3>
-                <div className="flex flex-col gap-3">
-                  <SettingToggle
+              {/* ADVANCED SECTION */}
+              <section className="space-y-4">
+                <SectionHeader icon={ArrowLeftRight} label={t('settings.section_advanced')} />
+                <div className="bg-app-surface border border-app-border rounded-2xl overflow-hidden divide-y divide-app-border">
+                  <SettingToggleRow
                     icon={Headphones}
                     label={t('settings.autoplay_label')}
                     hint={t('settings.autoplay_hint')}
                     checked={settings.autoPronounce}
                     onChange={(v) => updateSettings({ autoPronounce: v })}
                   />
-                  <SettingToggle
+                  <SettingToggleRow
                     icon={ArrowLeftRight}
                     label={t('settings.produce_label', { lang: t(`lang.${settings.learningLanguage}_short`) })}
                     hint={t('settings.produce_hint')}
                     checked={settings.produceDirection}
                     onChange={(v) => updateSettings({ produceDirection: v })}
                   />
-                  <SettingToggle
-                    icon={Sparkles}
+                  <SettingToggleRow
+                    icon={Mic2}
                     label={t('settings.ai_label')}
                     hint={t('settings.ai_hint')}
                     checked={settings.aiGradingEnabled}
                     onChange={(v) => updateSettings({ aiGradingEnabled: v })}
                   />
-                  <SettingToggle
-                    icon={Layout}
+                  <SettingToggleRow
+                    icon={MessageSquare}
                     label={t('settings.replay_label')}
                     hint={t('settings.replay_hint')}
                     checked={settings.inSessionReplay}
-                    onChange={(v: boolean) => updateSettings({ inSessionReplay: v })}
+                    onChange={(v) => updateSettings({ inSessionReplay: v })}
                   />
                 </div>
               </section>
 
-              {/* Voice Accent — only meaningful when learning English, hidden otherwise. */}
+              {/* VOICE ACCENT */}
               {settings.learningLanguage === 'en' && (
-                <section className="space-y-3 pb-8">
-                  <h3 className="text-[10px] uppercase tracking-widest text-app-hint font-black px-1">{t('settings.section_voice')}</h3>
-                  <div className="flex flex-col gap-3 p-4 bg-app-surface border border-app-border rounded-2xl text-app-text">
+                <section className="space-y-4 pb-12">
+                  <SectionHeader icon={Mic2} label={t('settings.section_voice')} />
+                  <div className="bg-app-surface border border-app-border rounded-2xl p-4 space-y-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-app-primary/10 text-app-primary flex items-center justify-center">
-                        <Languages size={16} />
+                        <Mic2 size={16} />
                       </div>
                       <div className="font-semibold text-sm">{t('settings.accent_label')}</div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 p-1 bg-app-bg rounded-xl border border-app-border">
+                    <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => updateSettings({ voiceLocale: 'en-US' })}
-                        className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                        className={`py-3 rounded-xl text-xs font-bold border transition-all ${
                           settings.voiceLocale === 'en-US'
-                            ? 'bg-app-primary text-app-primary-text shadow-sm'
-                            : 'text-app-hint active:bg-app-surface'
+                            ? 'bg-app-primary text-app-primary-text border-app-primary shadow-md'
+                            : 'bg-app-bg text-app-hint border-app-border active:bg-app-surface'
                         }`}
                       >
                         {t('settings.accent_us')}
                       </button>
                       <button
                         onClick={() => updateSettings({ voiceLocale: 'en-GB' })}
-                        className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                        className={`py-3 rounded-xl text-xs font-bold border transition-all ${
                           settings.voiceLocale === 'en-GB'
-                            ? 'bg-app-primary text-app-primary-text shadow-sm'
-                            : 'text-app-hint active:bg-app-surface'
+                            ? 'bg-app-primary text-app-primary-text border-app-primary shadow-md'
+                            : 'bg-app-bg text-app-hint border-app-border active:bg-app-surface'
                         }`}
                       >
                         {t('settings.accent_uk')}
@@ -312,11 +302,11 @@ export function SettingsSheet({
               )}
             </div>
 
-            {/* Footer Close Button */}
-            <div className="p-6 pt-2 bg-app-bg border-t border-app-border" style={{ paddingBottom: `calc(1.5rem + var(--tg-safe-area-inset-bottom, 0px))` }}>
+            {/* Footer */}
+            <div className="p-6 pt-3 bg-app-bg border-t border-app-border" style={{ paddingBottom: `calc(1.5rem + var(--tg-safe-area-inset-bottom, 0px))` }}>
               <button
                 onClick={onClose}
-                className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-bold active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
+                className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-black uppercase tracking-widest active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
               >
                 {t('common.save')}
               </button>
@@ -328,14 +318,22 @@ export function SettingsSheet({
   );
 }
 
-function SettingToggle({
+function SectionHeader({ icon: Icon, label }: { icon: any, label: string }) {
+  return (
+    <h3 className="text-[10px] uppercase tracking-[0.2em] text-app-hint font-black px-1 flex items-center gap-2">
+      <Icon size={12} className="opacity-50" /> {label}
+    </h3>
+  );
+}
+
+function SettingToggleRow({
   icon: Icon,
   label,
   hint,
   checked,
   onChange,
   onTest,
-  testKind,
+  testLabel,
 }: {
   icon: React.ElementType;
   label: string;
@@ -343,38 +341,37 @@ function SettingToggle({
   checked: boolean;
   onChange: (v: boolean) => void;
   onTest?: (e: React.MouseEvent) => void;
-  /** Which test label to render on the button. Explicit prop instead of
-   *  the previous `label.includes(t('settings.sound_label'))` heuristic,
-   *  which broke whenever the localised "Sound" string happened to be a
-   *  substring (or non-substring) of the rendered label in another locale. */
-  testKind?: 'sound' | 'haptics';
+  testLabel?: string;
 }) {
-  const t = useT()
   return (
-    <div className="flex flex-col gap-2 p-4 bg-app-surface border border-app-border rounded-2xl active:scale-[0.98] transition-transform text-app-text">
-      <label className="flex items-center justify-between cursor-pointer">
+    <div className="p-4 space-y-3">
+      <label className="flex items-center justify-between cursor-pointer group">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-app-primary/10 text-app-primary flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-app-primary/10 text-app-primary flex items-center justify-center transition-colors group-active:bg-app-primary/20">
             <Icon size={16} />
           </div>
-          <div>
-            <div className="font-semibold text-sm">{label}</div>
-            <div className="text-[10px] text-app-hint font-medium leading-tight">{hint}</div>
+          <div className="min-w-0 pr-2">
+            <div className="font-semibold text-sm text-app-text leading-none mb-1.5">{label}</div>
+            <div className="text-[10px] text-app-hint font-medium leading-tight line-clamp-1">{hint}</div>
           </div>
         </div>
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => onChange(e.target.checked)}
-          className="w-10 h-6 rounded-full bg-app-border appearance-none relative checked:bg-app-primary cursor-pointer transition-colors before:content-[''] before:absolute before:w-4 before:h-4 before:bg-white before:rounded-full before:top-1 before:left-1 checked:before:translate-x-4 before:transition-transform"
-        />
+        <div className="relative shrink-0">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={(e) => onChange(e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-10 h-6 bg-app-bg border border-app-border rounded-full peer-checked:bg-app-primary peer-checked:border-app-primary transition-all shadow-inner" />
+          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4 shadow-sm" />
+        </div>
       </label>
       {onTest && (
         <button 
           onClick={onTest}
-          className="mt-2 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg bg-app-bg text-app-hint text-[10px] font-bold uppercase tracking-wider active:scale-95 transition-transform border border-app-border/40"
+          className="w-full flex items-center justify-center gap-2 py-1.5 rounded-lg bg-app-bg text-app-hint text-[10px] font-bold uppercase tracking-wider active:scale-95 transition-transform border border-app-border/50"
         >
-          <Play size={10} fill="currentColor" /> {testKind === 'sound' ? t('settings.test_sound') : t('settings.test_haptics')}
+          <Play size={10} fill="currentColor" /> {testLabel}
         </button>
       )}
     </div>
@@ -387,7 +384,7 @@ function ModeOption({ active, onClick, children }: { active: boolean; onClick: (
       onClick={onClick}
       className={`py-2.5 px-3 text-[11px] font-bold transition-all rounded-xl border ${
         active
-          ? 'bg-app-primary/10 border-app-primary/30 text-app-primary shadow-sm'
+          ? 'bg-app-primary text-app-primary-text border-app-primary shadow-md'
           : 'bg-app-bg border-app-border text-app-hint active:bg-app-surface'
       }`}
     >
