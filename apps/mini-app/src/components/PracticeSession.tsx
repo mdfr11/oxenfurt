@@ -460,8 +460,16 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       })
       const res = await fetchWithAuth(`/translate?${params.toString()}`);
       if (res.ok) {
-        const { translation } = await res.json();
-        setTranslationTooltip(prev => prev ? { ...prev, translation } : null);
+        // Backend returns up to 3 candidates from MyMemory's translation
+        // memory. Joining with " · " shows the obvious sense plus any
+        // niche meanings so the learner can pick the one that fits
+        // their context (e.g. tap "cake" → "торт · жмых" instead of
+        // getting "жмых" alone).
+        const { translations } = (await res.json()) as { translations?: string[] };
+        const translation = (translations ?? []).join(' · ');
+        if (translation.length > 0) {
+          setTranslationTooltip(prev => prev ? { ...prev, translation } : null);
+        }
       }
     } catch {
       setTranslationTooltip(null);

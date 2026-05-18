@@ -66,18 +66,75 @@ describe('GET /translate', () => {
 
   test('accepts well-formed lang codes (en, en-US, ru)', async () => {
     stubFetch(
-      new Response(JSON.stringify({ responseData: { translatedText: 'привет' } }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({
+          responseData: { translatedText: 'привет' },
+          matches: [
+            { translation: 'привет', quality: '74', match: 1, 'usage-count': 5 },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
     )
     const res = await app().request('/?text=hello&from=en&to=ru', {
       headers: { authorization: await authHeader() },
     })
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ translation: 'привет' })
+    expect(await res.json()).toEqual({ translations: ['привет'] })
     expect(upstreamCalls).toHaveLength(1)
     expect(upstreamCalls[0]).toContain('langpair=en|ru')
+  })
+
+  test('returns up to 3 high-quality matches, sorted by exact-match then quality', async () => {
+    // The user-reported "cake → жмых" pathology — three valid matches,
+    // niche one happened to land first. With ranking we still return
+    // it (translation memory has it) but as one of several candidates,
+    // not in isolation.
+    stubFetch(
+      new Response(
+        JSON.stringify({
+          responseData: { translatedText: 'жмых' },
+          matches: [
+            { translation: 'жмых', quality: '74', match: 1, 'usage-count': 3 },
+            { translation: 'сладкое', quality: '0', match: 1, 'usage-count': 2 },
+            { translation: 'торт', quality: '74', match: 0.99, 'usage-count': 2 },
+            { translation: 'кекс', quality: '50', match: 1, 'usage-count': 1 },
+          ],
+        }),
+        { status: 200 },
+      ),
+    )
+    const res = await app().request('/?text=cake', { headers: { authorization: await authHeader() } })
+    const body = (await res.json()) as { translations: string[] }
+    // Quality<60 (сладкое=0, кекс=50) drops. жмых (match=1) outranks
+    // торт (match=0.99) on exact-match tiebreak.
+    expect(body.translations).toEqual(['жмых', 'торт'])
+  })
+
+  test('falls back to responseData when matches are absent', async () => {
+    stubFetch(
+      new Response(JSON.stringify({ responseData: { translatedText: 'привет' } }), { status: 200 }),
+    )
+    const res = await app().request('/?text=hi', { headers: { authorization: await authHeader() } })
+    expect(await res.json()).toEqual({ translations: ['привет'] })
+  })
+
+  test('dedupes case-insensitive across matches', async () => {
+    stubFetch(
+      new Response(
+        JSON.stringify({
+          matches: [
+            { translation: 'Привет', quality: '80', match: 1, 'usage-count': 1 },
+            { translation: 'привет', quality: '75', match: 1, 'usage-count': 1 },
+            { translation: 'здравствуй', quality: '70', match: 1, 'usage-count': 1 },
+          ],
+        }),
+        { status: 200 },
+      ),
+    )
+    const res = await app().request('/?text=hi', { headers: { authorization: await authHeader() } })
+    const body = (await res.json()) as { translations: string[] }
+    expect(body.translations).toEqual(['Привет', 'здравствуй'])
   })
 
   test('default langpair is en|ru when ?from/?to omitted', async () => {
@@ -107,7 +164,9 @@ describe('GET /translate', () => {
 
   test('502 no_translation when upstream returns empty translation', async () => {
     stubFetch(
-      new Response(JSON.stringify({ responseData: { translatedText: '' } }), { status: 200 }),
+      new Response(JSON.stringify({ responseData: { translatedText: '' }, matches: [] }), {
+        status: 200,
+      }),
     )
     const res = await app().request('/?text=hello', {
       headers: { authorization: await authHeader() },
