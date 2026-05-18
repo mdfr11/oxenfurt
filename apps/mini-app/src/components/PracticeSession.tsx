@@ -699,6 +699,16 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                 >
                   {variant === 'cloze' && vocab && clozePrompt ? (
                     <>
+                      {/* Translation hint above the cloze sentence.
+                          Without it, sentences like "I didn't hear any
+                          ___ from that company." are unfair — too many
+                          words fit. The hint turns the exercise into
+                          "produce the foreign form given meaning +
+                          context" instead of "guess what the LLM
+                          picked." */}
+                      <div className="text-base text-app-hint italic font-medium text-center">
+                        {vocab.translation}
+                      </div>
                       <p className="text-lg text-app-text leading-relaxed">
                         {clozePrompt.before}
                         <span className="text-app-primary font-bold">{'_'.repeat(Math.max(3, Math.min(12, clozePrompt.targetLength)))}</span>
