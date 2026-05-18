@@ -184,6 +184,12 @@ export const ru = {
   'settings.size_label': 'Размер сессии',
   'settings.size_hint': 'кол-во новых карточек',
   'settings.size_all': 'Все',
+  'settings.card_type_label': 'Тип карточек',
+  'settings.card_type_hint': 'фильтр для сессии',
+  'settings.card_type_all': 'Все',
+  'settings.card_type_vocab': 'Слова',
+  'settings.card_type_phrase': 'Фразы',
+  'settings.card_type_theory': 'Теория',
 
   'settings.sound_label': 'Звуки интерфейса',
   'settings.sound_hint': 'Щелчки и уведомления',

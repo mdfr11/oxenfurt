@@ -70,6 +70,11 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   // Soft cap from settings — null = no override, let backend default kick in.
   const sessionLimit = useMemo(() => getSettings().sessionLimit, [])
+  // Card type filter — 'all' (default) means no filter, otherwise the
+  // /due query only returns cards of that type. Captured once at mount;
+  // changing the setting mid-session won't change the queue (same
+  // contract as sessionLimit).
+  const cardTypeFilter = useMemo(() => getSettings().cardTypeFilter, [])
 
   // Snapshot of any paused session for THIS mode. Read once so the
   // /due query can decide whether to fetch fresh cards. The
@@ -83,7 +88,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // (bypassDue, sessionLimit); background refetches are ignored by the
   // hook's shouldReseed guard.
   const { data, isLoading, error } = useQuery({
-    queryKey: ['cards', 'due', bypassDue, sessionLimit],
+    queryKey: ['cards', 'due', bypassDue, sessionLimit, cardTypeFilter],
     enabled: !hasResumedSession,
     queryFn: async () => {
       const params = new URLSearchParams()
@@ -92,6 +97,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
         params.set('limit', '50')
       }
       if (sessionLimit !== null) params.set('limit', String(sessionLimit))
+      if (cardTypeFilter !== 'all') params.set('type', cardTypeFilter)
       const qs = params.toString()
       const path = qs ? `/cards/due?${qs}` : '/cards/due'
       const res = await fetchWithAuth(path)
@@ -176,16 +182,26 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   });
 
   // Typed-answer modes (cloze/translation/listening) have no sensible
-  // rendering for theory cards — they have no `term` to gap-fill, translate,
-  // or pronounce. Filter them out so the session stays coherent with the
-  // user's chosen mode. They remain available in `recognition` and `mixed`.
+  // rendering for theory cards — they have no `term` to gap-fill,
+  // translate, or pronounce. Two cases:
+  //   * type filter = 'all' / 'vocab' / 'phrase' AND mode is typed-answer
+  //     → drop theory cards so the session stays coherent with the mode
+  //   * type filter = 'theory' AND mode is typed-answer
+  //     → that's a contradiction the type-filter UI should prevent, but
+  //       if it happens (e.g. mid-deploy stale state) we DON'T filter
+  //       theory out — letting the session be empty was worse than just
+  //       running the session in recognition. The variant resolver below
+  //       already forces theory → recognition, so the only thing we'd
+  //       lose by NOT filtering is the original mode's variant — which
+  //       doesn't apply to theory anyway.
   const baseCards = useMemo<DueCardDto[]>(() => {
     const all = data?.cards ?? [];
-    if (mode === 'cloze' || mode === 'translation' || mode === 'listening') {
+    const typedAnswerMode = mode === 'cloze' || mode === 'translation' || mode === 'listening'
+    if (typedAnswerMode && cardTypeFilter !== 'theory') {
       return all.filter((c) => c.type !== 'theory');
     }
     return all;
-  }, [data?.cards, mode]);
+  }, [data?.cards, mode, cardTypeFilter]);
 
   // Queue + cursor + stats + pending-review undo slot + session-id ref
   // all live in this hook. See hooks/usePracticeQueue.ts for the why —

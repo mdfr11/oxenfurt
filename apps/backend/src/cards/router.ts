@@ -157,10 +157,17 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
     // through the queue but still has appetite. FSRS state updates on
     // review just the same — early-reviewed cards get rescheduled.
     const bypassDue = c.req.query('bypass_due') === 'true'
+    // Optional type filter for focused sessions — "only theory",
+    // "only vocab", etc. Unknown values are silently ignored so a
+    // stale client value doesn't crash the request.
+    const typeRaw = c.req.query('type')
+    const typeFilter: 'vocab' | 'theory' | 'phrase' | undefined =
+      typeRaw === 'vocab' || typeRaw === 'theory' || typeRaw === 'phrase' ? typeRaw : undefined
 
-    const condition = bypassDue
-      ? eq(cards.status, 'active')
-      : and(eq(cards.status, 'active'), lte(cards.due, now()))
+    const conds = [eq(cards.status, 'active')]
+    if (!bypassDue) conds.push(lte(cards.due, now()))
+    if (typeFilter !== undefined) conds.push(eq(cards.type, typeFilter))
+    const condition = and(...conds)
 
     const rows = await deps.db
       .select()

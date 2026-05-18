@@ -122,6 +122,35 @@ export function SettingsSheet({
                       ))}
                     </div>
                   </div>
+
+                  <div className="h-px bg-app-border mx-[-1rem]" />
+
+                  {/* Card-type filter — focused-practice picker. Default
+                      'all' keeps the queue mixed; selecting one type
+                      restricts /due to that type only. Theory + a typed-
+                      answer mode auto-degrades the mode to recognition
+                      (a theory card has nothing to type). */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="text-xs font-bold">{t('settings.card_type_label')}</div>
+                      <div className="text-[10px] text-app-hint font-medium tracking-tight">{t('settings.card_type_hint')}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      {(['all', 'vocab', 'phrase', 'theory'] as const).map((kind) => (
+                        <button
+                          key={kind}
+                          onClick={() => updateSettings({ cardTypeFilter: kind })}
+                          className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all active:scale-95 ${
+                            settings.cardTypeFilter === kind
+                              ? 'bg-app-primary text-app-primary-text border-app-primary shadow-sm'
+                              : 'bg-app-bg text-app-hint border-app-border'
+                          }`}
+                        >
+                          {t(`settings.card_type_${kind}` as const)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </section>
 

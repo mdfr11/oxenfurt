@@ -173,6 +173,12 @@ export const en: Record<keyof typeof ru, string> = {
   'settings.size_label': 'Session size',
   'settings.size_hint': 'new cards per session',
   'settings.size_all': 'All',
+  'settings.card_type_label': 'Card types',
+  'settings.card_type_hint': 'session filter',
+  'settings.card_type_all': 'All',
+  'settings.card_type_vocab': 'Vocab',
+  'settings.card_type_phrase': 'Phrases',
+  'settings.card_type_theory': 'Theory',
 
   'settings.sound_label': 'Interface sounds',
   'settings.sound_hint': 'Clicks and notifications',

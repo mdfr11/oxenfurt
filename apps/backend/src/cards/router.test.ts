@@ -154,6 +154,45 @@ describe.skipIf(noDb)('GET /due', () => {
     const body = (await res.json()) as { cards: unknown[] }
     expect(body.cards).toHaveLength(2)
   })
+
+  test('?type=vocab returns only vocab cards', async () => {
+    await seedActiveVocab('alpha', new Date(NOW.getTime() - 3000))
+    await seedActivePhrase('on the other hand', new Date(NOW.getTime() - 2000))
+    await seedActiveTheory('When to use *in case*?')
+    const res = await buildApp().request('/due?type=vocab', { headers: await authHeader() })
+    const body = (await res.json()) as { cards: Array<{ type: string }> }
+    expect(body.cards.every((c) => c.type === 'vocab')).toBe(true)
+    expect(body.cards).toHaveLength(1)
+  })
+
+  test('?type=theory returns only theory cards', async () => {
+    await seedActiveVocab('alpha', new Date(NOW.getTime() - 3000))
+    await seedActivePhrase('by the way', new Date(NOW.getTime() - 2000))
+    await seedActiveTheory('Difference between A and B?')
+    const res = await buildApp().request('/due?type=theory', { headers: await authHeader() })
+    const body = (await res.json()) as { cards: Array<{ type: string }> }
+    expect(body.cards).toHaveLength(1)
+    expect(body.cards[0]!.type).toBe('theory')
+  })
+
+  test('?type=phrase returns only phrase cards', async () => {
+    await seedActiveVocab('alpha', new Date(NOW.getTime() - 3000))
+    await seedActivePhrase('over the moon', new Date(NOW.getTime() - 2000))
+    await seedActiveTheory('Q?')
+    const res = await buildApp().request('/due?type=phrase', { headers: await authHeader() })
+    const body = (await res.json()) as { cards: Array<{ type: string }> }
+    expect(body.cards).toHaveLength(1)
+    expect(body.cards[0]!.type).toBe('phrase')
+  })
+
+  test('unknown ?type value is silently ignored (no 400, returns all)', async () => {
+    await seedActiveVocab('alpha', new Date(NOW.getTime() - 3000))
+    await seedActivePhrase('the X factor', new Date(NOW.getTime() - 2000))
+    const res = await buildApp().request('/due?type=garbage', { headers: await authHeader() })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { cards: unknown[] }
+    expect(body.cards).toHaveLength(2)
+  })
 })
 
 describe.skipIf(noDb)('POST /:id/review', () => {

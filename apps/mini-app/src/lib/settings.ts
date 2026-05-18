@@ -44,6 +44,13 @@ interface AppSettings {
   // outweighed the learning-step benefit. Power users who want Anki's
   // learning-step behaviour can flip it on.
   inSessionReplay: boolean;
+  // Restrict the practice session to one card type. 'all' = no filter
+  // (current behaviour). 'theory' is the obvious use case — grammar
+  // notes get lost in a mixed-with-vocab session — but the option is
+  // there for any single-type focus. Typed-answer modes (cloze /
+  // translation / listening) auto-degrade to recognition for theory
+  // cards since theory has nothing to type or pronounce.
+  cardTypeFilter: 'all' | 'vocab' | 'phrase' | 'theory';
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -57,6 +64,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   sessionLimit: null,
   aiGradingEnabled: false,
   inSessionReplay: false,
+  cardTypeFilter: 'all',
 };
 
 const SETTINGS_KEY = 'oxenfurt_settings';
