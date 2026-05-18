@@ -440,8 +440,8 @@ function CardListItem({ card, onOpen }: { card: CardListDto; onOpen: () => void 
         <div className="flex items-center gap-2 text-[10px] text-app-hint mt-2 opacity-70">
           <span>{t('library.detail_reviews')}: {card.reps}</span>
           <span>·</span>
-          <span className={card.lapses >= 4 ? 'text-rose-500 font-bold opacity-100 flex items-center gap-0.5' : ''}>
-            {card.lapses >= 4 && <Flame size={10} />}
+          <span className={card.lapses >= 4 ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1 opacity-100' : ''}>
+            {card.lapses >= 4 && <Flame size={10} fill="currentColor" />}
             {t('library.detail_lapses')}: {card.lapses}
           </span>
         </div>

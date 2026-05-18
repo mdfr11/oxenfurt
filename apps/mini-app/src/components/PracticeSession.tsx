@@ -714,12 +714,17 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                           "produce the foreign form given meaning +
                           context" instead of "guess what the LLM
                           picked." */}
-                      <div className="text-base text-app-hint italic font-medium text-center">
-                        {vocab.translation}
+                      <div className="flex flex-col items-center gap-2 mb-4 shrink-0">
+                        <div className="bg-app-primary/10 text-app-primary px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-[0.15em] border border-app-primary/20">
+                          {t('practice.prompt_translation')}
+                        </div>
+                        <div className="text-base text-app-text font-bold text-center leading-tight px-2 max-w-[280px]">
+                          {vocab.translation}
+                        </div>
                       </div>
-                      <p className="text-lg text-app-text leading-relaxed">
+                      <p className="text-lg text-app-text leading-relaxed text-center px-4">
                         {clozePrompt.before}
-                        <span className="text-app-primary font-bold">{'_'.repeat(Math.max(3, Math.min(12, clozePrompt.targetLength)))}</span>
+                        <span className="text-app-primary font-black underline underline-offset-4 decoration-2">{'_'.repeat(Math.max(3, Math.min(12, clozePrompt.targetLength)))}</span>
                         {clozePrompt.after}
                       </p>
                       <TypedAnswerField
@@ -1161,18 +1166,18 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
             initial={{ opacity: 0, scale: 0.9, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 10 }}
-            className="fixed z-[100] px-4 py-2 bg-zinc-900 text-white rounded-xl shadow-xl border border-white/10 flex flex-col items-center text-center gap-0.5"
+            className="fixed z-[100] px-4 py-2 bg-zinc-900/90 backdrop-blur-md text-white rounded-2xl shadow-2xl border border-white/20 flex flex-col items-center text-center gap-0.5 max-w-[240px]"
             style={{ 
-              left: Math.max(16, Math.min(window.innerWidth - 150, translationTooltip.x - 75)),
-              top: translationTooltip.y - 80 
+              left: Math.max(16, Math.min(window.innerWidth - 256, translationTooltip.x - 120)),
+              top: translationTooltip.y - 85 
             }}
           >
-            <div className="text-[10px] uppercase font-bold text-white/50 tracking-widest">{translationTooltip.text}</div>
-            <div className="text-sm font-semibold">
+            <div className="text-[9px] uppercase font-black text-white/40 tracking-[0.2em]">{translationTooltip.text}</div>
+            <div className="text-sm font-bold leading-tight">
               {translationTooltip.translation || '...'}
             </div>
             {/* Tooltip arrow */}
-            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-zinc-900 rotate-45 border-r border-b border-white/10" />
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-zinc-900/90 rotate-45 border-r border-b border-white/20" />
           </motion.div>
         )}
       </AnimatePresence>

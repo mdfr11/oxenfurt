@@ -57,7 +57,7 @@ async function record() {
     else if (u.includes('/cards/due')) body = {
       cards: [
         { 
-          id: '1', type: 'vocab', 
+          id: '0', type: 'vocab', 
           payload: { term: 'Pragmatic', translation: 'Practical', context_sentence: 'A pragmatic approach.' }, 
           fsrs: { fsrs_state: 2, due: new Date().toISOString(), stability: 5, difficulty: 3, elapsed_days: 1, scheduled_days: 5, learning_steps: 0, reps: 5, lapses: 0, last_review: new Date().toISOString() } 
         }
