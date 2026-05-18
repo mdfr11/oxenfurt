@@ -11,44 +11,92 @@ import type { DueCardDto, PhrasePayload, VocabPayload } from '@oxenfurt/shared'
 import type { ExerciseVariant } from '../lib/practiceMode'
 
 /**
- * Returns the substring of a vocab card's context_sentence covered by
- * the `context_term_start`/`context_term_end` offsets. Falls back to
- * the bare `term` field when offsets are missing or out of bounds — the
- * ingest pipeline doesn't always populate them precisely.
+ * Locate the term inside its context sentence, returning `[start, end)`
+ * indices that satisfy `sentence.slice(start, end).toLowerCase() ===
+ * term.toLowerCase()`.
+ *
+ * We do NOT trust the Hermes-supplied offsets blindly — the LLM has
+ * been known to return positions inside the term (off-by-one to the
+ * right of the first character) or positions that swallow the trailing
+ * space, producing cards like "I didn't hear any l______from that
+ * company." for the term "leak". The hinted offsets are tried first,
+ * but only kept when the slice they describe actually matches the
+ * term; otherwise we fall back to a case-insensitive substring search
+ * (preferring a hit near the hint). Returns null when the term simply
+ * isn't in the sentence — caller fronts a "term = ?" UI in that case.
+ */
+export function locateTerm(
+  sentence: string,
+  term: string,
+  hintedStart: number,
+  hintedEnd: number,
+): { start: number; end: number } | null {
+  const t = term.toLowerCase()
+  const s = sentence.toLowerCase()
+  // 1. Trust the hint when it actually points to the right substring.
+  if (
+    Number.isFinite(hintedStart) &&
+    Number.isFinite(hintedEnd) &&
+    hintedStart >= 0 &&
+    hintedEnd > hintedStart &&
+    hintedEnd <= sentence.length &&
+    s.slice(hintedStart, hintedEnd) === t
+  ) {
+    return { start: hintedStart, end: hintedEnd }
+  }
+  // 2. Hint is wrong (or missing). Find the term ourselves. Prefer a
+  //    hit close to the hint so multi-occurrence terms still align with
+  //    what the LLM was pointing at.
+  let bestStart = -1
+  let bestDistance = Number.POSITIVE_INFINITY
+  let from = 0
+  for (;;) {
+    const at = s.indexOf(t, from)
+    if (at < 0) break
+    const distance = Number.isFinite(hintedStart) ? Math.abs(at - hintedStart) : at
+    if (distance < bestDistance) {
+      bestDistance = distance
+      bestStart = at
+    }
+    from = at + 1
+  }
+  if (bestStart < 0) return null
+  return { start: bestStart, end: bestStart + term.length }
+}
+
+/**
+ * Returns the substring of a vocab card's context_sentence that
+ * corresponds to the term — using `locateTerm` so the LLM's hinted
+ * offsets are sanity-checked. Falls back to the bare `term` field when
+ * the term genuinely doesn't appear in the sentence.
  */
 export function extractClozeTerm(vocab: VocabPayload): string {
-  const start = vocab.context_term_start
-  const end = vocab.context_term_end
-  if (
-    Number.isFinite(start) &&
-    Number.isFinite(end) &&
-    start >= 0 &&
-    end > start &&
-    end <= vocab.context_sentence.length
-  ) {
-    return vocab.context_sentence.slice(start, end)
-  }
-  return vocab.term
+  const located = locateTerm(
+    vocab.context_sentence,
+    vocab.term,
+    vocab.context_term_start,
+    vocab.context_term_end,
+  )
+  if (located === null) return vocab.term
+  return vocab.context_sentence.slice(located.start, located.end)
 }
 
 /**
  * Slice a vocab card into the (before, after) pair that flanks the
  * blank, plus the target length for placeholder sizing. Returns a
- * sensible fallback when offsets are unusable — appends `(term = ?)`
- * to the sentence so the learner still has somewhere to type.
+ * sensible fallback when the term isn't in the sentence — appends
+ * `(term = ?)` so the learner still has somewhere to type.
  */
 export function buildClozeSentence(
   vocab: VocabPayload,
 ): { before: string; after: string; targetLength: number } {
-  const start = vocab.context_term_start
-  const end = vocab.context_term_end
-  if (
-    !Number.isFinite(start) ||
-    !Number.isFinite(end) ||
-    start < 0 ||
-    end <= start ||
-    end > vocab.context_sentence.length
-  ) {
+  const located = locateTerm(
+    vocab.context_sentence,
+    vocab.term,
+    vocab.context_term_start,
+    vocab.context_term_end,
+  )
+  if (located === null) {
     return {
       before: vocab.context_sentence + ' (',
       after: ' = ?)',
@@ -56,9 +104,9 @@ export function buildClozeSentence(
     }
   }
   return {
-    before: vocab.context_sentence.slice(0, start),
-    after: vocab.context_sentence.slice(end),
-    targetLength: end - start,
+    before: vocab.context_sentence.slice(0, located.start),
+    after: vocab.context_sentence.slice(located.end),
+    targetLength: located.end - located.start,
   }
 }
 

@@ -5,6 +5,7 @@ import {
   buildPhraseCloze,
   extractClozeTerm,
   fingerprintCards,
+  locateTerm,
   pickSpeakable,
   shouldAutoPronounce,
   shouldReseed,
@@ -45,6 +46,44 @@ function dueCard(id: string): DueCardDto {
   }
 }
 
+describe('locateTerm', () => {
+  test('trusts hinted offsets when they slice to the term exactly', () => {
+    expect(locateTerm('She is a versatile musician.', 'versatile', 9, 18)).toEqual({
+      start: 9,
+      end: 18,
+    })
+  })
+
+  test('falls back to substring search when the hint is off by one+', () => {
+    // The real user-reported regression: sentence
+    //   "I didn't hear any laughter from that company."
+    // "laughter" sits at [18, 26). LLM returned hint [19, 27) — start
+    // is one char past the real start, end swallows the trailing
+    // space. Slice on the hint gives "aughter " which doesn't match
+    // the term, so locateTerm has to search.
+    const sentence = "I didn't hear any laughter from that company."
+    expect(locateTerm(sentence, 'laughter', 19, 27)).toEqual({ start: 18, end: 26 })
+  })
+
+  test('handles case-insensitive matching', () => {
+    expect(locateTerm('Versatile means many things.', 'versatile', -1, -1)).toEqual({
+      start: 0,
+      end: 9,
+    })
+  })
+
+  test('prefers the occurrence closest to the hint when the term repeats', () => {
+    const sentence = 'leak somewhere or another leak in the pipe.'
+    // First "leak" at 0, second at 26. Hint near the second one →
+    // second wins.
+    expect(locateTerm(sentence, 'leak', 24, 28)).toEqual({ start: 26, end: 30 })
+  })
+
+  test('returns null when the term is not in the sentence at all', () => {
+    expect(locateTerm('Completely unrelated text.', 'versatile', 0, 9)).toBeNull()
+  })
+})
+
 describe('extractClozeTerm', () => {
   test('returns sliced substring when offsets are valid', () => {
     expect(extractClozeTerm(vocab())).toBe('versatile')
@@ -64,6 +103,13 @@ describe('extractClozeTerm', () => {
     const v = vocab({ context_term_start: 10, context_term_end: 10 })
     expect(extractClozeTerm(v)).toBe('versatile')
   })
+
+  test('corrects an off-by-one hint by searching for the term', () => {
+    // Hint says [10, 18) instead of [9, 18) — slice would give
+    // "ersatile" instead of "versatile". Should heal.
+    const v = vocab({ context_term_start: 10, context_term_end: 18 })
+    expect(extractClozeTerm(v)).toBe('versatile')
+  })
 })
 
 describe('buildClozeSentence', () => {
@@ -76,11 +122,34 @@ describe('buildClozeSentence', () => {
     })
   })
 
-  test('falls back to "(term = ?)" pattern when offsets are unusable', () => {
-    const result = buildClozeSentence(vocab({ context_term_start: -1, context_term_end: -1 }))
+  test('falls back to "(term = ?)" pattern only when the term is genuinely missing', () => {
+    // Term not in the sentence at all → fallback.
+    const result = buildClozeSentence(
+      vocab({ term: 'absent', context_term_start: -1, context_term_end: -1 }),
+    )
     expect(result.before).toBe('She is a versatile musician. (')
     expect(result.after).toBe(' = ?)')
-    expect(result.targetLength).toBe('versatile'.length)
+    expect(result.targetLength).toBe('absent'.length)
+  })
+
+  test('repairs the rendered card when the LLM hint shifts both ends', () => {
+    // Real user-reported regression. Hermes returned offsets that
+    // pointed one char into "laughter" and swallowed the trailing
+    // space, so the cloze rendered as
+    //   "I didn't hear any l______from that company."
+    // with the "l" leaking outside the blank and no space before
+    // "from". After the locateTerm fix the blank covers exactly
+    // "laughter" with proper spacing on both sides.
+    const result = buildClozeSentence({
+      term: 'laughter',
+      translation: 'смех',
+      context_sentence: "I didn't hear any laughter from that company.",
+      context_term_start: 19, // one char past the real start
+      context_term_end: 27, // one char past the real end (eats the space)
+    })
+    expect(result.before).toBe("I didn't hear any ")
+    expect(result.after).toBe(' from that company.')
+    expect(result.targetLength).toBe('laughter'.length)
   })
 })
 

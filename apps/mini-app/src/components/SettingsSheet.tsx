@@ -318,7 +318,7 @@ export function SettingsSheet({
   );
 }
 
-function SectionHeader({ icon: Icon, label }: { icon: any, label: string }) {
+function SectionHeader({ icon: Icon, label }: { icon: React.ComponentType<{ size?: number; className?: string }>, label: string }) {
   return (
     <h3 className="text-[10px] uppercase tracking-[0.2em] text-app-hint font-black px-1 flex items-center gap-2">
       <Icon size={12} className="opacity-50" /> {label}
