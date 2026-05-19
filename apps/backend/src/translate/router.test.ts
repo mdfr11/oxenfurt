@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { signSession } from '../auth/jwt.ts'
+import type { ChatMessage, ChatOptions, LlmClient } from '../llm/client.ts'
 import { createTranslateRouter } from './router.ts'
 
 const JWT_SECRET = '0123456789abcdef0123456789abcdef-trans'
@@ -27,8 +28,21 @@ afterEach(() => {
   globalThis.fetch = realFetch
 })
 
-function app() {
-  return createTranslateRouter({ jwtSecret: JWT_SECRET, now: () => NOW })
+function app(llm: LlmClient | null = null) {
+  return createTranslateRouter({ jwtSecret: JWT_SECRET, llm, now: () => NOW })
+}
+
+function stubLlm(
+  reply: string | (() => Promise<string>),
+): LlmClient & { calls: Array<{ messages: ChatMessage[]; opts: ChatOptions | undefined }> } {
+  const calls: Array<{ messages: ChatMessage[]; opts: ChatOptions | undefined }> = []
+  return {
+    calls,
+    async chat(messages, opts) {
+      calls.push({ messages, opts })
+      return typeof reply === 'function' ? await reply() : reply
+    },
+  }
 }
 
 describe('GET /translate', () => {
@@ -183,5 +197,86 @@ describe('GET /translate', () => {
       headers: { authorization: await authHeader() },
     })
     expect(upstreamCalls[0]).toContain('q=hello%20%26%20goodbye')
+  })
+
+  test('LLM path: uses configured client, no MyMemory call', async () => {
+    const llm = stubLlm('нравится · любить')
+    const res = await app(llm).request('/?text=like', {
+      headers: { authorization: await authHeader() },
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ translations: ['нравится', 'любить'] })
+    expect(llm.calls).toHaveLength(1)
+    expect(upstreamCalls).toHaveLength(0) // MyMemory not touched
+    // System prompt + user prompt — verify user-side phrasing.
+    const user = llm.calls[0]!.messages.find((m) => m.role === 'user')!
+    expect(user.content).toContain('like')
+    expect(user.content).toContain('English')
+    expect(user.content).toContain('Russian')
+  })
+
+  test('LLM path: passes context sentence through when provided', async () => {
+    const llm = stubLlm('нравится')
+    await app(llm).request(
+      '/?text=like&context=' + encodeURIComponent('I like anything that is peach flavored.'),
+      { headers: { authorization: await authHeader() } },
+    )
+    const user = llm.calls[0]!.messages.find((m) => m.role === 'user')!
+    expect(user.content).toContain('Context:')
+    expect(user.content).toContain('peach flavored')
+  })
+
+  test('LLM path: parses · / commas / line breaks as separators', async () => {
+    const llm = stubLlm('cat,\nкот · кошка, fluffy')
+    const res = await app(llm).request('/?text=feline', {
+      headers: { authorization: await authHeader() },
+    })
+    const body = (await res.json()) as { translations: string[] }
+    // First 3, deduped case-insensitively. Punctuation trimmed.
+    expect(body.translations).toEqual(['cat', 'кот', 'кошка'])
+  })
+
+  test('LLM path: strips markdown fences and outer quotes', async () => {
+    const llm = stubLlm('```\n"торт"\n```')
+    const res = await app(llm).request('/?text=cake', {
+      headers: { authorization: await authHeader() },
+    })
+    expect(await res.json()).toEqual({ translations: ['торт'] })
+  })
+
+  test('LLM failure falls back to MyMemory', async () => {
+    const llm = stubLlm(async () => {
+      throw new Error('llm dead')
+    })
+    stubFetch(
+      new Response(
+        JSON.stringify({
+          matches: [{ translation: 'кот', quality: '80', match: 1, 'usage-count': 1 }],
+        }),
+        { status: 200 },
+      ),
+    )
+    const res = await app(llm).request('/?text=cat', {
+      headers: { authorization: await authHeader() },
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ translations: ['кот'] })
+    expect(upstreamCalls).toHaveLength(1) // MyMemory was hit
+  })
+
+  test('LLM returns empty → fallback to MyMemory', async () => {
+    const llm = stubLlm('   ')
+    stubFetch(
+      new Response(
+        JSON.stringify({
+          matches: [{ translation: 'торт', quality: '80', match: 1, 'usage-count': 1 }],
+        }),
+        { status: 200 },
+      ),
+    )
+    const res = await app(llm).request('/?text=cake', {
+      headers: { authorization: await authHeader() },
+    })
+    expect(await res.json()).toEqual({ translations: ['торт'] })
   })
 })

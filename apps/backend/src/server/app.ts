@@ -230,6 +230,7 @@ export function createApp(deps: AppDeps): Hono {
     '/translate',
     createTranslateRouter({
       jwtSecret: deps.jwtSecret,
+      llm,
       now,
     }),
   )

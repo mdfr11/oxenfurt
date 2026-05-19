@@ -453,18 +453,26 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
     try {
       const { learningLanguage, nativeLanguage } = getSettings()
+      // Surrounding sentence helps the LLM disambiguate ("like" the
+      // verb vs "like" the preposition). Pulled from whichever payload
+      // the current card carries — vocab and phrase both have one.
+      const contextSentence =
+        currentCard?.type === 'vocab'
+          ? (currentCard.payload as VocabPayload).context_sentence
+          : currentCard?.type === 'phrase'
+            ? (currentCard.payload as PhrasePayload).context_sentence
+            : ''
       const params = new URLSearchParams({
         text: cleanWord,
         from: learningLanguage,
         to: nativeLanguage,
       })
+      if (contextSentence) params.set('context', contextSentence)
       const res = await fetchWithAuth(`/translate?${params.toString()}`);
       if (res.ok) {
-        // Backend returns up to 3 candidates from MyMemory's translation
-        // memory. Joining with " · " shows the obvious sense plus any
-        // niche meanings so the learner can pick the one that fits
-        // their context (e.g. tap "cake" → "торт · жмых" instead of
-        // getting "жмых" alone).
+        // Backend returns up to 3 candidates — context-aware via LLM
+        // when configured, MyMemory ranked-top-3 otherwise. Joining
+        // with " · " shows multiple senses so the learner can pick.
         const { translations } = (await res.json()) as { translations?: string[] };
         const translation = (translations ?? []).join(' · ');
         if (translation.length > 0) {
