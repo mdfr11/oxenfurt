@@ -168,6 +168,7 @@ export function createApp(deps: AppDeps): Hono {
     createCardsRouter({
       db: deps.db,
       jwtSecret: deps.jwtSecret,
+      ingestToken: deps.ingestToken,
       fsrs,
       now,
     }),

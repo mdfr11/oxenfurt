@@ -22,6 +22,7 @@ import { isUuid } from '../lib/uuid.ts'
 export interface CardsRouterDeps {
   db: Db
   jwtSecret: string
+  ingestToken: string
   fsrs: FsrsService
   now?: () => Date
 }
@@ -45,7 +46,19 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
 
-  app.use('*', jwtAuth({ jwtSecret: deps.jwtSecret, now }))
+  app.use('*', async (c, next) => {
+    const auth = c.req.header('authorization') ?? ''
+    const bearerMatch = auth.match(/^bearer\s+(.+)$/i)
+    const token = bearerMatch ? bearerMatch[1] : null
+
+    if (token === deps.ingestToken) {
+      // Agent bypass
+      return next()
+    }
+
+    // Fall back to standard JWT auth for users
+    return jwtAuth({ jwtSecret: deps.jwtSecret, now })(c, next)
+  })
 
   // List + filter + search for the Library screen. Defaults to active cards
   // sorted newest-first. The `q` query parameter does case-insensitive
