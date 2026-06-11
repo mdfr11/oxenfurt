@@ -372,13 +372,18 @@ export async function updateCardPayload(
       // "...a pragmatic approach..." and it still matches. If the term isn't
       // a substring of the sentence, fall back to (0, term.length) — cloze
       // gracefully degrades, the user still sees the answer on reveal.
+      //
+      // Empty sentence is a valid edit (the cabinet allows clearing it).
+      // In that case offsets are zeroed — practice surfaces degrade to the
+      // no-sentence path (cloze → recognition, no quote block).
       const { term, translation, context_sentence } = input.payload
-      const lowerSentence = context_sentence.toLowerCase()
-      const lowerTerm = term.toLowerCase()
-      const startIdx = lowerSentence.indexOf(lowerTerm)
-      const context_term_start = startIdx >= 0 ? startIdx : 0
-      const context_term_end =
-        startIdx >= 0 ? startIdx + term.length : term.length
+      let context_term_start = 0
+      let context_term_end = 0
+      if (context_sentence.length > 0) {
+        const startIdx = context_sentence.toLowerCase().indexOf(term.toLowerCase())
+        context_term_start = startIdx >= 0 ? startIdx : 0
+        context_term_end = startIdx >= 0 ? startIdx + term.length : term.length
+      }
       nextPayload = { term, translation, context_sentence, context_term_start, context_term_end }
     } else if (input.type === 'phrase') {
       // Phrase payload has no derived fields — passthrough.

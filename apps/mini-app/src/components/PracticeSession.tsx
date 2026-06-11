@@ -254,12 +254,21 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   // Resolve the exercise variant for the current card. Theory always
   // degrades to `recognition` — it has no term to type or audio to test on.
-  const variant: ExerciseVariant =
-    currentCard === undefined
-      ? 'recognition'
-      : currentCard.type === 'theory'
-        ? 'recognition'
-        : pickVariantFor(mode, currentCard.id)
+  // Vocab cloze also degrades to recognition when the card has no context
+  // sentence (cabinet-edited cards can clear it) — there's nothing to blank.
+  const variant: ExerciseVariant = (() => {
+    if (currentCard === undefined) return 'recognition'
+    if (currentCard.type === 'theory') return 'recognition'
+    const picked = pickVariantFor(mode, currentCard.id)
+    if (
+      picked === 'cloze' &&
+      currentCard.type === 'vocab' &&
+      (currentCard.payload as VocabPayload).context_sentence.length === 0
+    ) {
+      return 'recognition'
+    }
+    return picked
+  })()
 
   const expectsTypedAnswer = variant === 'cloze' || variant === 'translation' || variant === 'listening'
 
@@ -607,6 +616,9 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
 
   // Split sentence logic for target term highlighting and contextual translation
   const renderSentenceWithHighlight = (sentence: string, term: string) => {
+    // Cabinet-edited cards may have no context sentence — render nothing
+    // so the surrounding layout collapses cleanly.
+    if (sentence.length === 0) return null
     const fontSize = sentence.length > 120 ? 'text-lg' : sentence.length > 70 ? 'text-xl' : 'text-2xl';
     
     // First, split by the main term to preserve its highlighting
@@ -871,9 +883,11 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
                       <div onClick={(e) => e.stopPropagation()}>
                         <SpeedChip speed={ttsSpeed} onCycle={cycleSpeed} />
                       </div>
-                      <p className="text-xl text-app-text leading-relaxed">
-                        "{vocab.context_sentence}"
-                      </p>
+                      {vocab.context_sentence.length > 0 && (
+                        <p className="text-xl text-app-text leading-relaxed">
+                          "{vocab.context_sentence}"
+                        </p>
+                      )}
                     </>
                   ) : phrase ? (
                     <>

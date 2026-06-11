@@ -482,10 +482,12 @@ function CardDetailSheet({
                 <h2 className="text-2xl font-bold">{vocab.term}</h2>
                 <p className="text-sm text-app-hint mt-1">{vocab.translation}</p>
               </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_context')}</div>
-                <p className="text-sm leading-relaxed">«{vocab.context_sentence}»</p>
-              </div>
+              {vocab.context_sentence.length > 0 && (
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_context')}</div>
+                  <p className="text-sm leading-relaxed">«{vocab.context_sentence}»</p>
+                </div>
+              )}
             </>
           )}
           {phrase && (
@@ -498,10 +500,12 @@ function CardDetailSheet({
                   <p className="text-xs text-app-hint mt-1.5 font-mono">{phrase.pattern}</p>
                 )}
               </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_context')}</div>
-                <p className="text-sm leading-relaxed">«{phrase.context_sentence}»</p>
-              </div>
+              {phrase.context_sentence.length > 0 && (
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-1">{t('library.detail_context')}</div>
+                  <p className="text-sm leading-relaxed">«{phrase.context_sentence}»</p>
+                </div>
+              )}
             </>
           )}
           {theory && (

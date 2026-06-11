@@ -11,6 +11,7 @@ const conn = await getTestDb()
 const noDb = conn === null
 
 const JWT_SECRET = '0123456789abcdef0123456789abcdef-test'
+const INGEST_TOKEN = 'test-ingest-token'
 const NOW = new Date('2026-01-01T12:00:00.000Z')
 const fsrs = new FsrsService({ enableFuzz: false })
 
@@ -18,6 +19,7 @@ const buildApp = () =>
   createCardsRouter({
     db: conn!.db,
     jwtSecret: JWT_SECRET,
+    ingestToken: INGEST_TOKEN,
     fsrs,
     now: () => NOW,
   })
@@ -526,6 +528,40 @@ describe.skipIf(noDb)('PATCH /:id (inline edit)', () => {
     // 'pragmatic' is at index 2 (after "A ")
     expect(p.context_term_start).toBe(2)
     expect(p.context_term_end).toBe(2 + 'Pragmatic'.length)
+  })
+
+  test('vocab: accepts empty context_sentence and zeroes the offsets', async () => {
+    const id = await seedActiveVocab('hasSentence')
+    const res = await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'vocab',
+        payload: { term: 'orphan', translation: 'сирота', context_sentence: '' },
+      }),
+    })
+    expect(res.status).toBe(200)
+    const [row] = await conn!.db.select().from(cards).where(eq(cards.id, id))
+    const p = row!.payload as { context_sentence: string; context_term_start: number; context_term_end: number }
+    expect(p.context_sentence).toBe('')
+    expect(p.context_term_start).toBe(0)
+    expect(p.context_term_end).toBe(0)
+  })
+
+  test('phrase: accepts empty context_sentence', async () => {
+    const id = await seedActivePhrase('on the go')
+    const res = await buildApp().request(`/${id}`, {
+      method: 'PATCH',
+      headers: { ...(await authHeader()), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'phrase',
+        payload: { phrase: 'on the go', translation: 'на бегу', context_sentence: '' },
+      }),
+    })
+    expect(res.status).toBe(200)
+    const [row] = await conn!.db.select().from(cards).where(eq(cards.id, id))
+    const p = row!.payload as { context_sentence: string }
+    expect(p.context_sentence).toBe('')
   })
 
   test('vocab: falls back to (0, term.length) when term is not in the sentence', async () => {

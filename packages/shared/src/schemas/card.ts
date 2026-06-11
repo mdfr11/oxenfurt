@@ -41,10 +41,18 @@ export type PhrasePayload = v.InferOutput<typeof PhrasePayloadSchema>
 // Inline-edit payload schemas. Client sends just the user-editable fields;
 // the server recomputes term offsets from the (possibly edited) term and
 // context_sentence so the cloze renderer stays valid.
+//
+// `context_sentence` is intentionally optional / allowed-empty on the edit
+// path: a user editing a card from the cabinet (EditCardSheet) may not
+// have a natural sentence to attach, and the practice surfaces degrade
+// gracefully when one isn't present (vocab cloze falls back to
+// recognition, the sentence-quote block is hidden). Ingest still requires
+// a sentence — that constraint lives on VocabPayloadSchema /
+// PhrasePayloadSchema, not here.
 export const VocabUpdateInputSchema = v.object({
   term: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   translation: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
-  context_sentence: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
+  context_sentence: v.pipe(v.string(), v.trim(), v.maxLength(2000)),
 })
 export type VocabUpdateInput = v.InferOutput<typeof VocabUpdateInputSchema>
 
@@ -57,7 +65,7 @@ export type TheoryUpdateInput = v.InferOutput<typeof TheoryUpdateInputSchema>
 export const PhraseUpdateInputSchema = v.object({
   phrase: v.pipe(v.string(), v.trim(), v.minLength(2), v.maxLength(300)),
   translation: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
-  context_sentence: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
+  context_sentence: v.pipe(v.string(), v.trim(), v.maxLength(2000)),
   pattern: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(300))),
 })
 export type PhraseUpdateInput = v.InferOutput<typeof PhraseUpdateInputSchema>
