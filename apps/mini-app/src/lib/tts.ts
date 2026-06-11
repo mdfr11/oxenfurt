@@ -80,6 +80,14 @@ export async function speak(text: string, opts: { rate?: number } = {}): Promise
   const trimmed = text.trim()
   if (trimmed.length === 0) return
 
+  // CRITICAL on iPhone: create + resume the AudioContext synchronously
+  // here, while we're still inside the user gesture that invoked speak().
+  // Once we hit `await fetchTtsBuffer(...)` below, iOS WebKit drops the
+  // gesture context, and any later resume() / source.start() / audio.play()
+  // silently no-ops. iPad and Android WebViews are lenient about this,
+  // which is why the bug surfaces only on iPhone.
+  getTtsContext()
+
   disposeActive()
 
   // Compute the BCP-47 tag from the learning language. English honours the
