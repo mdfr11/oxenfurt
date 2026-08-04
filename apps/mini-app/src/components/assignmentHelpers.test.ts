@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import type { AssignmentItemDto, DueCardDto } from '@oxenfurt/shared';
-import { buildAssignmentQueue, deadlineState, isDrillRepeat } from './assignmentHelpers';
+import { RATING, type AssignmentDto, type AssignmentItemDto, type DueCardDto } from '@oxenfurt/shared';
+import {
+  buildAssignmentOutcome,
+  buildAssignmentQueue,
+  deadlineState,
+  isDrillRepeat,
+  shouldRequeueAfterRating,
+} from './assignmentHelpers';
 
 const NOW = new Date('2026-08-04T12:00:00.000Z');
 
@@ -77,15 +83,156 @@ describe('isDrillRepeat', () => {
 });
 
 describe('deadlineState', () => {
-  test('counts whole days remaining', () => {
-    expect(deadlineState('2026-08-06T21:00:00.000Z', NOW)).toEqual({ days: 2, urgent: false });
+  // Local-time constructors, not Z-suffixed literals: the function compares
+  // calendar days in the learner's timezone, so a UTC literal would make the
+  // expected day count depend on where the suite runs.
+  const local = (y: number, m: number, d: number, h: number) => new Date(y, m - 1, d, h);
+  const EVENING = local(2026, 8, 4, 22);
+
+  test('counts calendar days remaining', () => {
+    expect(deadlineState(local(2026, 8, 6, 21).toISOString(), EVENING)).toEqual({
+      days: 2,
+      urgent: false,
+    });
   });
 
-  test('marks the final day urgent', () => {
-    expect(deadlineState('2026-08-04T21:00:00.000Z', NOW)).toEqual({ days: 0, urgent: true });
+  test('marks a deadline falling today urgent', () => {
+    expect(deadlineState(local(2026, 8, 4, 23).toISOString(), EVENING)).toEqual({
+      days: 0,
+      urgent: true,
+    });
+  });
+
+  test('tomorrow morning is one day away, not today', () => {
+    // The bug this replaces: 11 h away floor-divided to 0 whole days, so a
+    // Friday-morning deadline read on Thursday evening said «сдать сегодня».
+    expect(deadlineState(local(2026, 8, 5, 9).toISOString(), EVENING)).toEqual({
+      days: 1,
+      urgent: false,
+    });
+  });
+
+  test('a deadline more than 24 h away can still be today', () => {
+    // Symmetric case: 23:00 tonight read at 00:30 this morning is under a
+    // day, but 23:00 *tonight* read at 00:30 today is the same calendar day.
+    expect(deadlineState(local(2026, 8, 4, 23).toISOString(), local(2026, 8, 4, 0))).toEqual({
+      days: 0,
+      urgent: true,
+    });
   });
 
   test('clamps a passed deadline to zero', () => {
-    expect(deadlineState('2026-08-03T21:00:00.000Z', NOW)).toEqual({ days: 0, urgent: true });
+    expect(deadlineState(local(2026, 8, 3, 21).toISOString(), EVENING)).toEqual({
+      days: 0,
+      urgent: true,
+    });
+  });
+});
+
+describe('shouldRequeueAfterRating', () => {
+  test('an assignment re-queues both Again and Hard', () => {
+    expect(shouldRequeueAfterRating(RATING.Again, true, false)).toBe(true);
+    expect(shouldRequeueAfterRating(RATING.Hard, true, false)).toBe(true);
+  });
+
+  test('an assignment never re-queues a taken card', () => {
+    expect(shouldRequeueAfterRating(RATING.Good, true, true)).toBe(false);
+    expect(shouldRequeueAfterRating(RATING.Easy, true, true)).toBe(false);
+  });
+
+  test('the in-session replay setting does not apply to assignments', () => {
+    // Off in settings, still on in an assignment — the item stays owed
+    // regardless of what the learner prefers for free practice.
+    expect(shouldRequeueAfterRating(RATING.Again, true, false)).toBe(true);
+  });
+
+  test('free practice re-queues Again only, and only when opted in', () => {
+    expect(shouldRequeueAfterRating(RATING.Again, false, true)).toBe(true);
+    expect(shouldRequeueAfterRating(RATING.Hard, false, true)).toBe(false);
+    expect(shouldRequeueAfterRating(RATING.Again, false, false)).toBe(false);
+  });
+});
+
+function assignment(overrides: Partial<AssignmentDto> = {}): AssignmentDto {
+  return {
+    id: 'a1',
+    title: 'Условные предложения',
+    rationale: null,
+    status: 'active',
+    source: null,
+    created_at: '2026-08-04T09:00:00.000Z',
+    due_at: '2026-08-06T21:00:00.000Z',
+    completed_at: null,
+    completed: 1,
+    total: 3,
+    groups: [
+      { label: 'Забытое', kind: 'weak', total: 2, completed: 1 },
+      { label: 'Слова с урока', kind: 'new', total: 1, completed: 0 },
+    ],
+    ...overrides,
+  };
+}
+
+function groupedItem(
+  id: string,
+  position: number,
+  label: string,
+  kind: 'topic' | 'new' | 'weak',
+  completed: boolean,
+): AssignmentItemDto {
+  return {
+    card: card(id),
+    group_label: label,
+    group_kind: kind,
+    position,
+    completed_at: completed ? '2026-08-04T09:00:00.000Z' : null,
+  };
+}
+
+describe('buildAssignmentOutcome', () => {
+  const items = [
+    groupedItem('a', 0, 'Забытое', 'weak', true),
+    groupedItem('b', 1, 'Забытое', 'weak', false),
+    groupedItem('c', 2, 'Слова с урока', 'new', false),
+  ];
+
+  test('folds this sitting into the snapshot, per group', () => {
+    const out = buildAssignmentOutcome(assignment(), items, new Set(['b', 'c']));
+    expect(out).toEqual({
+      title: 'Условные предложения',
+      completed: 3,
+      total: 3,
+      groups: [
+        { label: 'Забытое', kind: 'weak', total: 2, completed: 2 },
+        { label: 'Слова с урока', kind: 'new', total: 1, completed: 1 },
+      ],
+    });
+  });
+
+  test('a partial sitting reports partial progress', () => {
+    const out = buildAssignmentOutcome(assignment(), items, new Set(['b']));
+    expect(out.completed).toBe(2);
+    expect(out.total).toBe(3);
+    expect(out.groups.map((g) => g.completed)).toEqual([2, 0]);
+  });
+
+  test('does not double-count an item completed before this sitting', () => {
+    // 'a' was already stamped; taking it again in a drill repeat must not
+    // push the count past the denominator.
+    const out = buildAssignmentOutcome(assignment(), items, new Set(['a', 'b', 'c']));
+    expect(out.completed).toBe(3);
+    expect(out.groups[0]!.completed).toBe(2);
+  });
+
+  test('taking nothing leaves the snapshot untouched', () => {
+    const out = buildAssignmentOutcome(assignment(), items, new Set());
+    expect(out.completed).toBe(1);
+    expect(out.groups.map((g) => g.completed)).toEqual([1, 0]);
+  });
+
+  test('does not mutate the snapshot groups', () => {
+    const snapshot = assignment();
+    buildAssignmentOutcome(snapshot, items, new Set(['b', 'c']));
+    expect(snapshot.groups.map((g) => g.completed)).toEqual([1, 0]);
   });
 });
