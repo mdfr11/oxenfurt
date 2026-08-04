@@ -1699,7 +1699,7 @@ Create `apps/backend/src/diagnostics/router.ts`:
 // The agent decides how to weigh them; the backend just measures.
 
 import { Hono } from 'hono'
-import { and, asc, count, desc, eq, gte, lte, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, lt, lte, sql } from 'drizzle-orm'
 import type { DiagnosticsCardDto, DiagnosticsResponse } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { assignmentItems, assignments, cards, type CardRow } from '../db/schema.ts'
@@ -1750,7 +1750,10 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
         deps.db
           .select()
           .from(cards)
-          .where(and(eq(cards.status, 'active'), lte(cards.due, at)))
+          // Strictly before now, not `lte`: freshly ingested cards carry
+          // due = now, and calling them overdue at birth would hand the agent
+          // every card from today's lesson as schedule debt.
+          .where(and(eq(cards.status, 'active'), lt(cards.due, at)))
           .orderBy(asc(cards.due))
           .limit(limit),
         deps.db
@@ -1775,7 +1778,7 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
         deps.db
           .select({ value: count() })
           .from(cards)
-          .where(and(eq(cards.status, 'active'), lte(cards.due, at))),
+          .where(and(eq(cards.status, 'active'), lt(cards.due, at))),
         deps.db
           .select({ value: count() })
           .from(cards)
