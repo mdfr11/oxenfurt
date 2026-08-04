@@ -15,6 +15,7 @@ import {
 } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { cardQuestions, cardReviews, cards, type CardRow } from '../db/schema.ts'
+import { markCardCompleted, settleActiveAssignment } from '../assignments/service.ts'
 import { jwtAuth } from '../middleware/auth.ts'
 import { isUuid } from '../lib/uuid.ts'
 import { toDueDto } from './dto.ts'
@@ -258,6 +259,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
     const result = await archiveCard(deps.db, id)
     if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
     if (result === 'not_active') return c.json({ error: 'not_active' }, 400)
+    await settleActiveAssignment(deps.db, now())
     return c.json({ status: 'archived' })
   })
 
@@ -273,20 +275,36 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
     } catch {
       return c.json({ error: 'invalid_body' }, 400)
     }
-    const parsed = v.safeParse(v.object({ rating: RatingSchema }), body)
+    const parsed = v.safeParse(
+      v.object({ rating: RatingSchema, drill: v.optional(v.boolean(), false) }),
+      body,
+    )
     if (!parsed.success) {
       return c.json({ error: 'invalid_rating' }, 400)
     }
 
     const reviewedAt = now()
-    const updated = await applyReview(deps.db, deps.fsrs, id, parsed.output.rating, reviewedAt)
-    if (updated === null) {
+    const drill = parsed.output.drill
+    const updated = await applyReview(deps.db, deps.fsrs, id, parsed.output.rating, reviewedAt, {
+      drill,
+    })
+    // A drill never produces FSRS state, so `null` there is success — only a
+    // non-drill null means the card is gone or archived.
+    if (updated === null && !drill) {
       return c.json({ error: 'not_found' }, 404)
     }
-    return c.json({ fsrs: updated })
+    return c.json({ fsrs: updated, drill })
   })
 
   return app
+}
+
+export interface ApplyReviewOptions {
+  /** Repeat of a card already measured today. Moves assignment progress
+   *  but writes nothing to FSRS — cramming is study, not measurement.
+   *  Without this, every in-session repeat lands as another review with a
+   *  near-zero interval and steadily corrupts the scheduler. */
+  drill?: boolean
 }
 
 export async function applyReview(
@@ -295,6 +313,7 @@ export async function applyReview(
   cardId: string,
   rating: Rating,
   reviewedAt: Date,
+  opts: ApplyReviewOptions = {},
 ): Promise<FsrsCardState | null> {
   return await db.transaction(async (tx) => {
     const [row] = await tx
@@ -303,6 +322,12 @@ export async function applyReview(
       .where(eq(cards.id, cardId))
       .for('update')
     if (row === undefined || row.status !== 'active') return null
+
+    if (rating >= 3) {
+      await markCardCompleted(tx, cardId, reviewedAt)
+    }
+
+    if (opts.drill === true) return null
 
     const before: FsrsCardState = {
       fsrs_state: row.fsrsState as FsrsCardState['fsrs_state'],

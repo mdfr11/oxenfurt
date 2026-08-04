@@ -118,6 +118,21 @@ export async function markCardCompleted(db: Queryable, cardId: string, at: Date)
 
   if (updated.length === 0) return
 
+  await settleActiveAssignment(db, at)
+}
+
+/**
+ * Completes the active assignment when it has no unfinished, non-archived
+ * items left. Called from two places: after a card is taken (rating ≥ Good)
+ * and after a card is archived. Archiving the last owed card settles the
+ * assignment rather than stranding it — declining a card is a decision, not
+ * a skip, and a stuck 'active' row would hold the Home screen and block new
+ * assignments with 409 until the deadline lapsed.
+ */
+export async function settleActiveAssignment(db: Queryable, at: Date): Promise<void> {
+  const [active] = await db.select().from(assignments).where(eq(assignments.status, 'active'))
+  if (active === undefined) return
+
   const remaining = await db
     .select({ cardId: assignmentItems.cardId })
     .from(assignmentItems)
