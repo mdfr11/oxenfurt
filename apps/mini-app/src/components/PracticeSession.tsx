@@ -12,6 +12,8 @@ import { haptic } from '../lib/telegram';
 import {
   RATING,
   matchAnswer,
+  type AssignmentDto,
+  type AssignmentItemDto,
   type DueCardDto,
   type MatchResult,
   type PhrasePayload,
@@ -28,7 +30,13 @@ import {
   buildPhraseCloze,
   extractClozeTerm,
 } from './practiceHelpers';
-import { buildAssignmentQueue, isDrillRepeat } from './assignmentHelpers';
+import {
+  buildAssignmentOutcome,
+  buildAssignmentQueue,
+  isDrillRepeat,
+  shouldRequeueAfterRating,
+  type AssignmentOutcome,
+} from './assignmentHelpers';
 import { stopSpeaking } from '../lib/tts';
 import { useCardAudio } from '../hooks/useCardAudio';
 import { ACTIVE_ASSIGNMENT_KEY, useActiveAssignment } from '../hooks/useActiveAssignment';
@@ -53,7 +61,10 @@ interface PracticeSessionProps {
    *  queue. Changes three things: where cards come from, that failed cards
    *  always re-queue, and that repeats are sent as drills. */
   assignmentMode?: boolean;
-  onComplete: (total: number, correct: number) => void;
+  /** `assignment` is non-null only for an assignment session, and carries
+   *  the counts Summary needs — including when the assignment just finished
+   *  and is therefore no longer fetchable as the active one. */
+  onComplete: (total: number, correct: number, assignment: AssignmentOutcome | null) => void;
   onExit: () => void;
 }
 
@@ -103,12 +114,33 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
     [assignmentMode, assignmentQuery.data?.items],
   );
 
+  // The assignment as it stood when the queue was seeded. Pinned in a ref
+  // because the query refetches every 30 s and its counts move as reviews
+  // land — folding this sitting's answers into a *moving* baseline would
+  // double-count them. `usePracticeQueue` seeds once for the same reason.
+  const [assignmentSnapshot, setAssignmentSnapshot] = useState<
+    { assignment: AssignmentDto; items: AssignmentItemDto[] } | null
+  >(null);
+  // Latched during render, the same React 19 idiom the card-reset below
+  // uses: the value arrives from an upstream query and this is the first
+  // render that can see it.
+  if (assignmentMode && assignmentSnapshot === null && assignmentQuery.data?.assignment != null) {
+    setAssignmentSnapshot({
+      assignment: assignmentQuery.data.assignment,
+      items: assignmentQuery.data.items,
+    });
+  }
+
+  // Cards taken (rated Good or better) in this sitting — the server stamps
+  // exactly these, so they are what Summary adds to the snapshot.
+  const takenThisSession = useRef<Set<string>>(new Set());
+
   // /due query — gated by the resumed-session check. Resumed sessions
   // hydrate the queue from localStorage in usePracticeQueue, so we skip
   // the fetch entirely. Fresh sessions issue a single request keyed by
   // (bypassDue, sessionLimit); background refetches are ignored by the
   // hook's shouldReseed guard.
-  const { data, isLoading, error } = useQuery({
+  const dueQuery = useQuery({
     queryKey: ['cards', 'due', bypassDue, sessionLimit, cardTypeFilter],
     enabled: !hasResumedSession && !assignmentMode,
     queryFn: async () => {
@@ -126,6 +158,15 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
       return (await res.json()) as { cards: DueCardDto[] }
     },
   })
+
+  // Loading and error must come from whichever query is actually driving
+  // this session. A disabled query in React Query v5 reports
+  // `isLoading === false` and `error === null` forever, so reading them off
+  // /due in assignment mode meant that while /assignments/active was still
+  // in flight — or after it failed — the learner fell straight through to
+  // the "you're all done, have a coffee" empty state.
+  const isLoading = assignmentMode ? assignmentQuery.isPending : dueQuery.isLoading
+  const error = assignmentMode ? assignmentQuery.error : dueQuery.error
 
   const [isRevealed, setIsRevealed] = useState(false);
   // Cloze-only state — reset on each card via the effect below.
@@ -228,7 +269,7 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   //       lose by NOT filtering is the original mode's variant — which
   //       doesn't apply to theory anyway.
   const baseCards = useMemo<DueCardDto[]>(() => {
-    const all = assignmentMode ? assignmentCards : (data?.cards ?? []);
+    const all = assignmentMode ? assignmentCards : (dueQuery.data?.cards ?? []);
     const typedAnswerMode = mode === 'cloze' || mode === 'translation' || mode === 'listening'
     // …and never in an assignment. An item the queue drops can never be
     // answered, so it never completes, so the assignment never settles —
@@ -240,7 +281,7 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
       return all.filter((c) => c.type !== 'theory');
     }
     return all;
-  }, [assignmentMode, assignmentCards, data?.cards, mode, cardTypeFilter]);
+  }, [assignmentMode, assignmentCards, dueQuery.data?.cards, mode, cardTypeFilter]);
 
   // Queue + cursor + stats + pending-review undo slot + session-id ref
   // all live in this hook. See hooks/usePracticeQueue.ts for the why —
@@ -421,20 +462,21 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
     // tell the same story.
     const isCorrect = rating >= RATING.Good;
     const correctDelta: 0 | 1 = isCorrect ? 1 : 0;
+    // Good or better is exactly what the server stamps as taken.
+    if (isCorrect) takenThisSession.current.add(currentCard.id);
     const nextStats = {
       total: sessionStats.total + 1,
       correct: sessionStats.correct + correctDelta,
     }
 
-    // Auto-replay: on Again, re-queue this card a few positions ahead so
-    // the user sees it again in the same session (Anki learning-steps
-    // style). Gated by a setting (default off).
+    // Auto-replay: re-queue this card a few positions ahead so the user sees
+    // it again in the same session (Anki learning-steps style). In free
+    // practice that's Again only and gated by a setting (default off); in an
+    // assignment it's Again *or* Hard and not a preference — see
+    // shouldRequeueAfterRating.
     let replaySpliceIndex: number | null = null;
     let workingLength = queue.length;
-    // In an assignment, re-queueing a failed card isn't a preference — the
-    // item stays owed until it's taken, so showing it again in the same
-    // sitting is the whole mechanic.
-    if (rating === RATING.Again && (assignmentMode || getSettings().inSessionReplay)) {
+    if (shouldRequeueAfterRating(rating, assignmentMode, getSettings().inSessionReplay)) {
       replaySpliceIndex = queueState.spliceAhead(currentCard);
       workingLength = queue.length + 1;
     }
@@ -475,7 +517,17 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
       playSuccessChime()
       queueState.finishBackendSession(nextStats.total, nextStats.correct)
       queueState.markFinished();
-      onComplete(nextStats.total, nextStats.correct);
+      onComplete(
+        nextStats.total,
+        nextStats.correct,
+        assignmentSnapshot === null
+          ? null
+          : buildAssignmentOutcome(
+              assignmentSnapshot.assignment,
+              assignmentSnapshot.items,
+              takenThisSession.current,
+            ),
+      );
     }
   };
 
@@ -495,6 +547,9 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
     // measurement — undoing a repeat must leave the earlier answer on
     // the record.
     if (!pendingReview.drill) answeredThisSession.current.delete(pendingReview.id);
+    // The undone rating never reaches the server, so it never stamped the
+    // assignment item either — Summary's count must forget it too.
+    if (pendingReview.rating >= RATING.Good) takenThisSession.current.delete(pendingReview.id);
     queueState.rollback(pendingReview.previousIndex, pendingReview.previousStats);
     setIsRevealed(true);
     setPendingReview(null);
@@ -626,7 +681,10 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
           {bypassDue ? t('practice.empty_hint_zero') : t('practice.empty_hint_done')}
         </p>
         <div className="flex flex-col gap-3 w-full">
-          {!bypassDue && (
+          {/* Never in an assignment: the queue IS the assignment, so
+              bypass_due has nothing to fetch — the /due query stays
+              disabled and the button would be a dead end. */}
+          {!bypassDue && !assignmentMode && (
             <button
               onClick={() => {
                 setBypassDue(true)
@@ -641,7 +699,7 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
           <button
             onClick={handleExit}
             className={`w-full py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform ${
-              bypassDue
+              bypassDue || assignmentMode
                 ? 'bg-app-primary text-app-primary-text shadow-lg shadow-app-primary/20'
                 : 'border border-app-border bg-app-surface text-app-text'
             }`}
