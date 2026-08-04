@@ -55,9 +55,12 @@ describe.skipIf(noDb)('GET /agent/diagnostics', () => {
 
   test('reports overdue cards with days_overdue', async () => {
     const ids = await seedCards(2)
+    // Overdue means schedule debt: the card was shown once (last_review set)
+    // and its next due date has since passed. Backdating `due` alone is not
+    // enough — see the never-reviewed test below.
     await conn!.db
       .update(cards)
-      .set({ due: new Date('2026-07-28T12:00:00.000Z') })
+      .set({ due: new Date('2026-07-28T12:00:00.000Z'), lastReview: new Date('2026-07-21T12:00:00.000Z') })
       .where(eq(cards.id, ids[0]!))
 
     const json = (await (await get()).json()) as {
@@ -69,6 +72,29 @@ describe.skipIf(noDb)('GET /agent/diagnostics', () => {
     expect(json.overdue[0]!.card_id).toBe(ids[0]!)
     expect(json.overdue[0]!.days_overdue).toBe(7)
     expect(json.overdue[0]!.label).toBe('lesson-2026-07-28-term0')
+  })
+
+  test('excludes never-reviewed cards from overdue but keeps them in due_today', async () => {
+    const ids = await seedCards(2)
+    // ids[0]: fresh out of ingestion — due = now (ingestCards sets due to the
+    // ingestion timestamp), never reviewed. A moment later `due` is in the
+    // past, but the learner was never shown this card, so it cannot be
+    // schedule debt.
+    await conn!.db.update(cards).set({ due: new Date(NOW.getTime() - 1000) }).where(eq(cards.id, ids[0]!))
+    // ids[1]: genuinely overdue — reviewed once, then the schedule lapsed.
+    await conn!.db
+      .update(cards)
+      .set({ due: new Date('2026-07-28T12:00:00.000Z'), lastReview: new Date('2026-07-21T12:00:00.000Z') })
+      .where(eq(cards.id, ids[1]!))
+
+    const json = (await (await get()).json()) as {
+      summary: { overdue: number; due_today: number }
+      overdue: { card_id: string }[]
+    }
+    expect(json.summary.overdue).toBe(1)
+    expect(json.overdue.map((c) => c.card_id)).toEqual([ids[1]!])
+    // Both cards are still due today — the fresh one just isn't "late".
+    expect(json.summary.due_today).toBe(2)
   })
 
   test('reports leeches at four lapses or more', async () => {

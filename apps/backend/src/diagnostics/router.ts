@@ -10,7 +10,7 @@
 // The agent decides how to weigh them; the backend just measures.
 
 import { Hono } from 'hono'
-import { and, asc, count, desc, eq, gte, lt, lte, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, isNotNull, lt, lte, sql } from 'drizzle-orm'
 import type { DiagnosticsCardDto, DiagnosticsResponse } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { assignmentItems, assignments, cards, type CardRow } from '../db/schema.ts'
@@ -60,11 +60,15 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
     ] = await Promise.all([
       // Strictly before `at` — a card due at this exact instant (e.g. a
       // brand-new card, whose due defaults to its creation time) is due
-      // now, not late yet.
+      // now, not late yet. `last_review IS NOT NULL` additionally requires
+      // the card to have actually been shown at least once: a never-reviewed
+      // card cannot have missed a review, so "overdue" (schedule debt) does
+      // not apply to it even once its due date has passed — it belongs in
+      // `due_today` instead, which stays unconditional on review history.
       deps.db
         .select()
         .from(cards)
-        .where(and(eq(cards.status, 'active'), lt(cards.due, at)))
+        .where(and(eq(cards.status, 'active'), lt(cards.due, at), isNotNull(cards.lastReview)))
         .orderBy(asc(cards.due))
         .limit(limit),
       deps.db
@@ -89,7 +93,7 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
       deps.db
         .select({ value: count() })
         .from(cards)
-        .where(and(eq(cards.status, 'active'), lt(cards.due, at))),
+        .where(and(eq(cards.status, 'active'), lt(cards.due, at), isNotNull(cards.lastReview))),
       deps.db
         .select({ value: count() })
         .from(cards)
