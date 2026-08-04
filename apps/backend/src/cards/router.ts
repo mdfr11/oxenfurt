@@ -298,8 +298,12 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
 export interface ApplyReviewOptions {
   /** Repeat of a card already measured today. Moves assignment progress
    *  but writes nothing to FSRS — cramming is study, not measurement.
-   *  Without this, every in-session repeat lands as another review with a
-   *  near-zero interval and steadily corrupts the scheduler. */
+   *  This is scoped to assignments, not a global correction: a same-day
+   *  repeat after a failed answer is exactly what FSRS learning steps
+   *  model, so free practice's second write is legitimate and stays
+   *  unflagged. In an assignment the learner may take one card four or
+   *  five times in a sitting to clear it, and only the first of those is
+   *  an honest measurement. */
   drill?: boolean
 }
 
