@@ -43,6 +43,13 @@
       "when": 1748000000000,
       "tag": "0005_backfill_session_correct",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785840000000,
+      "tag": "0006_assignments",
+      "breakpoints": true
     }
   ]
 }
