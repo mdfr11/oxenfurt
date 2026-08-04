@@ -48,3 +48,6 @@ test-results/
 /frontend-*.png
 /practice-*.png
 *.screenshot.png
+
+# Superpowers brainstorming scratch
+.superpowers/
