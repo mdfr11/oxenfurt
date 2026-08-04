@@ -29,6 +29,9 @@ You finish a 60-minute session with your tutor. Your head is full of 20 new word
 
 ## ✨ Features
 
+### 📋 Tutor-Style Assignments
+After each lesson the agent composes a bounded, deadline-bound set of ~20 existing cards — new material, the point you struggled with, and what you keep forgetting — and that assignment becomes the app's primary screen until it's done or its deadline passes. Free practice over the full due queue stays available underneath, untouched.
+
 ### 🧠 Advanced Spaced Repetition
 Powered by **FSRS-5** (Free Spaced Repetition Scheduler). Unlike basic Anki, it adapts to your memory curve per-card, minimizing review time.
 - **5 Practice Modes**: Recognition, Cloze (gap-fill), Translation, Listening (TTS), and Mixed.
@@ -86,6 +89,7 @@ Oxenfurt is built for **Hermes Agent**. The agent reads your Zoom/Google Meet tr
 
 - **Ingest Spec**: [`deploy/hermes/skills/oxenfurt_ingest.md`](deploy/hermes/skills/oxenfurt_ingest.md)
 - **Answer Spec**: [`deploy/hermes/skills/oxenfurt_answer_questions.md`](deploy/hermes/skills/oxenfurt_answer_questions.md)
+- **Assignment Spec**: [`deploy/hermes/skills/oxenfurt_assignments.md`](deploy/hermes/skills/oxenfurt_assignments.md)
 
 ---
 

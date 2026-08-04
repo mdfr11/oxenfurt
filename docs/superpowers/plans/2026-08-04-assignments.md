@@ -592,12 +592,15 @@ git commit -m "feat(assignments): add shared wire schemas and DTO types"
 ### Task 3: Assignment service — expiry, load, completion
 
 **Files:**
+- Create: `apps/backend/src/cards/dto.ts`
 - Create: `apps/backend/src/assignments/service.ts`
+- Modify: `apps/backend/src/cards/router.ts` (import `toDueDto` instead of defining it)
 - Modify: `apps/backend/src/assignments/service.test.ts` (append)
 - Test: `apps/backend/src/assignments/service.test.ts`
 
 **Interfaces:**
 - Consumes: `assignments`, `assignmentItems`, `cards` from `../db/schema.ts`; `AssignmentDto`, `AssignmentItemDto`, `ActiveAssignmentResponse`, `AssignmentListItemDto` from `@oxenfurt/shared`.
+- Produces: `toDueDto(row: CardRow, hasQuestions?: boolean): DueCardDto` from `apps/backend/src/cards/dto.ts` — moved verbatim out of `cards/router.ts` so both the cards router and the assignment service share one mapper instead of duplicating it.
 - Produces:
   - `expireStaleAssignments(db: Db, now: Date): Promise<void>`
   - `loadActiveAssignment(db: Db, now: Date): Promise<ActiveAssignmentResponse>`
@@ -798,9 +801,28 @@ describe.skipIf(noDb)('listAssignments', () => {
 Run: `cd apps/backend && bun test src/assignments/service.test.ts`
 Expected: FAIL — cannot resolve `./service.ts`.
 
-- [ ] **Step 3: Write the service**
+- [ ] **Step 3: Extract the shared card mapper first**
 
-Create `apps/backend/src/assignments/service.ts`:
+Create `apps/backend/src/cards/dto.ts` by moving the private `toDueDto` function out of `apps/backend/src/cards/router.ts` (currently at line 438) **verbatim**, exported:
+
+```ts
+// Card → wire DTO for every read surface that hands a card to the practice
+// screen: GET /cards/due and the assignment service both need the identical
+// shape, so the mapper lives here rather than being copied.
+
+import type { DueCardDto, FsrsCardState } from '@oxenfurt/shared'
+import type { CardRow } from '../db/schema.ts'
+
+export function toDueDto(row: CardRow, hasQuestions?: boolean): DueCardDto {
+  // ... body moved verbatim from cards/router.ts, unchanged
+}
+```
+
+Then in `cards/router.ts`, delete the local definition and add `import { toDueDto } from './dto.ts'`. Run `cd apps/backend && bun test src/cards/router.test.ts` — it must still pass unchanged, proving the move was behaviour-preserving.
+
+- [ ] **Step 4: Write the service**
+
+Create `apps/backend/src/assignments/service.ts` (it imports the mapper from Step 3 — do **not** redefine it here):
 
 ```ts
 // Read-side and accounting helpers for assignments. Deliberately free of
@@ -827,13 +849,8 @@ import type {
   FsrsCardState,
 } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
-import {
-  assignmentItems,
-  assignments,
-  cards,
-  type AssignmentRow,
-  type CardRow,
-} from '../db/schema.ts'
+import { toDueDto } from '../cards/dto.ts'
+import { assignmentItems, assignments, cards, type AssignmentRow } from '../db/schema.ts'
 
 /** Anything that can run queries — the real Db or a Drizzle transaction. */
 type Queryable = Pick<Db, 'select' | 'update' | 'insert' | 'delete'>
@@ -978,47 +995,24 @@ function toAssignmentDto(row: AssignmentRow, items: AssignmentItemDto[]): Assign
     groups,
   }
 }
-
-/** Same shape `GET /cards/due` returns, duplicated here rather than
- *  imported because cards/router.ts keeps its mapper private. */
-function toDueDto(row: CardRow): DueCardDto {
-  const fsrs: FsrsCardState = {
-    fsrs_state: row.fsrsState as FsrsCardState['fsrs_state'],
-    due: row.due.toISOString(),
-    stability: row.stability,
-    difficulty: row.difficulty,
-    elapsed_days: row.elapsedDays,
-    scheduled_days: row.scheduledDays,
-    learning_steps: row.learningSteps,
-    reps: row.reps,
-    lapses: row.lapses,
-    last_review: row.lastReview === null ? null : row.lastReview.toISOString(),
-  }
-  return {
-    id: row.id,
-    type: row.type,
-    payload: row.payload,
-    source: row.source,
-    source_quote: row.sourceQuote,
-    fsrs,
-  }
-}
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+Drop `DueCardDto` and `FsrsCardState` from this file's type imports — the mapper now lives in `../cards/dto.ts` and neither type is referenced here.
+
+- [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `cd apps/backend && bun test src/assignments/service.test.ts`
-Expected: PASS — 16 tests. If `toDueDto` triggers a type error on `payload`, confirm `CardRow['payload']` is the union `VocabPayload | TheoryPayload | PhrasePayload`, which is what `DueCardDto.payload` expects.
+Expected: PASS — 16 tests.
 
-- [ ] **Step 5: Typecheck**
+- [ ] **Step 6: Verify the mapper move broke nothing**
 
-Run: `cd apps/backend && pnpm typecheck`
-Expected: no errors.
+Run: `cd apps/backend && bun test && pnpm typecheck`
+Expected: the full suite still passes — in particular every pre-existing `/cards/due` test, which now exercises the extracted mapper.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/backend/src/assignments/service.ts apps/backend/src/assignments/service.test.ts
+git add apps/backend/src/cards/dto.ts apps/backend/src/cards/router.ts apps/backend/src/assignments/service.ts apps/backend/src/assignments/service.test.ts
 git commit -m "feat(assignments): add lazy expiry, active load and completion accounting"
 ```
 
@@ -1705,7 +1699,7 @@ Create `apps/backend/src/diagnostics/router.ts`:
 // The agent decides how to weigh them; the backend just measures.
 
 import { Hono } from 'hono'
-import { and, asc, count, desc, eq, gte, lte, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, lt, lte, sql } from 'drizzle-orm'
 import type { DiagnosticsCardDto, DiagnosticsResponse } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { assignmentItems, assignments, cards, type CardRow } from '../db/schema.ts'
@@ -1741,12 +1735,25 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
     const endOfToday = new Date(at)
     endOfToday.setUTCHours(23, 59, 59, 999)
 
-    const [overdueRows, leechRows, fragileRows, activeCount, dueTodayCount, leechCount] =
-      await Promise.all([
+    // Note the split between rows and counts: the row lists are capped by
+    // `limit`, so the summary must come from real COUNTs or it would silently
+    // under-report the moment the learner has more than `limit` overdue cards.
+    const [
+      overdueRows,
+      leechRows,
+      fragileRows,
+      activeCount,
+      overdueCount,
+      dueTodayCount,
+      leechCount,
+    ] = await Promise.all([
         deps.db
           .select()
           .from(cards)
-          .where(and(eq(cards.status, 'active'), lte(cards.due, at)))
+          // Strictly before now, not `lte`: freshly ingested cards carry
+          // due = now, and calling them overdue at birth would hand the agent
+          // every card from today's lesson as schedule debt.
+          .where(and(eq(cards.status, 'active'), lt(cards.due, at)))
           .orderBy(asc(cards.due))
           .limit(limit),
         deps.db
@@ -1768,6 +1775,10 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
           .orderBy(asc(cards.stability))
           .limit(limit),
         deps.db.select({ value: count() }).from(cards).where(eq(cards.status, 'active')),
+        deps.db
+          .select({ value: count() })
+          .from(cards)
+          .where(and(eq(cards.status, 'active'), lt(cards.due, at))),
         deps.db
           .select({ value: count() })
           .from(cards)
@@ -1793,7 +1804,7 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
     const response: DiagnosticsResponse = {
       summary: {
         active_cards: activeCount[0]?.value ?? 0,
-        overdue: overdueRows.length,
+        overdue: overdueCount[0]?.value ?? 0,
         due_today: dueTodayCount[0]?.value ?? 0,
         leeches: leechCount[0]?.value ?? 0,
       },
@@ -1913,14 +1924,16 @@ git commit -m "feat(assignments): expose agent-facing knowledge diagnostics"
 
 ---
 
-### Task 7: Drill flag and completion hook on review
+### Task 7: Drill flag, completion hook on review, and archive settlement
 
 **Files:**
-- Modify: `apps/backend/src/cards/router.ts:264-352`
+- Modify: `apps/backend/src/assignments/service.ts`
+- Modify: `apps/backend/src/cards/router.ts:255-352`
 - Modify: `apps/backend/src/cards/router.test.ts` (append)
 
 **Interfaces:**
 - Consumes: `markCardCompleted` from `../assignments/service.ts`.
+- Produces: `settleActiveAssignment(db: Queryable, at: Date): Promise<void>` — exported from `../assignments/service.ts`; flips the active assignment to `completed` when it has no unfinished non-archived items left. Extracted from the tail of `markCardCompleted` so both callers share one implementation.
 - Produces: `applyReview(db, fsrs, cardId, rating, reviewedAt, opts?: { drill?: boolean })` — returns `FsrsCardState | null` as before; with `drill: true` it returns `null` for the FSRS state only when the card is missing, and otherwise skips all FSRS writes. `POST /cards/:id/review` accepts `{ rating, drill? }` and answers `{ fsrs: FsrsCardState | null, drill: boolean }`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -2023,8 +2036,40 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
     const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
     expect(row!.status).toBe('completed')
   })
+
+  test('archiving the last unfinished card completes the assignment', async () => {
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+    await reviewRequest(ids[0]!, { rating: 3 })
+    await reviewRequest(ids[1]!, { rating: 3 })
+
+    const res = await cardsApp().request(`/${ids[2]}/archive`, {
+      method: 'POST',
+      headers: { authorization: await authHeader() },
+    })
+    expect(res.status).toBe(200)
+
+    const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(row!.status).toBe('completed')
+    expect(row!.completedAt).not.toBeNull()
+  })
+
+  test('archiving a card while others are unfinished leaves the assignment active', async () => {
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+
+    await cardsApp().request(`/${ids[2]}/archive`, {
+      method: 'POST',
+      headers: { authorization: await authHeader() },
+    })
+
+    const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(row!.status).toBe('active')
+  })
 })
 ```
+
+These two tests close a gap the Task 3 review surfaced: without them, archiving the last unfinished card leaves the assignment `active` forever — it keeps occupying the Home screen at `2/2` and blocks new assignments with `409` until the deadline lapses. The spec explicitly calls the opposite behaviour correct: declining a card is a decision, not a skip.
 
 Add these two helpers near the top of the file if equivalents don't already exist — `seedManyCards(n)` mirrors the seeding helper from `assignments/router.test.ts`, and:
 
@@ -2043,12 +2088,60 @@ async function reviewRequest(id: string, body: Record<string, unknown>) {
 Run: `cd apps/backend && bun test src/cards/router.test.ts`
 Expected: FAIL — `drill:true` still mutates FSRS and returns `{ fsrs: {...} }`; assignment items stay unfinished.
 
-- [ ] **Step 3: Extend `applyReview`**
+- [ ] **Step 3: Extract `settleActiveAssignment` in the service**
+
+In `apps/backend/src/assignments/service.ts`, pull the "flip when nothing unfinished remains" tail out of `markCardCompleted` into an exported function, and have `markCardCompleted` call it. Behaviour must be identical — this is a pure extraction, and the Task 3 service tests must still pass untouched.
+
+```ts
+/**
+ * Completes the active assignment when it has no unfinished, non-archived
+ * items left. Called from two places: after a card is taken (rating ≥ Good)
+ * and after a card is archived. Archiving the last owed card settles the
+ * assignment rather than stranding it — declining a card is a decision, not
+ * a skip, and a stuck 'active' row would hold the Home screen and block new
+ * assignments with 409 until the deadline lapsed.
+ */
+export async function settleActiveAssignment(db: Queryable, at: Date): Promise<void> {
+  const [active] = await db.select().from(assignments).where(eq(assignments.status, 'active'))
+  if (active === undefined) return
+
+  const remaining = await db
+    .select({ cardId: assignmentItems.cardId })
+    .from(assignmentItems)
+    .innerJoin(cards, eq(cards.id, assignmentItems.cardId))
+    .where(
+      and(
+        eq(assignmentItems.assignmentId, active.id),
+        eq(cards.status, 'active'),
+        isNull(assignmentItems.completedAt),
+      ),
+    )
+
+  if (remaining.length === 0) {
+    await db
+      .update(assignments)
+      .set({ status: 'completed', completedAt: at })
+      .where(eq(assignments.id, active.id))
+  }
+}
+```
+
+An assignment whose every item has been archived settles as `completed` too — there is nothing left to owe.
+
+- [ ] **Step 4: Call it from the archive route**
+
+In `apps/backend/src/cards/router.ts`, the existing `app.post('/:id/archive', …)` route (line 255) archives the card and returns. After the archive succeeds and before the response, add:
+
+```ts
+    await settleActiveAssignment(deps.db, now())
+```
+
+- [ ] **Step 5: Extend `applyReview`**
 
 In `apps/backend/src/cards/router.ts`, add the import:
 
 ```ts
-import { markCardCompleted } from '../assignments/service.ts'
+import { markCardCompleted, settleActiveAssignment } from '../assignments/service.ts'
 ```
 
 and replace the `applyReview` signature and body with:
@@ -2091,7 +2184,7 @@ export async function applyReview(
 
 Keep everything from `const before: FsrsCardState = {` to `return next` exactly as it is today — only the guard clauses above are new.
 
-- [ ] **Step 4: Extend the route**
+- [ ] **Step 6: Extend the route**
 
 Replace the body-parsing and dispatch part of `app.post('/:id/review', …)` with:
 
@@ -2119,21 +2212,21 @@ Replace the body-parsing and dispatch part of `app.post('/:id/review', …)` wit
 
 Note the behavioural subtlety this introduces: a drill against a missing or archived card now answers `200 { fsrs: null, drill: true }` instead of 404. That is acceptable — the client only drills cards it already holds in its queue — and keeps the transaction from needing a second existence probe.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 7: Run the tests to verify they pass**
 
 Run: `cd apps/backend && bun test src/cards/router.test.ts`
 Expected: PASS — including the 6 new tests and all pre-existing review tests (`{ fsrs: … }` responses now also carry `drill: false`; update any existing assertion that used `toEqual` on the whole response body).
 
-- [ ] **Step 6: Full suite and typecheck**
+- [ ] **Step 8: Full suite and typecheck**
 
 Run: `cd apps/backend && pnpm typecheck && bun test`
 Expected: all green.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add apps/backend/src/cards/router.ts apps/backend/src/cards/router.test.ts
-git commit -m "feat(assignments): add drill reviews and assignment completion on rating"
+git add apps/backend/src/cards/router.ts apps/backend/src/cards/router.test.ts apps/backend/src/assignments/service.ts
+git commit -m "feat(assignments): add drill reviews and completion on rating or archive"
 ```
 
 ---

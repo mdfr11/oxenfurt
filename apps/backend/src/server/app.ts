@@ -12,6 +12,8 @@ import { createTtsRouter } from '../tts/router.ts'
 import { createTranslateRouter } from '../translate/router.ts'
 import { createGradeRouter } from '../grade/router.ts'
 import { createAgentQuestionsRouter, createUserQuestionsRouter } from '../questions/router.ts'
+import { createAgentAssignmentsRouter, createUserAssignmentsRouter } from '../assignments/router.ts'
+import { createDiagnosticsRouter } from '../diagnostics/router.ts'
 import { createLlmClient, type LlmClient } from '../llm/client.ts'
 
 export interface AppDeps {
@@ -221,6 +223,34 @@ export function createApp(deps: AppDeps): Hono {
   app.route(
     '/agent/questions',
     createAgentQuestionsRouter({
+      db: deps.db,
+      ingestToken: deps.ingestToken,
+      now,
+    }),
+  )
+
+  app.route(
+    '/assignments',
+    createUserAssignmentsRouter({
+      db: deps.db,
+      jwtSecret: deps.jwtSecret,
+      ingestToken: deps.ingestToken,
+      now,
+    }),
+  )
+
+  app.route(
+    '/agent/assignments',
+    createAgentAssignmentsRouter({
+      db: deps.db,
+      ingestToken: deps.ingestToken,
+      now,
+    }),
+  )
+
+  app.route(
+    '/agent/diagnostics',
+    createDiagnosticsRouter({
       db: deps.db,
       ingestToken: deps.ingestToken,
       now,

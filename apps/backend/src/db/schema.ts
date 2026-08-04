@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   real,
   smallint,
   text,
@@ -97,4 +98,49 @@ export const cardQuestions = pgTable('card_questions', {
   answeredAt: timestamp('answered_at', { withTimezone: true, mode: 'date' }),
   seenAt: timestamp('seen_at', { withTimezone: true, mode: 'date' }),
 })
+
+export type AssignmentStatus = 'active' | 'completed' | 'expired'
+export type GroupKind = 'topic' | 'new' | 'weak'
+
+export const assignments = pgTable(
+  'assignments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    title: text('title').notNull(),
+    rationale: text('rationale'),
+    status: text('status').$type<AssignmentStatus>().notNull().default('active'),
+    source: text('source'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    dueAt: timestamp('due_at', { withTimezone: true, mode: 'date' }).notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
+  },
+  (t) => [index('idx_assignments_created').on(t.createdAt)],
+)
+
+export type AssignmentRow = typeof assignments.$inferSelect
+
+export const assignmentItems = pgTable(
+  'assignment_items',
+  {
+    assignmentId: uuid('assignment_id')
+      .notNull()
+      .references(() => assignments.id, { onDelete: 'cascade' }),
+    cardId: uuid('card_id')
+      .notNull()
+      .references(() => cards.id, { onDelete: 'cascade' }),
+    groupLabel: text('group_label').notNull(),
+    groupKind: text('group_kind').$type<GroupKind>().notNull(),
+    position: integer('position').notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.assignmentId, t.cardId] }),
+    index('idx_assignment_items_order').on(t.assignmentId, t.position),
+    index('idx_assignment_items_card').on(t.cardId),
+  ],
+)
+
+export type AssignmentItemRow = typeof assignmentItems.$inferSelect
 

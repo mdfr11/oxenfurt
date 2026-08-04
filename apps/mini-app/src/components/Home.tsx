@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { mainButton } from '@telegram-apps/sdk-react';
-import { Library as LibraryIcon, BarChart3, Settings, Flame, ChevronDown, GraduationCap } from 'lucide-react';
+import { Library as LibraryIcon, BarChart3, Settings, Flame, ChevronDown, GraduationCap, X, History } from 'lucide-react';
 import { fetchWithAuth, API_BASE } from '../lib/api';
 import { loadPracticeMode, type PracticeMode } from '../lib/practiceMode';
 import { primeSpeech } from '../lib/tts';
@@ -11,11 +11,17 @@ import { clearSession, loadSession, subscribeToSession } from '../lib/sessionPer
 import { useT } from '../lib/i18n/useT';
 import { plurKey } from '../lib/i18n/plural';
 import { SettingsSheet } from './SettingsSheet';
+import { AssignmentCard } from './AssignmentCard';
+import { AssignmentHistory } from './AssignmentHistory';
+import { BottomSheet } from './BottomSheet';
+import { Markdown } from './Markdown';
+import { useActiveAssignment } from '../hooks/useActiveAssignment';
 
 import { motion } from 'framer-motion';
 
 interface HomeProps {
   onStart: (mode: PracticeMode) => void;
+  onStartAssignment: () => void;
   onOpenLibrary: () => void;
   onOpenStats: () => void;
   onOpenAnswers: () => void;
@@ -45,9 +51,10 @@ function getRank(t: T, count: number): string {
   return t('rank.beginner')
 }
 
-export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userFirstName }: HomeProps) {
+export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, onOpenAnswers, userFirstName }: HomeProps) {
   const [mode, setMode] = useState<PracticeMode>(() => loadPracticeMode());
   const [isSettingsOpen, setIsSettingsOpen] = useState(() => window.location.hash === '#settings');
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const { settings } = useSettings();
   const t = useT();
 
@@ -75,6 +82,10 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
     refetchInterval: 30_000,
     refetchOnMount: 'always',
   });
+
+  const { data: assignmentData, isPending: isAssignmentPending } = useActiveAssignment();
+  const assignment = assignmentData?.assignment ?? null;
+  const [isRationaleOpen, setIsRationaleOpen] = useState(false);
 
   const { data: unreadData } = useQuery({
     queryKey: ['questions', 'count'],
@@ -106,22 +117,64 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
   const due = stats?.dueCount ?? 0;
   const reviewed = stats?.reviewedToday ?? 0;
   const totalForToday = due + reviewed;
-  
-  const progressPercent = totalForToday > 0 ? (reviewed / totalForToday) * 100 : (reviewed > 0 ? 100 : 0);
-  
+
+  // The ring belongs to whatever is currently the primary loop: the
+  // assignment when one is live, today's queue otherwise.
+  const ringDone = assignment ? assignment.completed : reviewed;
+  const ringTotal = assignment ? assignment.total : totalForToday;
+
+  // Until we know whether an assignment exists, the ring holds: empty and
+  // still. Showing today's due count first and swapping it a beat later
+  // makes every open of the app start with a number that turns out to be
+  // the wrong one.
+  const progressPercent = isAssignmentPending
+    ? 0
+    : ringTotal > 0
+      ? (ringDone / ringTotal) * 100
+      : ringDone > 0
+        ? 100
+        : 0;
+
   const radius = 72;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
+
+  // The single primary action, shared by the Telegram MainButton and its
+  // in-app twin so the two can never disagree.
+  const mainActionLabel = pausedSession
+    ? t('home.resume_session')
+    : assignment
+      ? t('assignment.continue')
+      : t('home.start_session');
+
+  // One element, two positions — see the call site for why it moves.
+  const modeCaption = (
+    <div className={`${assignment ? 'mb-3' : 'mt-3'} flex flex-col items-center gap-1.5 opacity-60`}>
+      <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em]">
+        {t('settings.mode_label')}: <span className="text-app-text">{t(modeKey(mode))}</span>
+        {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit}</span>}
+      </p>
+    </div>
+  );
+
+  const startMainAction = useCallback(() => {
+    if (pausedSession) onStart(pausedSession.mode);
+    else if (assignment) onStartAssignment();
+    else onStart(mode);
+  }, [pausedSession, assignment, mode, onStart, onStartAssignment]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
     try {
       if (!isSettingsOpen) {
-        mainButton.setParams({ text: pausedSession ? t('home.resume_session') : t('home.start_session'), isVisible: true, isEnabled: true })
+        // Precedence: a paused free session resumes first — dropping someone
+        // mid-session would lose their place. The assignment only outranks a
+        // fresh start.
+        mainButton.setParams({ text: mainActionLabel, isVisible: true, isEnabled: true })
         unsubscribe = mainButton.onClick(() => {
           primeSpeech()
           void primeAudio()
-          onStart(pausedSession ? pausedSession.mode : mode)
+          startMainAction()
         })
       } else {
         mainButton.setParams({ isVisible: false })
@@ -137,7 +190,7 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
       // SDK not mounted (dev outside Telegram) — ignore.
     }
     }
-  }, [onStart, mode, isSettingsOpen, pausedSession, t])
+  }, [isSettingsOpen, mainActionLabel, startMainAction])
 
   return (
     <div
@@ -171,13 +224,22 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
         </div>
         
         <div className="flex flex-col items-end gap-2 shrink-0">
-          <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-3 text-app-hint active:opacity-60 transition-opacity bg-app-surface border border-app-border rounded-2xl shadow-sm"
-            aria-label={t('home.aria_settings')}
-          >
-            <Settings size={22} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsHistoryOpen(true)}
+              className="p-3 text-app-hint active:opacity-60 transition-opacity bg-app-surface border border-app-border rounded-2xl shadow-sm"
+              aria-label={t('assignment.history_title')}
+            >
+              <History size={22} />
+            </button>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-3 text-app-hint active:opacity-60 transition-opacity bg-app-surface border border-app-border rounded-2xl shadow-sm"
+              aria-label={t('home.aria_settings')}
+            >
+              <Settings size={22} />
+            </button>
+          </div>
           <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest transition-colors ${
             health?.ok 
               ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' 
@@ -189,7 +251,16 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center relative z-0">
+      {/* With an assignment the composition sits low: split evenly, the slack
+          left a dead band between the last group row and the CTA. The bias is
+          padding rather than `justify-end` so that a tall column (both action
+          pills, a title that wraps) still overflows symmetrically instead of
+          pushing the ring up under the header. */}
+      <div
+        className={`flex-1 flex flex-col items-center justify-center relative z-0 ${
+          assignment ? 'pt-16' : ''
+        }`}
+      >
         <div className="relative w-56 h-56 flex items-center justify-center mb-8">
           {/* Background Ring */}
           <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 200 200">
@@ -223,7 +294,19 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
             />
           </svg>
           <div className="flex flex-col items-center text-center mt-1 px-4 relative min-h-[120px] justify-center">
-            {due > 0 ? (
+            {isAssignmentPending ? null : assignment ? (
+              <>
+                <span className="font-black text-app-text tracking-tighter leading-none text-5xl">
+                  {ringDone}
+                  <span className="text-2xl opacity-40">/{ringTotal}</span>
+                </span>
+                <div className="h-4 flex items-center mt-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-app-hint opacity-60 leading-none">
+                    {t('assignment.ring_label')}
+                  </span>
+                </div>
+              </>
+            ) : due > 0 ? (
               <>
                 <span className={`font-black text-app-text tracking-tighter leading-none transition-all ${
                   due > 999 ? 'text-4xl' : due > 99 ? 'text-5xl' : 'text-6xl'
@@ -269,7 +352,9 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
         </div>
 
         <div className="flex flex-col items-center gap-6 w-full max-w-[340px]">
-          {stats && stats.learnedCount === 0 && totalForToday === 0 ? (
+          {isAssignmentPending ? null : assignment ? (
+            <AssignmentCard assignment={assignment} onOpenRationale={() => setIsRationaleOpen(true)} />
+          ) : stats && stats.learnedCount === 0 && totalForToday === 0 ? (
             <div className="bg-app-primary/10 border border-app-primary/20 rounded-2xl p-4 text-center">
               <h3 className="font-bold text-app-primary text-sm mb-1">{t('home.welcome_title')}</h3>
               <p className="text-xs text-app-text/80 leading-relaxed">{t('home.welcome_desc')}</p>
@@ -287,54 +372,76 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
             </div>
           )}
 
-          <div className="flex flex-col gap-3 w-full mt-2">
-            {unreadCount > 0 && (
-              <button
-                onClick={onOpenAnswers}
-                className="flex items-center gap-3 bg-app-primary/10 border border-app-primary/20 rounded-2xl px-4 py-3.5 text-sm active:scale-[0.98] transition-transform shadow-sm"
-              >
-                <span className="flex-1 text-app-text text-left text-[11px] font-bold tracking-tight">
-                  🤖 {t('home.agent_answered', { count: unreadCount, plural: t(plurKey(unreadCount, 'home.agent_answered_plural_one', 'home.agent_answered_plural_few', 'home.agent_answered_plural_many')) })}
-                </span>
-                <ChevronDown size={14} className="-rotate-90 text-app-primary" />
-              </button>
-            )}
-            {pausedSession && (
-              <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3.5 text-[11px] shadow-sm">
-                <span className="flex-1 text-app-text font-bold tracking-tight">
-                  {t('home.paused_pill', { current: pausedSession.currentIndex, total: pausedSession.cards.length })}
-                </span>
+          {/* Empty, this still costs its gap and top margin — 32px of invisible
+              space that lands between the assignment and the CTA. Dropped only
+              when there is genuinely nothing to show and an assignment is on
+              screen; the no-assignment layout keeps the container it has. */}
+          {(!assignment || unreadCount > 0 || pausedSession) && (
+            <div className="flex flex-col gap-3 w-full mt-2">
+              {unreadCount > 0 && (
                 <button
-                  onClick={handleDiscardPaused}
-                  className="text-app-hint font-black uppercase tracking-tighter underline underline-offset-2 active:opacity-60 text-[10px]"
+                  onClick={onOpenAnswers}
+                  className="flex items-center gap-3 bg-app-primary/10 border border-app-primary/20 rounded-2xl px-4 py-3.5 text-sm active:scale-[0.98] transition-transform shadow-sm"
                 >
-                  {t('common.discard')}
+                  <span className="flex-1 text-app-text text-left text-[11px] font-bold tracking-tight">
+                    🤖 {t('home.agent_answered', { count: unreadCount, plural: t(plurKey(unreadCount, 'home.agent_answered_plural_one', 'home.agent_answered_plural_few', 'home.agent_answered_plural_many')) })}
+                  </span>
+                  <ChevronDown size={14} className="-rotate-90 text-app-primary" />
                 </button>
-              </div>
-            )}
-          </div>
+              )}
+              {pausedSession && (
+                <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3.5 text-[11px] shadow-sm">
+                  <span className="flex-1 text-app-text font-bold tracking-tight">
+                    {t('home.paused_pill', { current: pausedSession.currentIndex, total: pausedSession.cards.length })}
+                  </span>
+                  <button
+                    onClick={handleDiscardPaused}
+                    className="text-app-hint font-black uppercase tracking-tighter underline underline-offset-2 active:opacity-60 text-[10px]"
+                  >
+                    {t('common.discard')}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       <div className="flex flex-col gap-3 relative z-10">
         <div className="relative">
+          {/* Above the CTA when an assignment is live: it describes the mode
+              every session runs in, and below the button it would sit against
+              free practice and read as that button's caption. With no
+              assignment there is nothing beneath it to mislabel. */}
+          {assignment && modeCaption}
           <button
             className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-bold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
             onClick={() => {
               primeSpeech()
               void primeAudio()
-              onStart(pausedSession ? pausedSession.mode : mode)
+              startMainAction()
             }}
           >
-            {pausedSession ? t('home.resume_session') : t('home.start_session')}
+            {mainActionLabel}
           </button>
-          
-          <div className="mt-3 flex flex-col items-center gap-1.5 opacity-60">
-            <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em]">
-              {t('settings.mode_label')}: <span className="text-app-text">{t(modeKey(mode))}</span>
-              {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit}</span>}
-            </p>
-          </div>
+
+          {!assignment && modeCaption}
+
+          {assignment && !pausedSession && (
+            // The pressure valve: free practice one tap away, set as text
+            // rather than a filled or bordered control. With chrome it rhymed
+            // with the navigation row below and the eye filed it there. Text
+            // weight keeps it subordinate to the assignment without making it
+            // hard to find. Shown only while the assignment IS the primary
+            // action: with a session paused the primary already resumes free
+            // practice, so a second control would duplicate that same tap.
+            <button
+              onClick={() => onStart(mode)}
+              className="mx-auto mt-2.5 mb-3 block px-3 text-[11px] font-bold text-app-hint underline underline-offset-4 decoration-app-hint/30 active:opacity-60 transition-opacity"
+            >
+              {t('assignment.free_practice')}
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3 mt-1">
@@ -355,8 +462,34 @@ export function Home({ onStart, onOpenLibrary, onOpenStats, onOpenAnswers, userF
         </div>
       </div>
 
-      <SettingsSheet 
-        isOpen={isSettingsOpen} 
+      {assignment !== null && assignment.rationale !== null && (
+        <BottomSheet isOpen={isRationaleOpen} onClose={() => setIsRationaleOpen(false)} maxHeight="75vh">
+          <div className="flex justify-between items-start mb-4 text-app-text gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-0.5">
+                {t('assignment.rationale_title')}
+              </div>
+              <h2 className="text-lg font-bold leading-tight">{assignment.title}</h2>
+            </div>
+            <button
+              onClick={() => setIsRationaleOpen(false)}
+              className="p-2 -mr-2 shrink-0 text-app-hint active:scale-95 transition-transform"
+              aria-label={t('common.close')}
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <Markdown className="text-sm text-app-text/90">{assignment.rationale}</Markdown>
+
+          <div style={{ height: 'calc(0.5rem + var(--tg-safe-area-inset-bottom, 0px))' }} />
+        </BottomSheet>
+      )}
+
+      <AssignmentHistory isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
+
+      <SettingsSheet
+        isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         currentMode={mode}
         onModeChange={(m) => setMode(m)}

@@ -46,7 +46,7 @@ export async function resetTestDb(db: Db): Promise<void> {
   // clears them, but listing them explicitly keeps the intent obvious and
   // protects against future schema changes that drop the cascade.
   await db.execute(sql`
-    TRUNCATE TABLE card_questions, card_reviews, sessions, cards
+    TRUNCATE TABLE assignment_items, assignments, card_questions, card_reviews, sessions, cards
     RESTART IDENTITY CASCADE
   `)
 }

@@ -7,7 +7,6 @@ import {
   RatingSchema,
   type CardListDto,
   type CardUpdateInput,
-  type DueCardDto,
   type FsrsCardState,
   type PhrasePayload,
   type Rating,
@@ -16,8 +15,14 @@ import {
 } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { cardQuestions, cardReviews, cards, type CardRow } from '../db/schema.ts'
+import {
+  expireStaleAssignments,
+  markCardCompleted,
+  settleActiveAssignment,
+} from '../assignments/service.ts'
 import { jwtAuth } from '../middleware/auth.ts'
 import { isUuid } from '../lib/uuid.ts'
+import { toDueDto } from './dto.ts'
 
 export interface CardsRouterDeps {
   db: Db
@@ -255,7 +260,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
   app.post('/:id/archive', async (c) => {
     const id = c.req.param('id')
     if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
-    const result = await archiveCard(deps.db, id)
+    const result = await archiveCard(deps.db, id, now())
     if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
     if (result === 'not_active') return c.json({ error: 'not_active' }, 400)
     return c.json({ status: 'archived' })
@@ -273,20 +278,37 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
     } catch {
       return c.json({ error: 'invalid_body' }, 400)
     }
-    const parsed = v.safeParse(v.object({ rating: RatingSchema }), body)
+    const parsed = v.safeParse(
+      v.object({ rating: RatingSchema, drill: v.optional(v.boolean(), false) }),
+      body,
+    )
     if (!parsed.success) {
       return c.json({ error: 'invalid_rating' }, 400)
     }
 
     const reviewedAt = now()
-    const updated = await applyReview(deps.db, deps.fsrs, id, parsed.output.rating, reviewedAt)
-    if (updated === null) {
-      return c.json({ error: 'not_found' }, 404)
-    }
-    return c.json({ fsrs: updated })
+    const drill = parsed.output.drill
+    const result = await applyReview(deps.db, deps.fsrs, id, parsed.output.rating, reviewedAt, {
+      drill,
+    })
+    if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
+    if (result === 'drilled') return c.json({ fsrs: null, drill: true })
+    return c.json({ fsrs: result, drill })
   })
 
   return app
+}
+
+export interface ApplyReviewOptions {
+  /** Repeat of a card already measured today. Moves assignment progress
+   *  but writes nothing to FSRS — cramming is study, not measurement.
+   *  This is scoped to assignments, not a global correction: a same-day
+   *  repeat after a failed answer is exactly what FSRS learning steps
+   *  model, so free practice's second write is legitimate and stays
+   *  unflagged. In an assignment the learner may take one card four or
+   *  five times in a sitting to clear it, and only the first of those is
+   *  an honest measurement. */
+  drill?: boolean
 }
 
 export async function applyReview(
@@ -295,14 +317,27 @@ export async function applyReview(
   cardId: string,
   rating: Rating,
   reviewedAt: Date,
-): Promise<FsrsCardState | null> {
+  opts: ApplyReviewOptions = {},
+): Promise<FsrsCardState | 'not_found' | 'drilled'> {
   return await db.transaction(async (tx) => {
     const [row] = await tx
       .select()
       .from(cards)
       .where(eq(cards.id, cardId))
       .for('update')
-    if (row === undefined || row.status !== 'active') return null
+    if (row === undefined || row.status !== 'active') return 'not_found'
+
+    // Lazy expiry, same as every read path. Without it this was the one
+    // surface where an assignment past its deadline could still have items
+    // stamped — and, with the last one, be settled as `completed`. Runs
+    // after the card lock so the order stays card-then-assignment.
+    await expireStaleAssignments(tx, reviewedAt)
+
+    if (rating >= 3) {
+      await markCardCompleted(tx, cardId, reviewedAt)
+    }
+
+    if (opts.drill === true) return 'drilled'
 
     const before: FsrsCardState = {
       fsrs_state: row.fsrsState as FsrsCardState['fsrs_state'],
@@ -404,6 +439,7 @@ export async function updateCardPayload(
 export async function archiveCard(
   db: Db,
   cardId: string,
+  now: Date,
 ): Promise<'ok' | 'not_found' | 'not_active'> {
   return await db.transaction(async (tx) => {
     const [row] = await tx
@@ -414,6 +450,10 @@ export async function archiveCard(
     if (row === undefined) return 'not_found'
     if (row.status !== 'active') return 'not_active'
     await tx.update(cards).set({ status: 'archived' }).where(eq(cards.id, cardId))
+    // Same transaction as the archive itself — if settlement throws, the
+    // archive rolls back too, so a retry never lands on a stuck 400
+    // not_active with the assignment left stranded active.
+    await settleActiveAssignment(tx, now)
     return 'ok'
   })
 }
@@ -430,30 +470,6 @@ function toListDto(row: CardRow, hasQuestions?: boolean): CardListDto {
     due: row.due.toISOString(),
     reps: row.reps,
     lapses: row.lapses,
-  }
-  if (hasQuestions) dto.has_questions = true
-  return dto
-}
-
-function toDueDto(row: CardRow, hasQuestions?: boolean): DueCardDto {
-  const dto: DueCardDto = {
-    id: row.id,
-    type: row.type,
-    payload: row.payload,
-    source: row.source,
-    source_quote: row.sourceQuote,
-    fsrs: {
-      fsrs_state: row.fsrsState as FsrsCardState['fsrs_state'],
-      due: row.due.toISOString(),
-      stability: row.stability,
-      difficulty: row.difficulty,
-      elapsed_days: row.elapsedDays,
-      scheduled_days: row.scheduledDays,
-      learning_steps: row.learningSteps,
-      reps: row.reps,
-      lapses: row.lapses,
-      last_review: row.lastReview === null ? null : row.lastReview.toISOString(),
-    },
   }
   if (hasQuestions) dto.has_questions = true
   return dto

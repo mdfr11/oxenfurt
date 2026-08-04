@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { FsrsService, RATING } from '@oxenfurt/shared'
 import { signSession } from '../auth/jwt.ts'
 import { getTestDb, resetTestDb } from '../db/testing.ts'
-import { cardReviews, cards } from '../db/schema.ts'
+import { assignmentItems, assignments, cardReviews, cards } from '../db/schema.ts'
 import { ingestCards } from '../ingest/cards.ts'
+import { settleActiveAssignment } from '../assignments/service.ts'
 import { applyReview, createCardsRouter } from './router.ts'
 
 const conn = await getTestDb()
@@ -95,6 +96,39 @@ async function seedActiveTheory(question: string, source?: string): Promise<stri
   )
   const rows = await conn!.db.select().from(cards)
   return rows.find((r) => (r.payload as { question?: string }).question === question)!.id
+}
+
+// Mirrors `seedCards` from assignments/router.test.ts — seeds `count` active
+// vocab cards and returns their ids, for tests that only care about having
+// a handful of cards, not their content.
+async function seedManyCards(count: number): Promise<string[]> {
+  await ingestCards(
+    conn!.db,
+    fsrs,
+    {
+      cards: Array.from({ length: count }, (_, i) => ({
+        type: 'vocab' as const,
+        payload: {
+          term: `many${i}`,
+          translation: `перевод${i}`,
+          context_sentence: `A sentence with many${i} inside.`,
+          context_term_start: 14,
+          context_term_end: 14 + `many${i}`.length,
+        },
+      })),
+    },
+    NOW,
+  )
+  const rows = await conn!.db.select({ id: cards.id }).from(cards).orderBy(asc(cards.createdAt))
+  return rows.map((r) => r.id)
+}
+
+async function reviewRequest(id: string, body: Record<string, unknown>) {
+  return buildApp().request(`/${id}/review`, {
+    method: 'POST',
+    headers: { ...(await authHeader()), 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }
 
 beforeEach(async () => {
@@ -247,14 +281,14 @@ describe.skipIf(noDb)('POST /:id/review', () => {
     expect(reviews[0]!.fsrsStateBefore).toBe(0)
   })
 
-  test('applyReview returns null for an archived card', async () => {
+  test("applyReview returns 'not_found' for an archived card", async () => {
     const id = await seedActiveVocab('archive-me')
     await conn!.db
       .update(cards)
       .set({ status: 'archived' })
       .where(eq(cards.id, id))
     const result = await applyReview(conn!.db, fsrs, id, RATING.Good, NOW)
-    expect(result).toBeNull()
+    expect(result).toBe('not_found')
   })
 
   test('theory cards from ingest enter the active queue immediately', async () => {
@@ -286,6 +320,315 @@ describe.skipIf(noDb)('POST /:id/review', () => {
     const due = await buildApp().request('/due', { headers: await authHeader() })
     const body = (await due.json()) as { cards: unknown[] }
     expect(body.cards).toHaveLength(0)
+  })
+})
+
+describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completion', () => {
+  async function seedActiveAssignment(cardIds: string[]) {
+    const [row] = await conn!.db
+      .insert(assignments)
+      .values({ title: 'Задание', dueAt: new Date('2026-08-06T21:00:00.000Z') })
+      .returning()
+    await conn!.db.insert(assignmentItems).values(
+      cardIds.map((cardId, i) => ({
+        assignmentId: row!.id,
+        cardId,
+        groupLabel: 'Тема',
+        groupKind: 'topic' as const,
+        position: i,
+      })),
+    )
+    return row!.id
+  }
+
+  test('rating Good completes the matching assignment item', async () => {
+    const ids = await seedManyCards(3)
+    await seedActiveAssignment(ids)
+
+    const res = await reviewRequest(ids[0]!, { rating: 3 })
+    expect(res.status).toBe(200)
+
+    const [item] = await conn!.db
+      .select()
+      .from(assignmentItems)
+      .where(eq(assignmentItems.cardId, ids[0]!))
+    expect(item!.completedAt).not.toBeNull()
+  })
+
+  test('rating Again leaves the item unfinished', async () => {
+    const ids = await seedManyCards(3)
+    await seedActiveAssignment(ids)
+
+    await reviewRequest(ids[0]!, { rating: 1 })
+
+    const [item] = await conn!.db
+      .select()
+      .from(assignmentItems)
+      .where(eq(assignmentItems.cardId, ids[0]!))
+    expect(item!.completedAt).toBeNull()
+  })
+
+  test('rating Hard leaves the item unfinished', async () => {
+    const ids = await seedManyCards(3)
+    await seedActiveAssignment(ids)
+
+    await reviewRequest(ids[0]!, { rating: 2 })
+
+    const [item] = await conn!.db
+      .select()
+      .from(assignmentItems)
+      .where(eq(assignmentItems.cardId, ids[0]!))
+    expect(item!.completedAt).toBeNull()
+  })
+
+  // Lazy expiry has to run on the WRITE path too, not just the reads. It's
+  // the only surface where a rating could otherwise land on an assignment
+  // whose deadline had already passed — stamping an item, and with the last
+  // one settling the whole thing as `completed` after the fact.
+  test('a review past the deadline expires the assignment and stamps nothing', async () => {
+    const ids = await seedManyCards(3)
+    const [row] = await conn!.db
+      .insert(assignments)
+      .values({ title: 'Просроченное', dueAt: new Date('2025-12-31T12:00:00.000Z') })
+      .returning()
+    await conn!.db.insert(assignmentItems).values(
+      ids.map((cardId, i) => ({
+        assignmentId: row!.id,
+        cardId,
+        groupLabel: 'Тема',
+        groupKind: 'topic' as const,
+        position: i,
+      })),
+    )
+
+    const res = await reviewRequest(ids[0]!, { rating: 3 })
+    expect(res.status).toBe(200)
+
+    const [after] = await conn!.db.select().from(assignments).where(eq(assignments.id, row!.id))
+    expect(after!.status).toBe('expired')
+    const [item] = await conn!.db
+      .select()
+      .from(assignmentItems)
+      .where(eq(assignmentItems.cardId, ids[0]!))
+    expect(item!.completedAt).toBeNull()
+  })
+
+  test('an expired assignment cannot be settled by rating its last card', async () => {
+    const ids = await seedManyCards(1)
+    const [row] = await conn!.db
+      .insert(assignments)
+      .values({ title: 'Просроченное', dueAt: new Date('2025-12-31T12:00:00.000Z') })
+      .returning()
+    await conn!.db.insert(assignmentItems).values({
+      assignmentId: row!.id,
+      cardId: ids[0]!,
+      groupLabel: 'Тема',
+      groupKind: 'topic' as const,
+      position: 0,
+    })
+
+    await reviewRequest(ids[0]!, { rating: 4 })
+
+    const [after] = await conn!.db.select().from(assignments).where(eq(assignments.id, row!.id))
+    expect(after!.status).toBe('expired')
+    expect(after!.completedAt).toBeNull()
+  })
+
+  test('a review before the deadline still completes the item', async () => {
+    // The other side of the expiry guard: it must not touch a live one.
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+
+    await reviewRequest(ids[0]!, { rating: 3 })
+
+    const [after] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(after!.status).toBe('active')
+    const [item] = await conn!.db
+      .select()
+      .from(assignmentItems)
+      .where(eq(assignmentItems.cardId, ids[0]!))
+    expect(item!.completedAt).not.toBeNull()
+  })
+
+  test('drill:true does not touch FSRS state or card_reviews', async () => {
+    const ids = await seedManyCards(3)
+    await seedActiveAssignment(ids)
+    const [before] = await conn!.db.select().from(cards).where(eq(cards.id, ids[0]!))
+
+    const res = await reviewRequest(ids[0]!, { rating: 3, drill: true })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ fsrs: null, drill: true })
+
+    const [after] = await conn!.db.select().from(cards).where(eq(cards.id, ids[0]!))
+    expect(after!.reps).toBe(before!.reps)
+    expect(after!.due.toISOString()).toBe(before!.due.toISOString())
+    const reviews = await conn!.db.select().from(cardReviews)
+    expect(reviews).toHaveLength(0)
+  })
+
+  test('drill:true still completes the assignment item', async () => {
+    const ids = await seedManyCards(3)
+    await seedActiveAssignment(ids)
+
+    await reviewRequest(ids[0]!, { rating: 3, drill: true })
+
+    const [item] = await conn!.db
+      .select()
+      .from(assignmentItems)
+      .where(eq(assignmentItems.cardId, ids[0]!))
+    expect(item!.completedAt).not.toBeNull()
+  })
+
+  test('drill:true on a nonexistent card returns 404 and stamps no assignment item', async () => {
+    const ids = await seedManyCards(3)
+    await seedActiveAssignment(ids)
+    const ghost = '99999999-9999-4999-8999-999999999999'
+
+    const res = await reviewRequest(ghost, { rating: 3, drill: true })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'not_found' })
+
+    const items = await conn!.db.select().from(assignmentItems)
+    expect(items.every((i) => i.completedAt === null)).toBe(true)
+  })
+
+  test('drill:true on an archived card returns 404 and stamps no assignment item', async () => {
+    const ids = await seedManyCards(3)
+    await seedActiveAssignment(ids)
+    await conn!.db.update(cards).set({ status: 'archived' }).where(eq(cards.id, ids[0]!))
+
+    const res = await reviewRequest(ids[0]!, { rating: 3, drill: true })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'not_found' })
+
+    const [item] = await conn!.db
+      .select()
+      .from(assignmentItems)
+      .where(eq(assignmentItems.cardId, ids[0]!))
+    expect(item!.completedAt).toBeNull()
+  })
+
+  test('drill:false still writes FSRS state and a review row', async () => {
+    const ids = await seedManyCards(3)
+    const [before] = await conn!.db.select().from(cards).where(eq(cards.id, ids[0]!))
+
+    await reviewRequest(ids[0]!, { rating: 3 })
+
+    const [after] = await conn!.db.select().from(cards).where(eq(cards.id, ids[0]!))
+    expect(after!.reps).toBe(before!.reps + 1)
+    const reviews = await conn!.db.select().from(cardReviews)
+    expect(reviews).toHaveLength(1)
+  })
+
+  test('completing the last item flips the assignment to completed', async () => {
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+
+    for (const id of ids) await reviewRequest(id, { rating: 3 })
+
+    const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(row!.status).toBe('completed')
+  })
+
+  // Regression for a live-QA bug: the undo-window flush fires the last two
+  // reviews of a session within milliseconds of each other. Each ran
+  // settleActiveAssignment's "remaining" check against a snapshot that
+  // didn't yet include the other's uncommitted stamp, so both saw one item
+  // outstanding and neither settled — the assignment finished (all items
+  // stamped) but stayed 'active' forever, stranding the Home screen and
+  // blocking new assignments with 409. Fired with Promise.all rather than
+  // sequential awaits so the two requests genuinely overlap as concurrent
+  // transactions, not just two fast sequential ones.
+  test('concurrent completion of the last two items still settles the assignment', async () => {
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+    await reviewRequest(ids[0]!, { rating: 3 })
+
+    const [a, b] = await Promise.all([
+      reviewRequest(ids[1]!, { rating: 3 }),
+      reviewRequest(ids[2]!, { rating: 3 }),
+    ])
+    expect(a.status).toBe(200)
+    expect(b.status).toBe(200)
+
+    const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(row!.status).toBe('completed')
+    expect(row!.completedAt).not.toBeNull()
+  })
+
+  // The Promise.all test above exercises the real endpoint, but on a local
+  // loopback DB the two requests can each finish well inside the other's
+  // connection setup, so it doesn't reliably force the interleave that
+  // caused the bug — confirmed by running it against the unpatched service
+  // (no lock): 0 failures in 5 reruns, a false green. This test forces the
+  // exact window instead of hoping for it: two transactions each stamp
+  // their own item, then rendezvous on a barrier so BOTH stamps are
+  // guaranteed uncommitted before EITHER calls settleActiveAssignment —
+  // the precise interleave observed in production (two reviews 3ms apart).
+  // Without the FOR UPDATE lock, each side's "remaining" read misses the
+  // other's uncommitted stamp and neither settles, deterministically.
+  test('two transactions racing to settle via a forced interleave both still land on completed', async () => {
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+    await reviewRequest(ids[0]!, { rating: 3 })
+
+    let markAStamped: () => void = () => {}
+    let markBStamped: () => void = () => {}
+    const aStamped = new Promise<void>((resolve) => { markAStamped = resolve })
+    const bStamped = new Promise<void>((resolve) => { markBStamped = resolve })
+
+    async function stampThenSettle(cardId: string, markSelfStamped: () => void, waitForOther: Promise<void>) {
+      await conn!.db.transaction(async (tx) => {
+        await tx
+          .update(assignmentItems)
+          .set({ completedAt: NOW })
+          .where(
+            and(eq(assignmentItems.assignmentId, assignmentId), eq(assignmentItems.cardId, cardId)),
+          )
+        markSelfStamped()
+        await waitForOther
+        await settleActiveAssignment(tx, NOW)
+      })
+    }
+
+    await Promise.all([
+      stampThenSettle(ids[1]!, markAStamped, bStamped),
+      stampThenSettle(ids[2]!, markBStamped, aStamped),
+    ])
+
+    const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(row!.status).toBe('completed')
+    expect(row!.completedAt).not.toBeNull()
+  })
+
+  test('archiving the last unfinished card completes the assignment', async () => {
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+    await reviewRequest(ids[0]!, { rating: 3 })
+    await reviewRequest(ids[1]!, { rating: 3 })
+
+    const res = await buildApp().request(`/${ids[2]}/archive`, {
+      method: 'POST',
+      headers: await authHeader(),
+    })
+    expect(res.status).toBe(200)
+
+    const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(row!.status).toBe('completed')
+    expect(row!.completedAt).not.toBeNull()
+  })
+
+  test('archiving a card while others are unfinished leaves the assignment active', async () => {
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+
+    await buildApp().request(`/${ids[2]}/archive`, {
+      method: 'POST',
+      headers: await authHeader(),
+    })
+
+    const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(row!.status).toBe('active')
   })
 })
 
