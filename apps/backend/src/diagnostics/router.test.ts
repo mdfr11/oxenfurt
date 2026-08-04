@@ -91,14 +91,52 @@ describe.skipIf(noDb)('GET /agent/diagnostics', () => {
       .set({ status: 'archived', lapses: 9, due: new Date('2026-07-01T12:00:00.000Z') })
       .where(eq(cards.id, ids[0]!))
 
+    // A source whose only card is archived must not surface in recent_sources at all.
+    const soloIds = await seedCards(1, 'lesson-2026-08-02')
+    await conn!.db.update(cards).set({ status: 'archived' }).where(eq(cards.id, soloIds[0]!))
+
+    // An assignment item pointing at an archived card must drop out of both the
+    // denominator and the unfinished list, not just get marked "completed".
+    const [row] = await conn!.db
+      .insert(assignments)
+      .values({ title: 'Тест на архив', status: 'active', dueAt: new Date('2026-08-10T21:00:00.000Z') })
+      .returning()
+    await conn!.db.insert(assignmentItems).values([
+      { assignmentId: row!.id, cardId: ids[0]!, groupLabel: 'Тема', groupKind: 'topic' as const, position: 0, completedAt: null },
+      { assignmentId: row!.id, cardId: ids[1]!, groupLabel: 'Тема', groupKind: 'topic' as const, position: 1, completedAt: null },
+    ])
+
     const json = (await (await get()).json()) as {
       summary: { active_cards: number }
       overdue: unknown[]
       leeches: unknown[]
+      recent_sources: { source: string; cards: number }[]
+      last_assignment: { total: number; unfinished_card_ids: string[] }
     }
     expect(json.summary.active_cards).toBe(1)
     expect(json.overdue).toHaveLength(0)
     expect(json.leeches).toHaveLength(0)
+
+    const sourceLabels = json.recent_sources.map((s) => s.source)
+    expect(sourceLabels).toContain('lesson-2026-07-28')
+    expect(sourceLabels).not.toContain('lesson-2026-08-02')
+    expect(json.recent_sources.find((s) => s.source === 'lesson-2026-07-28')?.cards).toBe(1)
+
+    expect(json.last_assignment.total).toBe(1)
+    expect(json.last_assignment.unfinished_card_ids).toEqual([ids[1]!])
+  })
+
+  test('reports fragile cards where difficulty is high and stability is low', async () => {
+    const ids = await seedCards(3)
+    // Comfortably inside the fragile window: hard AND about to be forgotten.
+    await conn!.db.update(cards).set({ difficulty: 8, stability: 1 }).where(eq(cards.id, ids[0]!))
+    // Fails the difficulty condition alone — not hard enough to count as fragile.
+    await conn!.db.update(cards).set({ difficulty: 5, stability: 1 }).where(eq(cards.id, ids[1]!))
+    // Fails the stability condition alone — hard, but memory is holding up fine.
+    await conn!.db.update(cards).set({ difficulty: 8, stability: 10 }).where(eq(cards.id, ids[2]!))
+
+    const json = (await (await get()).json()) as { fragile: { card_id: string }[] }
+    expect(json.fragile.map((c) => c.card_id)).toEqual([ids[0]!])
   })
 
   test('groups recent sources with counts', async () => {
