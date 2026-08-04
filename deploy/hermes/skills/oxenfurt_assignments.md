@@ -77,24 +77,30 @@ in one assignment (the backend rejects it); dedupe before composing.
 {
   "summary": {
     "active_cards": 412,   // everything not archived
-    "overdue": 37,         // due strictly before now
-    "due_today": 44,       // due before end of today (UTC)
+    "overdue": 37,         // due before now AND reviewed at least once
+    "due_today": 44,       // due before end of today (UTC), new cards included
     "leeches": 6
   },
-  "overdue":  [ /* DiagnosticsCard[], soonest-due first */ ],
+  "overdue":  [ /* DiagnosticsCard[], longest-overdue first */ ],
   "leeches":  [ /* lapses >= 4, most-lapsed first */ ],
   "fragile":  [ /* difficulty >= 7 AND stability <= 3 days, least-stable first */ ],
   "recent_sources": [
-    { "source": "lesson-2026-07-28", "cards": 19, "latest": "2026-07-28T17:02:11.000Z" }
+    { "source": "lesson-2026-08-04", "cards": 19, "latest": "2026-08-04T17:02:11.000Z" }
   ],
-  "last_assignment": {
+  "last_assignment": {          // OR null — see below
     "id": "uuid", "title": "…", "status": "expired",
-    "due_at": "2026-07-25T18:00:00.000Z",
+    "due_at": "2026-08-01T18:00:00.000Z",
     "completed": 11, "total": 18,
     "unfinished_card_ids": ["uuid", "uuid", "…"]
   }
 }
 ```
+
+**`last_assignment` is `null` when no assignment has ever been created.** That
+is not a rare edge case — it is the state on the very first run of this skill
+against a fresh deployment. Check it before reading `unfinished_card_ids`.
+It is also the *only* nullable top-level key: the three lenses and
+`recent_sources` are always arrays, empty at worst.
 
 Each `DiagnosticsCard`:
 
@@ -103,7 +109,7 @@ Each `DiagnosticsCard`:
   card_id: string        // what you put in items[].card_id
   type: 'vocab' | 'phrase' | 'theory'
   label: string          // the term / phrase / question, clipped to 120 chars
-  source: string | null  // 'lesson-2026-07-28'
+  source: string | null  // 'lesson-2026-08-04'
   due: string            // ISO
   days_overdue: number   // 0 when not overdue
   lapses: number
@@ -119,7 +125,15 @@ What the numbers actually mean when you are choosing cards:
 - **`days_overdue` is schedule debt, not difficulty.** A card 20 days overdue
   may simply have been missed during a busy fortnight. It says the schedule
   slipped; it says nothing about whether the learner finds the card hard.
-  Useful for ordering the `weak` group, weak evidence on its own.
+  Useful for ordering the `weak` group, weak evidence on its own. The list is
+  ordered by due date ascending, so **the longest-overdue card comes first**.
+- **`overdue` means a review was missed, so it never contains new material.**
+  The lens requires `last_review` to be set: the learner saw this card before
+  and did not come back in time. A card from the lesson you just ingested has
+  never been reviewed, so it cannot be overdue no matter what its due date
+  says — it shows up in `summary.due_today` and in `recent_sources` instead.
+  That separation is the point of the lens: `overdue` is remediation,
+  `recent_sources` is new teaching, and an assignment usually wants both.
 - **`lapses` is repeated forgetting.** This is the strongest signal in the
   payload. `lapses >= 4` is what puts a card in `leeches`: it has been learned
   and lost four or more times. These almost always deserve a slot.
@@ -152,7 +166,7 @@ Content-Type: application/json
   title: string          // 1..120 chars, trimmed
   rationale?: string     // 0..2000 chars, rendered as Markdown in the Mini App
   due_at: string         // ISO 8601 timestamp
-  source?: string        // 1..200 chars, e.g. 'lesson-2026-07-28'
+  source?: string        // 1..200 chars, e.g. 'lesson-2026-08-04'
   replace?: boolean      // default false — see "Single active assignment"
   items: AssignmentItem[]  // 3..30 items; TARGET ~20
 }
@@ -170,7 +184,8 @@ each group contiguous in the array. Keep `group_kind` consistent within a
 label: the section takes the kind of its first item and the rest are ignored
 for display.
 
-Response: `{ "assignment_id": "uuid", "items": 20 }`.
+Response: `{ assignment_id: string, items: number }` — `items` echoes back how
+many you sent.
 
 ---
 
@@ -178,7 +193,13 @@ Response: `{ "assignment_id": "uuid", "items": 20 }`.
 
 ### 1. Unfinished work goes in first
 
-Read `last_assignment.unfinished_card_ids` from the diagnostics. Those cards go
+**If `last_assignment` is `null`, skip this step entirely** — nothing has ever
+been assigned, so there is no carry-over. Compose from the lesson plus the
+diagnostics lenses and go straight to step 2. The same applies when
+`unfinished_card_ids` is empty: the learner finished the last one, which is the
+outcome you are aiming for, not a gap to fill.
+
+Otherwise, read `last_assignment.unfinished_card_ids`. Those cards go
 at the **top of the `items` array, before anything else**, in their own group.
 The learner owed them and did not take them; dropping them silently teaches
 that assignments can be waited out.
@@ -229,8 +250,8 @@ week's assignment. Cards do not expire.
 ### 4. Voice
 
 - **`title`** is concrete and human, and names the material:
-  «Условные предложения и лексика 28 июля». Never «Задание №4», never
-  «Assignment 2026-07-28». The learner reads this on the home screen and in a
+  «Условные предложения и лексика 4 августа». Never «Задание №4», never
+  «Assignment 2026-08-04». The learner reads this on the home screen and in a
   Telegram notification; it has to sound like a person set it.
 - **`rationale`** is two or three sentences in the tutor's voice explaining
   *this* selection — why these cards, why now. It is rendered as Markdown, so
@@ -240,7 +261,7 @@ week's assignment. Cards do not expire.
 - **`group_label`** is a section header in Russian, 80 chars max, specific
   enough to be worth reading: «Новые слова с урока», «Условные предложения»,
   «Слова, которые упорно забываются».
-- **`source`** should be the lesson id you ingested (`lesson-2026-07-28`) so
+- **`source`** should be the lesson id you ingested (`lesson-2026-08-04`) so
   the assignment can be traced back to its transcript.
 
 ---
@@ -297,9 +318,10 @@ assignment should cost nothing but quietly reappear in the next one.
 
 ## Full example
 
-Diagnostics come back showing 6 leeches, a stack of fragile conditionals, and
-an expired assignment with 7 cards untaken. The lesson of 28 July has just been
-ingested. The next lesson is Thursday 6 August.
+`oxenfurt_ingest` has just written 19 cards from the lesson of Tuesday 4
+August. Diagnostics come back with `last_assignment` expired, 4 of its 18 items
+untaken; 6 leeches; and a stack of fragile conditionals. The tutor's next
+lesson is Monday 10 August, so the deadline is Sunday evening.
 
 ```http
 POST http://127.0.0.1:3000/agent/assignments
@@ -309,39 +331,50 @@ Content-Type: application/json
 
 ```json
 {
-  "title": "Условные предложения и лексика 28 июля",
-  "rationale": "На уроке второй тип условных предложений пришлось разбирать дважды — собрал сюда все карточки по нему, включая старые. Плюс новые слова с прошлого занятия и четыре, которые ты стабильно забываешь: *reluctant* висит с мая.\n\nДо среды успеешь спокойно, по 5-7 карточек в день.",
-  "due_at": "2026-08-05T18:00:00.000Z",
-  "source": "lesson-2026-07-28",
+  "title": "Условные предложения и лексика 4 августа",
+  "rationale": "На уроке второй тип условных предложений пришлось разбирать дважды — собрал сюда все карточки по нему, включая старые. Плюс новые слова со вторника и четыре, которые ты стабильно забываешь: *reluctant* висит с мая.\n\nДо воскресенья успеешь спокойно, по четыре карточки в день.",
+  "due_at": "2026-08-09T18:00:00.000Z",
+  "source": "lesson-2026-08-04",
   "items": [
     { "card_id": "3f1c…", "group_label": "Долг с прошлого задания", "group_kind": "weak" },
     { "card_id": "9a20…", "group_label": "Долг с прошлого задания", "group_kind": "weak" },
     { "card_id": "c7b4…", "group_label": "Долг с прошлого задания", "group_kind": "weak" },
+    { "card_id": "e461…", "group_label": "Долг с прошлого задания", "group_kind": "weak" },
 
-    { "card_id": "1e88…", "group_label": "Новые слова с урока 28 июля", "group_kind": "new" },
-    { "card_id": "44d1…", "group_label": "Новые слова с урока 28 июля", "group_kind": "new" },
-    { "card_id": "b902…", "group_label": "Новые слова с урока 28 июля", "group_kind": "new" },
+    { "card_id": "1e88…", "group_label": "Новые слова с урока 4 августа", "group_kind": "new" },
+    { "card_id": "44d1…", "group_label": "Новые слова с урока 4 августа", "group_kind": "new" },
+    { "card_id": "b902…", "group_label": "Новые слова с урока 4 августа", "group_kind": "new" },
+    { "card_id": "6ff7…", "group_label": "Новые слова с урока 4 августа", "group_kind": "new" },
+    { "card_id": "2c05…", "group_label": "Новые слова с урока 4 августа", "group_kind": "new" },
+    { "card_id": "d13a…", "group_label": "Новые слова с урока 4 августа", "group_kind": "new" },
+    { "card_id": "8b6e…", "group_label": "Новые слова с урока 4 августа", "group_kind": "new" },
+    { "card_id": "f072…", "group_label": "Новые слова с урока 4 августа", "group_kind": "new" },
 
     { "card_id": "77ea…", "group_label": "Условные предложения", "group_kind": "topic" },
     { "card_id": "0c53…", "group_label": "Условные предложения", "group_kind": "topic" },
+    { "card_id": "a938…", "group_label": "Условные предложения", "group_kind": "topic" },
+    { "card_id": "51bd…", "group_label": "Условные предложения", "group_kind": "topic" },
 
     { "card_id": "5db6…", "group_label": "Упорно забываются", "group_kind": "weak" },
-    { "card_id": "aa17…", "group_label": "Упорно забываются", "group_kind": "weak" }
+    { "card_id": "aa17…", "group_label": "Упорно забываются", "group_kind": "weak" },
+    { "card_id": "7e24…", "group_label": "Упорно забываются", "group_kind": "weak" },
+    { "card_id": "c88f…", "group_label": "Упорно забываются", "group_kind": "weak" }
   ]
 }
 ```
 
-*(Abridged — the real payload carries ~20 items: 3-4 unfinished, ~8 `new`,
-~4 `topic`, ~4 `weak`.)*
+Twenty items — 4 carried over, 8 `new`, 4 `topic`, 4 `weak` — not the 19 fresh
+cards plus everything the diagnostics flagged. Eleven of the new words wait for
+next week. (`card_id`s are shortened here for width; send full uuids.)
 
 ```json
-{ "assignment_id": "d24a1f6e-…", "items": 20 }
+{ "assignment_id": "d24a1f6e-8b3c-4a71-9f0e-2d5c17a4b9e3", "items": 20 }
 ```
 
 Then, once:
 
-> **Условные предложения и лексика 28 июля**
-> 20 карточек, до среды вечера.
+> **Условные предложения и лексика 4 августа**
+> 20 карточек, до воскресенья вечера.
 > [Открыть] ← inline `web_app` button
 
 ---
