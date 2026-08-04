@@ -1921,14 +1921,16 @@ git commit -m "feat(assignments): expose agent-facing knowledge diagnostics"
 
 ---
 
-### Task 7: Drill flag and completion hook on review
+### Task 7: Drill flag, completion hook on review, and archive settlement
 
 **Files:**
-- Modify: `apps/backend/src/cards/router.ts:264-352`
+- Modify: `apps/backend/src/assignments/service.ts`
+- Modify: `apps/backend/src/cards/router.ts:255-352`
 - Modify: `apps/backend/src/cards/router.test.ts` (append)
 
 **Interfaces:**
 - Consumes: `markCardCompleted` from `../assignments/service.ts`.
+- Produces: `settleActiveAssignment(db: Queryable, at: Date): Promise<void>` — exported from `../assignments/service.ts`; flips the active assignment to `completed` when it has no unfinished non-archived items left. Extracted from the tail of `markCardCompleted` so both callers share one implementation.
 - Produces: `applyReview(db, fsrs, cardId, rating, reviewedAt, opts?: { drill?: boolean })` — returns `FsrsCardState | null` as before; with `drill: true` it returns `null` for the FSRS state only when the card is missing, and otherwise skips all FSRS writes. `POST /cards/:id/review` accepts `{ rating, drill? }` and answers `{ fsrs: FsrsCardState | null, drill: boolean }`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -2031,8 +2033,40 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
     const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
     expect(row!.status).toBe('completed')
   })
+
+  test('archiving the last unfinished card completes the assignment', async () => {
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+    await reviewRequest(ids[0]!, { rating: 3 })
+    await reviewRequest(ids[1]!, { rating: 3 })
+
+    const res = await cardsApp().request(`/${ids[2]}/archive`, {
+      method: 'POST',
+      headers: { authorization: await authHeader() },
+    })
+    expect(res.status).toBe(200)
+
+    const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(row!.status).toBe('completed')
+    expect(row!.completedAt).not.toBeNull()
+  })
+
+  test('archiving a card while others are unfinished leaves the assignment active', async () => {
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+
+    await cardsApp().request(`/${ids[2]}/archive`, {
+      method: 'POST',
+      headers: { authorization: await authHeader() },
+    })
+
+    const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(row!.status).toBe('active')
+  })
 })
 ```
+
+These two tests close a gap the Task 3 review surfaced: without them, archiving the last unfinished card leaves the assignment `active` forever — it keeps occupying the Home screen at `2/2` and blocks new assignments with `409` until the deadline lapses. The spec explicitly calls the opposite behaviour correct: declining a card is a decision, not a skip.
 
 Add these two helpers near the top of the file if equivalents don't already exist — `seedManyCards(n)` mirrors the seeding helper from `assignments/router.test.ts`, and:
 
@@ -2051,12 +2085,60 @@ async function reviewRequest(id: string, body: Record<string, unknown>) {
 Run: `cd apps/backend && bun test src/cards/router.test.ts`
 Expected: FAIL — `drill:true` still mutates FSRS and returns `{ fsrs: {...} }`; assignment items stay unfinished.
 
-- [ ] **Step 3: Extend `applyReview`**
+- [ ] **Step 3: Extract `settleActiveAssignment` in the service**
+
+In `apps/backend/src/assignments/service.ts`, pull the "flip when nothing unfinished remains" tail out of `markCardCompleted` into an exported function, and have `markCardCompleted` call it. Behaviour must be identical — this is a pure extraction, and the Task 3 service tests must still pass untouched.
+
+```ts
+/**
+ * Completes the active assignment when it has no unfinished, non-archived
+ * items left. Called from two places: after a card is taken (rating ≥ Good)
+ * and after a card is archived. Archiving the last owed card settles the
+ * assignment rather than stranding it — declining a card is a decision, not
+ * a skip, and a stuck 'active' row would hold the Home screen and block new
+ * assignments with 409 until the deadline lapsed.
+ */
+export async function settleActiveAssignment(db: Queryable, at: Date): Promise<void> {
+  const [active] = await db.select().from(assignments).where(eq(assignments.status, 'active'))
+  if (active === undefined) return
+
+  const remaining = await db
+    .select({ cardId: assignmentItems.cardId })
+    .from(assignmentItems)
+    .innerJoin(cards, eq(cards.id, assignmentItems.cardId))
+    .where(
+      and(
+        eq(assignmentItems.assignmentId, active.id),
+        eq(cards.status, 'active'),
+        isNull(assignmentItems.completedAt),
+      ),
+    )
+
+  if (remaining.length === 0) {
+    await db
+      .update(assignments)
+      .set({ status: 'completed', completedAt: at })
+      .where(eq(assignments.id, active.id))
+  }
+}
+```
+
+An assignment whose every item has been archived settles as `completed` too — there is nothing left to owe.
+
+- [ ] **Step 4: Call it from the archive route**
+
+In `apps/backend/src/cards/router.ts`, the existing `app.post('/:id/archive', …)` route (line 255) archives the card and returns. After the archive succeeds and before the response, add:
+
+```ts
+    await settleActiveAssignment(deps.db, now())
+```
+
+- [ ] **Step 5: Extend `applyReview`**
 
 In `apps/backend/src/cards/router.ts`, add the import:
 
 ```ts
-import { markCardCompleted } from '../assignments/service.ts'
+import { markCardCompleted, settleActiveAssignment } from '../assignments/service.ts'
 ```
 
 and replace the `applyReview` signature and body with:
@@ -2099,7 +2181,7 @@ export async function applyReview(
 
 Keep everything from `const before: FsrsCardState = {` to `return next` exactly as it is today — only the guard clauses above are new.
 
-- [ ] **Step 4: Extend the route**
+- [ ] **Step 6: Extend the route**
 
 Replace the body-parsing and dispatch part of `app.post('/:id/review', …)` with:
 
@@ -2127,21 +2209,21 @@ Replace the body-parsing and dispatch part of `app.post('/:id/review', …)` wit
 
 Note the behavioural subtlety this introduces: a drill against a missing or archived card now answers `200 { fsrs: null, drill: true }` instead of 404. That is acceptable — the client only drills cards it already holds in its queue — and keeps the transaction from needing a second existence probe.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 7: Run the tests to verify they pass**
 
 Run: `cd apps/backend && bun test src/cards/router.test.ts`
 Expected: PASS — including the 6 new tests and all pre-existing review tests (`{ fsrs: … }` responses now also carry `drill: false`; update any existing assertion that used `toEqual` on the whole response body).
 
-- [ ] **Step 6: Full suite and typecheck**
+- [ ] **Step 8: Full suite and typecheck**
 
 Run: `cd apps/backend && pnpm typecheck && bun test`
 Expected: all green.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add apps/backend/src/cards/router.ts apps/backend/src/cards/router.test.ts
-git commit -m "feat(assignments): add drill reviews and assignment completion on rating"
+git add apps/backend/src/cards/router.ts apps/backend/src/cards/router.test.ts apps/backend/src/assignments/service.ts
+git commit -m "feat(assignments): add drill reviews and completion on rating or archive"
 ```
 
 ---
