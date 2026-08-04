@@ -192,6 +192,10 @@ export default function App() {
                 setPracticeMode(mode);
                 window.location.hash = '#practice';
               }}
+              // Reuses the practice screen; feeding it the assignment's own
+              // queue instead of the due queue is the next step, so for now
+              // this lands on the same session free practice does.
+              onStartAssignment={() => setScreen('practice')}
               onOpenLibrary={() => { window.location.hash = '#library'; }}
               onOpenStats={() => { window.location.hash = '#stats'; }}
               onOpenAnswers={() => { window.location.hash = '#answers'; }}
