@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { FsrsService, RATING } from '@oxenfurt/shared'
 import { signSession } from '../auth/jwt.ts'
 import { getTestDb, resetTestDb } from '../db/testing.ts'
 import { assignmentItems, assignments, cardReviews, cards } from '../db/schema.ts'
 import { ingestCards } from '../ingest/cards.ts'
+import { settleActiveAssignment } from '../assignments/service.ts'
 import { applyReview, createCardsRouter } from './router.ts'
 
 const conn = await getTestDb()
@@ -458,6 +459,77 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
 
     const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
     expect(row!.status).toBe('completed')
+  })
+
+  // Regression for a live-QA bug: the undo-window flush fires the last two
+  // reviews of a session within milliseconds of each other. Each ran
+  // settleActiveAssignment's "remaining" check against a snapshot that
+  // didn't yet include the other's uncommitted stamp, so both saw one item
+  // outstanding and neither settled — the assignment finished (all items
+  // stamped) but stayed 'active' forever, stranding the Home screen and
+  // blocking new assignments with 409. Fired with Promise.all rather than
+  // sequential awaits so the two requests genuinely overlap as concurrent
+  // transactions, not just two fast sequential ones.
+  test('concurrent completion of the last two items still settles the assignment', async () => {
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+    await reviewRequest(ids[0]!, { rating: 3 })
+
+    const [a, b] = await Promise.all([
+      reviewRequest(ids[1]!, { rating: 3 }),
+      reviewRequest(ids[2]!, { rating: 3 }),
+    ])
+    expect(a.status).toBe(200)
+    expect(b.status).toBe(200)
+
+    const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(row!.status).toBe('completed')
+    expect(row!.completedAt).not.toBeNull()
+  })
+
+  // The Promise.all test above exercises the real endpoint, but on a local
+  // loopback DB the two requests can each finish well inside the other's
+  // connection setup, so it doesn't reliably force the interleave that
+  // caused the bug — confirmed by running it against the unpatched service
+  // (no lock): 0 failures in 5 reruns, a false green. This test forces the
+  // exact window instead of hoping for it: two transactions each stamp
+  // their own item, then rendezvous on a barrier so BOTH stamps are
+  // guaranteed uncommitted before EITHER calls settleActiveAssignment —
+  // the precise interleave observed in production (two reviews 3ms apart).
+  // Without the FOR UPDATE lock, each side's "remaining" read misses the
+  // other's uncommitted stamp and neither settles, deterministically.
+  test('two transactions racing to settle via a forced interleave both still land on completed', async () => {
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+    await reviewRequest(ids[0]!, { rating: 3 })
+
+    let markAStamped: () => void = () => {}
+    let markBStamped: () => void = () => {}
+    const aStamped = new Promise<void>((resolve) => { markAStamped = resolve })
+    const bStamped = new Promise<void>((resolve) => { markBStamped = resolve })
+
+    async function stampThenSettle(cardId: string, markSelfStamped: () => void, waitForOther: Promise<void>) {
+      await conn!.db.transaction(async (tx) => {
+        await tx
+          .update(assignmentItems)
+          .set({ completedAt: NOW })
+          .where(
+            and(eq(assignmentItems.assignmentId, assignmentId), eq(assignmentItems.cardId, cardId)),
+          )
+        markSelfStamped()
+        await waitForOther
+        await settleActiveAssignment(tx, NOW)
+      })
+    }
+
+    await Promise.all([
+      stampThenSettle(ids[1]!, markAStamped, bStamped),
+      stampThenSettle(ids[2]!, markBStamped, aStamped),
+    ])
+
+    const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(row!.status).toBe('completed')
+    expect(row!.completedAt).not.toBeNull()
   })
 
   test('archiving the last unfinished card completes the assignment', async () => {

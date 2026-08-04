@@ -128,9 +128,29 @@ export async function markCardCompleted(db: Queryable, cardId: string, at: Date)
  * assignment rather than stranding it — declining a card is a decision, not
  * a skip, and a stuck 'active' row would hold the Home screen and block new
  * assignments with 409 until the deadline lapsed.
+ *
+ * `FOR UPDATE` on the assignment row is load-bearing, not decoration: this
+ * is check-then-act (read "remaining", then maybe write "completed"), and
+ * the last two items of a session routinely land within milliseconds of
+ * each other. Without the lock, two concurrent completions each run their
+ * "remaining" query against a snapshot that doesn't yet include the other's
+ * uncommitted stamp, both see one item outstanding, and neither settles —
+ * the assignment is done but stuck 'active' forever. The lock serializes
+ * the two calls: whichever commits second re-reads the row (and therefore
+ * `assignment_items`) only after the first's stamp is visible, so it's the
+ * one that observes zero remaining and flips the status. A plain
+ * NOT EXISTS/UPDATE has the identical blind spot — the subquery still can't
+ * see the other transaction's uncommitted row — only serializing the two
+ * call paths on this lock closes it. Callers that also lock rows (the card
+ * row in `applyReview`/`archiveCard`) take that lock first, so the order is
+ * always card-then-assignment and this can't deadlock against them.
  */
 export async function settleActiveAssignment(db: Queryable, at: Date): Promise<void> {
-  const [active] = await db.select().from(assignments).where(eq(assignments.status, 'active'))
+  const [active] = await db
+    .select()
+    .from(assignments)
+    .where(eq(assignments.status, 'active'))
+    .for('update')
   if (active === undefined) return
 
   const remaining = await db
