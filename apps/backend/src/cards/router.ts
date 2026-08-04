@@ -7,7 +7,6 @@ import {
   RatingSchema,
   type CardListDto,
   type CardUpdateInput,
-  type DueCardDto,
   type FsrsCardState,
   type PhrasePayload,
   type Rating,
@@ -18,6 +17,7 @@ import type { Db } from '../db/client.ts'
 import { cardQuestions, cardReviews, cards, type CardRow } from '../db/schema.ts'
 import { jwtAuth } from '../middleware/auth.ts'
 import { isUuid } from '../lib/uuid.ts'
+import { toDueDto } from './dto.ts'
 
 export interface CardsRouterDeps {
   db: Db
@@ -430,30 +430,6 @@ function toListDto(row: CardRow, hasQuestions?: boolean): CardListDto {
     due: row.due.toISOString(),
     reps: row.reps,
     lapses: row.lapses,
-  }
-  if (hasQuestions) dto.has_questions = true
-  return dto
-}
-
-function toDueDto(row: CardRow, hasQuestions?: boolean): DueCardDto {
-  const dto: DueCardDto = {
-    id: row.id,
-    type: row.type,
-    payload: row.payload,
-    source: row.source,
-    source_quote: row.sourceQuote,
-    fsrs: {
-      fsrs_state: row.fsrsState as FsrsCardState['fsrs_state'],
-      due: row.due.toISOString(),
-      stability: row.stability,
-      difficulty: row.difficulty,
-      elapsed_days: row.elapsedDays,
-      scheduled_days: row.scheduledDays,
-      learning_steps: row.learningSteps,
-      reps: row.reps,
-      lapses: row.lapses,
-      last_review: row.lastReview === null ? null : row.lastReview.toISOString(),
-    },
   }
   if (hasQuestions) dto.has_questions = true
   return dto
