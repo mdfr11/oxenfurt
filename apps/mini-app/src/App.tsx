@@ -12,6 +12,7 @@ import { Library } from './components/Library';
 import { Stats } from './components/Stats';
 import { AnswersScreen } from './components/AnswersScreen';
 import { loadPracticeMode, type PracticeMode } from './lib/practiceMode';
+import type { AssignmentOutcome } from './components/assignmentHelpers';
 
 type Screen = 'home' | 'practice' | 'summary' | 'loading' | 'library' | 'stats' | 'answers';
 
@@ -31,8 +32,14 @@ export default function App() {
   const [stats, setStats] = useState<SessionStats>({ total: 0, correct: 0 });
   const [practiceMode, setPracticeMode] = useState<PracticeMode>(() => loadPracticeMode());
   // Which queue the practice screen should pull from. A prop, not a screen:
-  // the assignment reuses the practice screen wholesale.
+  // the assignment reuses the practice screen wholesale. Derived from the
+  // hash rather than set alongside it, because `screen` is hash-driven and
+  // React state is not: a reload at `#practice` used to restore the practice
+  // screen with the mode reset to false, silently continuing the assignment
+  // as free practice against the FSRS due queue.
   const [assignmentMode, setAssignmentMode] = useState(false);
+  // Counts for the post-assignment Summary. Null for a free session.
+  const [assignmentOutcome, setAssignmentOutcome] = useState<AssignmentOutcome | null>(null);
   // Deep-link target for Library — when set, Library auto-opens this
   // card after its list query lands. Used by AnswersScreen's "jump to
   // card" affordance; cleared as soon as Library consumes it so going
@@ -47,7 +54,13 @@ export default function App() {
       if (h.includes('library')) setScreen('library')
       else if (h.includes('stats')) setScreen('stats')
       else if (h.includes('answers')) setScreen('answers')
-      else if (h.includes('practice')) setScreen('practice')
+      else if (h.includes('practice')) {
+        // `#practice/assignment` vs `#practice`. The suffix is what survives
+        // a reload, so it — not React state — decides which queue the
+        // session runs against.
+        setAssignmentMode(h.includes('assignment'))
+        setScreen('practice')
+      }
       // `#summary` must be matched BEFORE the generic `home` fallback
       // — PracticeSession.onComplete sets this hash on the last-card
       // rating; without the branch the screen stayed on 'practice'
@@ -144,8 +157,9 @@ export default function App() {
             <PracticeSession
               mode={practiceMode}
               assignmentMode={assignmentMode}
-              onComplete={(total, correct) => {
+              onComplete={(total, correct, assignment) => {
                 setStats({ total, correct });
+                setAssignmentOutcome(assignment);
                 window.location.hash = '#summary';
               }}
               onExit={() => {
@@ -157,12 +171,13 @@ export default function App() {
           <motion.div key="summary" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <Summary
               stats={stats}
+              assignment={assignmentOutcome}
               onFinish={() => { window.location.hash = '#home'; }}
               // The assignment queue is spent by the time Summary shows, so
               // a follow-up round is free practice — same as it was before
-              // assignments existed.
+              // assignments existed. The bare `#practice` hash is what says
+              // so; handleHash turns the mode off.
               onRepeatHard={() => {
-                setAssignmentMode(false);
                 window.location.hash = '#practice';
               }}
             />
@@ -199,7 +214,6 @@ export default function App() {
           <motion.div key="home" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
             <Home
               onStart={(mode) => {
-                setAssignmentMode(false);
                 setPracticeMode(mode);
                 window.location.hash = '#practice';
               }}
@@ -210,8 +224,7 @@ export default function App() {
               // '#home' in the first place, which would strand the user on
               // a practice screen whose exit button does nothing.
               onStartAssignment={() => {
-                setAssignmentMode(true);
-                window.location.hash = '#practice';
+                window.location.hash = '#practice/assignment';
               }}
               onOpenLibrary={() => { window.location.hash = '#library'; }}
               onOpenStats={() => { window.location.hash = '#stats'; }}
