@@ -18,7 +18,8 @@ import { ASSIGNMENT_MAX_DUE_DAYS, CreateAssignmentSchema } from '@oxenfurt/share
 import type { Db } from '../db/client.ts'
 import { assignmentItems, assignments, cards } from '../db/schema.ts'
 import { ingestTokenAuth } from '../middleware/ingest-token.ts'
-import { expireStaleAssignments } from './service.ts'
+import { jwtAuth } from '../middleware/auth.ts'
+import { expireStaleAssignments, listAssignments, loadActiveAssignment } from './service.ts'
 
 const MAX_DUE_MS = ASSIGNMENT_MAX_DUE_DAYS * 24 * 60 * 60 * 1000
 
@@ -137,6 +138,41 @@ export function createAgentAssignmentsRouter(deps: AgentAssignmentsRouterDeps): 
     }
 
     return c.json({ assignment_id: created.id, items: input.items.length })
+  })
+
+  return app
+}
+
+export interface UserAssignmentsRouterDeps {
+  db: Db
+  jwtSecret: string
+  /** Hermes reads its own history back through the same routes. */
+  ingestToken: string
+  now?: () => Date
+}
+
+export function createUserAssignmentsRouter(deps: UserAssignmentsRouterDeps): Hono {
+  const app = new Hono()
+  const now = deps.now ?? (() => new Date())
+
+  // Same dual-auth shape as the cards router: agent bypass first, JWT
+  // otherwise. Keeps one read surface instead of mirroring these routes
+  // under /agent.
+  app.use('*', async (c, next) => {
+    const auth = c.req.header('authorization') ?? ''
+    const match = auth.match(/^bearer\s+(.+)$/i)
+    if (match && match[1] === deps.ingestToken) return next()
+    return jwtAuth({ jwtSecret: deps.jwtSecret, now })(c, next)
+  })
+
+  app.get('/active', async (c) => {
+    return c.json(await loadActiveAssignment(deps.db, now()))
+  })
+
+  app.get('/', async (c) => {
+    const limitRaw = c.req.query('limit') ?? '50'
+    const limit = Math.max(1, Math.min(100, Number.parseInt(limitRaw, 10) || 50))
+    return c.json({ assignments: await listAssignments(deps.db, now(), limit) })
   })
 
   return app

@@ -4,7 +4,8 @@ import { FsrsService } from '@oxenfurt/shared'
 import { getTestDb, resetTestDb } from '../db/testing.ts'
 import { assignmentItems, assignments, cards } from '../db/schema.ts'
 import { ingestCards } from '../ingest/cards.ts'
-import { createAgentAssignmentsRouter } from './router.ts'
+import { signSession } from '../auth/jwt.ts'
+import { createAgentAssignmentsRouter, createUserAssignmentsRouter } from './router.ts'
 
 const conn = await getTestDb()
 const noDb = conn === null
@@ -172,5 +173,74 @@ describe.skipIf(noDb)('POST /agent/assignments', () => {
 
     const res = await post(ids)
     expect(res.status).toBe(200)
+  })
+})
+
+const JWT_SECRET = '0123456789abcdef0123456789abcdef-assign'
+
+async function userHeader(): Promise<string> {
+  const token = await signSession({ userId: 1 }, JWT_SECRET, { ttlSeconds: 900, now: NOW })
+  return `Bearer ${token}`
+}
+
+function userApp() {
+  return createUserAssignmentsRouter({
+    db: conn!.db,
+    jwtSecret: JWT_SECRET,
+    ingestToken: INGEST_TOKEN,
+    now: () => NOW,
+  })
+}
+
+describe.skipIf(noDb)('GET /assignments/active', () => {
+  test('401 without auth', async () => {
+    const res = await userApp().request('/active')
+    expect(res.status).toBe(401)
+  })
+
+  test('returns null when nothing is active', async () => {
+    const res = await userApp().request('/active', { headers: { authorization: await userHeader() } })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ assignment: null, items: [] })
+  })
+
+  test('returns the assignment with card DTOs and groups', async () => {
+    const ids = await seedCards(3)
+    await post(ids)
+
+    const res = await userApp().request('/active', { headers: { authorization: await userHeader() } })
+    const json = (await res.json()) as {
+      assignment: { title: string; total: number; completed: number; groups: unknown[] }
+      items: { card: { id: string; fsrs: { due: string } } }[]
+    }
+
+    expect(json.assignment.title).toBe('Условные предложения и лексика 28 июля')
+    expect(json.assignment.total).toBe(3)
+    expect(json.assignment.completed).toBe(0)
+    expect(json.assignment.groups).toHaveLength(2)
+    expect(json.items).toHaveLength(3)
+    expect(json.items[0]!.card.id).toBe(ids[0]!)
+    expect(json.items[0]!.card.fsrs.due).toBeString()
+  })
+
+  test('accepts the ingest token too', async () => {
+    const ids = await seedCards(3)
+    await post(ids)
+    const res = await userApp().request('/active', {
+      headers: { authorization: `Bearer ${INGEST_TOKEN}` },
+    })
+    expect(res.status).toBe(200)
+  })
+})
+
+describe.skipIf(noDb)('GET /assignments', () => {
+  test('lists history newest first', async () => {
+    const ids = await seedCards(3)
+    await post(ids)
+    const res = await userApp().request('/', { headers: { authorization: await userHeader() } })
+    const json = (await res.json()) as { assignments: { total: number; status: string }[] }
+    expect(json.assignments).toHaveLength(1)
+    expect(json.assignments[0]!.total).toBe(3)
+    expect(json.assignments[0]!.status).toBe('active')
   })
 })
