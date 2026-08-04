@@ -225,7 +225,13 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   const baseCards = useMemo<DueCardDto[]>(() => {
     const all = assignmentMode ? assignmentCards : (data?.cards ?? []);
     const typedAnswerMode = mode === 'cloze' || mode === 'translation' || mode === 'listening'
-    if (typedAnswerMode && cardTypeFilter !== 'theory') {
+    // …and never in an assignment. An item the queue drops can never be
+    // answered, so it never completes, so the assignment never settles —
+    // it holds Home and blocks the next one until its deadline lapses. A
+    // saved mode preference must not be able to wedge the feature. The
+    // variant resolver degrades theory to recognition anyway, which is
+    // exactly the trade the comment above already accepts.
+    if (typedAnswerMode && !assignmentMode && cardTypeFilter !== 'theory') {
       return all.filter((c) => c.type !== 'theory');
     }
     return all;
