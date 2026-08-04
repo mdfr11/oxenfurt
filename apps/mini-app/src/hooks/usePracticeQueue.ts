@@ -57,6 +57,15 @@ export interface UsePracticeQueueArgs {
   /** Cards the /due query returned (post-type-filter). Seeded into the
    *  working queue once; never re-seeded after that. */
   baseCards: DueCardDto[]
+  /** Whether this session takes part in the paused-session store at all —
+   *  reading it on mount, writing it on every change, clearing it on
+   *  finish. False for assignments: their queue is reconstructible from
+   *  the server (/assignments/active minus completed items), so "resuming"
+   *  one is just entering it again. Persisting them would put assignment
+   *  cards into the FREE-practice resume slot, where they would replay as
+   *  a free session and lose both the queue source and the drill
+   *  semantics — and would let two stores disagree about the same work. */
+  resumable: boolean
 }
 
 export interface UsePracticeQueueResult {
@@ -111,10 +120,13 @@ export interface UsePracticeQueueResult {
 export function usePracticeQueue({
   mode,
   baseCards,
+  resumable,
 }: UsePracticeQueueArgs): UsePracticeQueueResult {
   // One-shot snapshot of the resumed session — reading once on mount
   // is intentional. Subsequent writes go back through saveSession.
-  const resumedSnapshot = useMemo(() => loadSession(mode), [mode])
+  // Non-resumable sessions never look: whatever is in that slot belongs
+  // to free practice and would replace their queue outright.
+  const resumedSnapshot = useMemo(() => (resumable ? loadSession(mode) : null), [mode, resumable])
   const resumed = resumedSnapshot !== null
 
   const [queue, setQueue] = useState<DueCardDto[]>(() => resumedSnapshot?.cards ?? [])
@@ -165,6 +177,7 @@ export function usePracticeQueue({
   // just-cleared queue and Home would keep showing the paused-session
   // pill even after a clean completion.
   useEffect(() => {
+    if (!resumable) return
     if (sessionFinishedRef.current) return
     if (queue.length === 0 || currentIndex >= queue.length) return
     saveSession({
@@ -174,7 +187,7 @@ export function usePracticeQueue({
       stats: sessionStats,
       savedAt: Date.now(),
     })
-  }, [mode, queue, currentIndex, sessionStats])
+  }, [resumable, mode, queue, currentIndex, sessionStats])
 
   const spliceAhead = (card: DueCardDto, offset = 4): number => {
     const pos = Math.min(currentIndex + offset, queue.length)
@@ -204,7 +217,9 @@ export function usePracticeQueue({
 
   const markFinished = (): void => {
     sessionFinishedRef.current = true
-    clearSession()
+    // Nothing of ours is in that slot when we never wrote to it, and
+    // clearing it would throw away an unrelated paused free session.
+    if (resumable) clearSession()
   }
 
   const resetQueue = (): void => {

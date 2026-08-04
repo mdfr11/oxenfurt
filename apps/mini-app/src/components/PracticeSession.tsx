@@ -85,8 +85,13 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   // Snapshot of any paused session for THIS mode. Read once so the
   // /due query can decide whether to fetch fresh cards. The
   // usePracticeQueue hook also reads localStorage internally for its
-  // own init — cheap, and avoids prop-drilling the snapshot in.
-  const hasResumedSession = useMemo(() => loadSession(mode) !== null, [mode])
+  // own init — cheap, and avoids prop-drilling the snapshot in. Kept in
+  // lockstep with the `resumable` flag passed to that hook: an assignment
+  // never resumes from that store, so it must not claim to here either.
+  const hasResumedSession = useMemo(
+    () => !assignmentMode && loadSession(mode) !== null,
+    [assignmentMode, mode],
+  )
 
   // Assignment queue. The two sources are mutually exclusive by
   // construction: this query only runs in assignment mode, the /due query
@@ -242,7 +247,7 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   // short version: the lock/unlock regression was a queue state-machine
   // bug, isolating the state makes it both easier to reason about and
   // easier to write regression tests for (see practiceHelpers.test.ts).
-  const queueState = usePracticeQueue({ mode, baseCards })
+  const queueState = usePracticeQueue({ mode, baseCards, resumable: !assignmentMode })
   const {
     queue,
     currentIndex,
