@@ -139,6 +139,16 @@ describe.skipIf(noDb)('POST /agent/assignments', () => {
     expect(((await res.json()) as { error: string }).error).toBe('assignment_active')
   })
 
+  test('concurrent creates: exactly one 200, one 409, one active row', async () => {
+    const ids = await seedCards(3)
+    const [a, b] = await Promise.all([post(ids), post(ids)])
+    const statuses = [a.status, b.status].sort()
+    expect(statuses).toEqual([200, 409])
+
+    const live = await conn!.db.select().from(assignments).where(eq(assignments.status, 'active'))
+    expect(live).toHaveLength(1)
+  })
+
   test('replace:true expires the previous assignment', async () => {
     const ids = await seedCards(3)
     const first = await post(ids)

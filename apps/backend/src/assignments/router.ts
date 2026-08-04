@@ -13,6 +13,7 @@
 import { Hono } from 'hono'
 import { and, eq, inArray } from 'drizzle-orm'
 import * as v from 'valibot'
+import postgres from 'postgres'
 import { ASSIGNMENT_MAX_DUE_DAYS, CreateAssignmentSchema } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { assignmentItems, assignments, cards } from '../db/schema.ts'
@@ -20,6 +21,22 @@ import { ingestTokenAuth } from '../middleware/ingest-token.ts'
 import { expireStaleAssignments } from './service.ts'
 
 const MAX_DUE_MS = ASSIGNMENT_MAX_DUE_DAYS * 24 * 60 * 60 * 1000
+
+// Postgres SQLSTATE for a unique-constraint violation. The single-active
+// invariant is enforced for real by `idx_assignments_single_active` (a
+// partial unique index — see drizzle/0006_assignments.sql), not by the
+// check-then-act read above. Two racing requests can both pass that read;
+// only one of their inserts wins, and the loser lands here.
+const UNIQUE_VIOLATION = '23505'
+const SINGLE_ACTIVE_CONSTRAINT = 'idx_assignments_single_active'
+
+function isSingleActiveViolation(err: unknown): boolean {
+  return (
+    err instanceof postgres.PostgresError &&
+    err.code === UNIQUE_VIOLATION &&
+    err.constraint_name === SINGLE_ACTIVE_CONSTRAINT
+  )
+}
 
 export interface AgentAssignmentsRouterDeps {
   db: Db
@@ -83,30 +100,41 @@ export function createAgentAssignmentsRouter(deps: AgentAssignmentsRouterDeps): 
         .where(eq(assignments.id, live.id))
     }
 
-    const created = await deps.db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(assignments)
-        .values({
-          title: input.title,
-          rationale: input.rationale ?? null,
-          source: input.source ?? null,
-          dueAt,
-          createdAt: at,
-        })
-        .returning()
+    let created: typeof assignments.$inferSelect
+    try {
+      created = await deps.db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(assignments)
+          .values({
+            title: input.title,
+            rationale: input.rationale ?? null,
+            source: input.source ?? null,
+            dueAt,
+            createdAt: at,
+          })
+          .returning()
 
-      await tx.insert(assignmentItems).values(
-        input.items.map((item, position) => ({
-          assignmentId: row!.id,
-          cardId: item.card_id,
-          groupLabel: item.group_label,
-          groupKind: item.group_kind,
-          position,
-        })),
-      )
+        await tx.insert(assignmentItems).values(
+          input.items.map((item, position) => ({
+            assignmentId: row!.id,
+            cardId: item.card_id,
+            groupLabel: item.group_label,
+            groupKind: item.group_kind,
+            position,
+          })),
+        )
 
-      return row!
-    })
+        return row!
+      })
+    } catch (err) {
+      // A concurrent request won the race between our "no live assignment"
+      // read and our insert. Report the same 409 the check-then-act path
+      // above returns, so callers see one consistent contract either way.
+      if (isSingleActiveViolation(err)) {
+        return c.json({ error: 'assignment_active' }, 409)
+      }
+      throw err
+    }
 
     return c.json({ assignment_id: created.id, items: input.items.length })
   })
