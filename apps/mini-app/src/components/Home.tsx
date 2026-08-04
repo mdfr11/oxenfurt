@@ -147,6 +147,16 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
       ? t('assignment.continue')
       : t('home.start_session');
 
+  // One element, two positions — see the call site for why it moves.
+  const modeCaption = (
+    <div className={`${assignment ? 'mb-3' : 'mt-3'} flex flex-col items-center gap-1.5 opacity-60`}>
+      <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em]">
+        {t('settings.mode_label')}: <span className="text-app-text">{t(modeKey(mode))}</span>
+        {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit}</span>}
+      </p>
+    </div>
+  );
+
   const startMainAction = useCallback(() => {
     if (pausedSession) onStart(pausedSession.mode);
     else if (assignment) onStartAssignment();
@@ -241,7 +251,16 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center relative z-0">
+      {/* With an assignment the composition sits low: split evenly, the slack
+          left a dead band between the last group row and the CTA. The bias is
+          padding rather than `justify-end` so that a tall column (both action
+          pills, a title that wraps) still overflows symmetrically instead of
+          pushing the ring up under the header. */}
+      <div
+        className={`flex-1 flex flex-col items-center justify-center relative z-0 ${
+          assignment ? 'pt-16' : ''
+        }`}
+      >
         <div className="relative w-56 h-56 flex items-center justify-center mb-8">
           {/* Background Ring */}
           <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 200 200">
@@ -353,37 +372,48 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
             </div>
           )}
 
-          <div className="flex flex-col gap-3 w-full mt-2">
-            {unreadCount > 0 && (
-              <button
-                onClick={onOpenAnswers}
-                className="flex items-center gap-3 bg-app-primary/10 border border-app-primary/20 rounded-2xl px-4 py-3.5 text-sm active:scale-[0.98] transition-transform shadow-sm"
-              >
-                <span className="flex-1 text-app-text text-left text-[11px] font-bold tracking-tight">
-                  🤖 {t('home.agent_answered', { count: unreadCount, plural: t(plurKey(unreadCount, 'home.agent_answered_plural_one', 'home.agent_answered_plural_few', 'home.agent_answered_plural_many')) })}
-                </span>
-                <ChevronDown size={14} className="-rotate-90 text-app-primary" />
-              </button>
-            )}
-            {pausedSession && (
-              <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3.5 text-[11px] shadow-sm">
-                <span className="flex-1 text-app-text font-bold tracking-tight">
-                  {t('home.paused_pill', { current: pausedSession.currentIndex, total: pausedSession.cards.length })}
-                </span>
+          {/* Empty, this still costs its gap and top margin — 32px of invisible
+              space that lands between the assignment and the CTA. Dropped only
+              when there is genuinely nothing to show and an assignment is on
+              screen; the no-assignment layout keeps the container it has. */}
+          {(!assignment || unreadCount > 0 || pausedSession) && (
+            <div className="flex flex-col gap-3 w-full mt-2">
+              {unreadCount > 0 && (
                 <button
-                  onClick={handleDiscardPaused}
-                  className="text-app-hint font-black uppercase tracking-tighter underline underline-offset-2 active:opacity-60 text-[10px]"
+                  onClick={onOpenAnswers}
+                  className="flex items-center gap-3 bg-app-primary/10 border border-app-primary/20 rounded-2xl px-4 py-3.5 text-sm active:scale-[0.98] transition-transform shadow-sm"
                 >
-                  {t('common.discard')}
+                  <span className="flex-1 text-app-text text-left text-[11px] font-bold tracking-tight">
+                    🤖 {t('home.agent_answered', { count: unreadCount, plural: t(plurKey(unreadCount, 'home.agent_answered_plural_one', 'home.agent_answered_plural_few', 'home.agent_answered_plural_many')) })}
+                  </span>
+                  <ChevronDown size={14} className="-rotate-90 text-app-primary" />
                 </button>
-              </div>
-            )}
-          </div>
+              )}
+              {pausedSession && (
+                <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3.5 text-[11px] shadow-sm">
+                  <span className="flex-1 text-app-text font-bold tracking-tight">
+                    {t('home.paused_pill', { current: pausedSession.currentIndex, total: pausedSession.cards.length })}
+                  </span>
+                  <button
+                    onClick={handleDiscardPaused}
+                    className="text-app-hint font-black uppercase tracking-tighter underline underline-offset-2 active:opacity-60 text-[10px]"
+                  >
+                    {t('common.discard')}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       <div className="flex flex-col gap-3 relative z-10">
         <div className="relative">
+          {/* Above the CTA when an assignment is live: it describes the mode
+              every session runs in, and below the button it would sit against
+              free practice and read as that button's caption. With no
+              assignment there is nothing beneath it to mislabel. */}
+          {assignment && modeCaption}
           <button
             className="w-full bg-app-primary text-app-primary-text py-4 rounded-2xl font-bold text-lg active:scale-95 transition-transform shadow-lg shadow-app-primary/20"
             onClick={() => {
@@ -394,28 +424,25 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
           >
             {mainActionLabel}
           </button>
-          
-          <div className="mt-3 flex flex-col items-center gap-1.5 opacity-60">
-            <p className="text-[10px] text-app-hint font-bold uppercase tracking-[0.1em]">
-              {t('settings.mode_label')}: <span className="text-app-text">{t(modeKey(mode))}</span>
-              {settings.sessionLimit && <span className="ml-1">· {settings.sessionLimit}</span>}
-            </p>
-          </div>
-        </div>
 
-        {assignment && !pausedSession && (
-          // The pressure valve: free practice one tap away, quiet, no badge
-          // and no count — a ghost against the filled primary above it. Shown
-          // only while the assignment IS that primary: with a session paused
-          // the primary already resumes free practice, so a second button for
-          // it would duplicate, and misdescribe, the same tap.
-          <button
-            onClick={() => onStart(mode)}
-            className="flex items-center justify-center gap-2 bg-app-surface border border-app-border rounded-2xl px-4 py-3 text-[11px] font-bold text-app-hint active:scale-[0.98] transition-transform"
-          >
-            {t('assignment.free_practice')}
-          </button>
-        )}
+          {!assignment && modeCaption}
+
+          {assignment && !pausedSession && (
+            // The pressure valve: free practice one tap away, set as text
+            // rather than a filled or bordered control. With chrome it rhymed
+            // with the navigation row below and the eye filed it there. Text
+            // weight keeps it subordinate to the assignment without making it
+            // hard to find. Shown only while the assignment IS the primary
+            // action: with a session paused the primary already resumes free
+            // practice, so a second control would duplicate that same tap.
+            <button
+              onClick={() => onStart(mode)}
+              className="mx-auto mt-2.5 mb-3 block px-3 text-[11px] font-bold text-app-hint underline underline-offset-4 decoration-app-hint/30 active:opacity-60 transition-opacity"
+            >
+              {t('assignment.free_practice')}
+            </button>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-3 mt-1">
           <button

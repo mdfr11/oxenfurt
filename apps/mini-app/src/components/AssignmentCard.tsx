@@ -23,7 +23,7 @@ export function AssignmentCard({ assignment, onOpenRationale }: AssignmentCardPr
   );
 
   return (
-    <div className="w-full max-w-[340px] flex flex-col items-center gap-3">
+    <div className="w-full max-w-[340px] flex flex-col items-center gap-4">
       <button
         onClick={onOpenRationale}
         disabled={assignment.rationale === null}
@@ -46,7 +46,7 @@ export function AssignmentCard({ assignment, onOpenRationale }: AssignmentCardPr
       {/* Empty only when every card in the assignment has been archived —
           rendering the container anyway would leave a floating gap. */}
       {assignment.groups.length > 0 && (
-        <div className="w-full flex flex-col gap-1.5 px-1">
+        <div className="w-full flex flex-col gap-2.5 px-1">
           {assignment.groups.map((group) => (
             <div key={group.label} className="flex items-center gap-2.5 text-[11px]">
               <span
