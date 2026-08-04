@@ -81,7 +81,7 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
     refetchOnMount: 'always',
   });
 
-  const { data: assignmentData } = useActiveAssignment();
+  const { data: assignmentData, isPending: isAssignmentPending } = useActiveAssignment();
   const assignment = assignmentData?.assignment ?? null;
   const [isRationaleOpen, setIsRationaleOpen] = useState(false);
 
@@ -121,8 +121,17 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
   const ringDone = assignment ? assignment.completed : reviewed;
   const ringTotal = assignment ? assignment.total : totalForToday;
 
-  const progressPercent =
-    ringTotal > 0 ? (ringDone / ringTotal) * 100 : ringDone > 0 ? 100 : 0;
+  // Until we know whether an assignment exists, the ring holds: empty and
+  // still. Showing today's due count first and swapping it a beat later
+  // makes every open of the app start with a number that turns out to be
+  // the wrong one.
+  const progressPercent = isAssignmentPending
+    ? 0
+    : ringTotal > 0
+      ? (ringDone / ringTotal) * 100
+      : ringDone > 0
+        ? 100
+        : 0;
 
   const radius = 72;
   const circumference = 2 * Math.PI * radius;
@@ -137,10 +146,10 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
       : t('home.start_session');
 
   const startMainAction = useCallback(() => {
-    if (pausedSession) onStart(pausedSession.mode)
-    else if (assignment) onStartAssignment()
-    else onStart(mode)
-  }, [pausedSession, assignment, mode, onStart, onStartAssignment])
+    if (pausedSession) onStart(pausedSession.mode);
+    else if (assignment) onStartAssignment();
+    else onStart(mode);
+  }, [pausedSession, assignment, mode, onStart, onStartAssignment]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
@@ -255,7 +264,7 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
             />
           </svg>
           <div className="flex flex-col items-center text-center mt-1 px-4 relative min-h-[120px] justify-center">
-            {assignment ? (
+            {isAssignmentPending ? null : assignment ? (
               <>
                 <span className="font-black text-app-text tracking-tighter leading-none text-5xl">
                   {ringDone}
@@ -313,7 +322,7 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
         </div>
 
         <div className="flex flex-col items-center gap-6 w-full max-w-[340px]">
-          {assignment ? (
+          {isAssignmentPending ? null : assignment ? (
             <AssignmentCard assignment={assignment} onOpenRationale={() => setIsRationaleOpen(true)} />
           ) : stats && stats.learnedCount === 0 && totalForToday === 0 ? (
             <div className="bg-app-primary/10 border border-app-primary/20 rounded-2xl p-4 text-center">
@@ -383,10 +392,12 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
           </div>
         </div>
 
-        {assignment && (
-          // The pressure valve: free practice stays one tap away, quiet and
-          // deliberately without a badge or a count. Ghost against the filled
-          // primary above it — the assignment is what you came for.
+        {assignment && !pausedSession && (
+          // The pressure valve: free practice one tap away, quiet, no badge
+          // and no count — a ghost against the filled primary above it. Shown
+          // only while the assignment IS that primary: with a session paused
+          // the primary already resumes free practice, so a second button for
+          // it would duplicate, and misdescribe, the same tap.
           <button
             onClick={() => onStart(mode)}
             className="flex items-center justify-center gap-2 bg-app-surface border border-app-border rounded-2xl px-4 py-3 text-[11px] font-bold text-app-hint active:scale-[0.98] transition-transform"
