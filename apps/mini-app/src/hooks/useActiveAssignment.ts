@@ -8,9 +8,16 @@ import { fetchWithAuth } from '../lib/api';
 
 export const ACTIVE_ASSIGNMENT_KEY = ['assignments', 'active'] as const;
 
-export function useActiveAssignment() {
+export interface UseActiveAssignmentOptions {
+  /** Off for a free practice session, which must not read the assignment
+   *  at all. Defaults to on — Home always wants it. */
+  enabled?: boolean;
+}
+
+export function useActiveAssignment({ enabled = true }: UseActiveAssignmentOptions = {}) {
   return useQuery({
     queryKey: ACTIVE_ASSIGNMENT_KEY,
+    enabled,
     queryFn: async (): Promise<ActiveAssignmentResponse> => {
       const res = await fetchWithAuth('/assignments/active');
       if (!res.ok) throw new Error('Failed to fetch assignment');

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Coffee, X, Info, Pencil, Type, Quote, BookOpen, Layers, HelpCircle, Volume2 } from 'lucide-react';
 import {
@@ -28,8 +28,10 @@ import {
   buildPhraseCloze,
   extractClozeTerm,
 } from './practiceHelpers';
+import { buildAssignmentQueue, isDrillRepeat } from './assignmentHelpers';
 import { stopSpeaking } from '../lib/tts';
 import { useCardAudio } from '../hooks/useCardAudio';
+import { ACTIVE_ASSIGNMENT_KEY, useActiveAssignment } from '../hooks/useActiveAssignment';
 import { Markdown } from './Markdown';
 import { getSettings } from '../lib/settings';
 import { loadSession } from '../lib/sessionPersist';
@@ -47,11 +49,15 @@ import { useT } from '../lib/i18n/useT';
 
 interface PracticeSessionProps {
   mode: PracticeMode;
+  /** Session driven by the active assignment rather than the FSRS due
+   *  queue. Changes three things: where cards come from, that failed cards
+   *  always re-queue, and that repeats are sent as drills. */
+  assignmentMode?: boolean;
   onComplete: (total: number, correct: number) => void;
   onExit: () => void;
 }
 
-export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionProps) {
+export function PracticeSession({ mode, assignmentMode = false, onComplete, onExit }: PracticeSessionProps) {
   const t = useT();
   // Prevent double-exit or lingering handlers during transition
   const [isExiting, setIsExiting] = useState(false);
@@ -82,6 +88,16 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // own init — cheap, and avoids prop-drilling the snapshot in.
   const hasResumedSession = useMemo(() => loadSession(mode) !== null, [mode])
 
+  // Assignment queue. The two sources are mutually exclusive by
+  // construction: this query only runs in assignment mode, the /due query
+  // below only runs outside it, so neither session type pays for the
+  // other's fetch.
+  const assignmentQuery = useActiveAssignment({ enabled: assignmentMode });
+  const assignmentCards = useMemo(
+    () => (assignmentMode ? buildAssignmentQueue(assignmentQuery.data?.items ?? []) : []),
+    [assignmentMode, assignmentQuery.data?.items],
+  );
+
   // /due query — gated by the resumed-session check. Resumed sessions
   // hydrate the queue from localStorage in usePracticeQueue, so we skip
   // the fetch entirely. Fresh sessions issue a single request keyed by
@@ -89,7 +105,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   // hook's shouldReseed guard.
   const { data, isLoading, error } = useQuery({
     queryKey: ['cards', 'due', bypassDue, sessionLimit, cardTypeFilter],
-    enabled: !hasResumedSession,
+    enabled: !hasResumedSession && !assignmentMode,
     queryFn: async () => {
       const params = new URLSearchParams()
       if (bypassDue) {
@@ -170,16 +186,28 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     }
   }, [handleExit, isExiting, t])
 
+  const queryClient = useQueryClient();
+
   const reviewMutation = useMutation({
-    mutationFn: async ({ id, rating }: { id: string; rating: Rating }) => {
+    mutationFn: async ({ id, rating, drill }: { id: string; rating: Rating; drill: boolean }) => {
       const res = await fetchWithAuth(`/cards/${id}/review`, {
         method: 'POST',
-        body: JSON.stringify({ rating }),
+        body: JSON.stringify({ rating, drill }),
       });
       if (!res.ok) throw new Error('Failed to submit review');
       return res.json();
     },
+    onSuccess: () => {
+      // Keeps Home's ring and the group counters honest the moment the
+      // user backs out mid-assignment.
+      if (assignmentMode) void queryClient.invalidateQueries({ queryKey: ACTIVE_ASSIGNMENT_KEY });
+    },
   });
+
+  // Cards already answered in this sitting. Drives the drill decision —
+  // the first answer for a card is the measurement, every repeat after it
+  // is training and must not touch FSRS.
+  const answeredThisSession = useRef<Set<string>>(new Set());
 
   // Typed-answer modes (cloze/translation/listening) have no sensible
   // rendering for theory cards — they have no `term` to gap-fill,
@@ -195,13 +223,13 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   //       lose by NOT filtering is the original mode's variant — which
   //       doesn't apply to theory anyway.
   const baseCards = useMemo<DueCardDto[]>(() => {
-    const all = data?.cards ?? [];
+    const all = assignmentMode ? assignmentCards : (data?.cards ?? []);
     const typedAnswerMode = mode === 'cloze' || mode === 'translation' || mode === 'listening'
     if (typedAnswerMode && cardTypeFilter !== 'theory') {
       return all.filter((c) => c.type !== 'theory');
     }
     return all;
-  }, [data?.cards, mode, cardTypeFilter]);
+  }, [assignmentMode, assignmentCards, data?.cards, mode, cardTypeFilter]);
 
   // Queue + cursor + stats + pending-review undo slot + session-id ref
   // all live in this hook. See hooks/usePracticeQueue.ts for the why —
@@ -235,7 +263,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       const pending = pendingReviewRef.current
       if (pending) {
         clearTimeout(pending.timeoutId);
-        reviewMutation.mutate({ id: pending.id, rating: pending.rating });
+        reviewMutation.mutate({ id: pending.id, rating: pending.rating, drill: pending.drill });
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -362,6 +390,12 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
   const handleRate = (rating: Rating) => {
     if (!currentCard) return;
 
+    // Measurement vs training. Only assignments cram a card until it
+    // sticks, so only they can produce a repeat — a free session keeps
+    // posting honest reviews exactly as it always has.
+    const drill = assignmentMode && isDrillRepeat(currentCard, answeredThisSession.current, new Date());
+    answeredThisSession.current.add(currentCard.id);
+
     if (rating === RATING.Again) { haptic('notificationOccurred', 'error'); playThudSound(); }
     else if (rating === RATING.Hard) { haptic('impactOccurred', 'medium'); playPopSound(); }
     else if (rating === RATING.Good) { haptic('selectionChanged'); playPopSound(); }
@@ -386,7 +420,10 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     // style). Gated by a setting (default off).
     let replaySpliceIndex: number | null = null;
     let workingLength = queue.length;
-    if (rating === RATING.Again && getSettings().inSessionReplay) {
+    // In an assignment, re-queueing a failed card isn't a preference — the
+    // item stays owed until it's taken, so showing it again in the same
+    // sitting is the whole mechanic.
+    if (rating === RATING.Again && (assignmentMode || getSettings().inSessionReplay)) {
       replaySpliceIndex = queueState.spliceAhead(currentCard);
       workingLength = queue.length + 1;
     }
@@ -394,18 +431,19 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     // Flush any existing pending review immediately before queueing the next one.
     if (pendingReview) {
       clearTimeout(pendingReview.timeoutId);
-      reviewMutation.mutate({ id: pendingReview.id, rating: pendingReview.rating });
+      reviewMutation.mutate({ id: pendingReview.id, rating: pendingReview.rating, drill: pendingReview.drill });
     }
 
     // Delay the API call by 3.5 seconds to allow undo.
     const timeoutId = window.setTimeout(() => {
-      reviewMutation.mutate({ id: currentCard.id, rating });
+      reviewMutation.mutate({ id: currentCard.id, rating, drill });
       setPendingReview(null);
     }, 3500);
 
     setPendingReview({
       id: currentCard.id,
       rating,
+      drill,
       timeoutId,
       previousIndex: currentIndex,
       previousStats: sessionStats,
@@ -420,7 +458,7 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
       // Last card: no undo, flush immediately and complete.
       clearTimeout(timeoutId);
       setPendingReview(null);
-      reviewMutation.mutate({ id: currentCard.id, rating });
+      reviewMutation.mutate({ id: currentCard.id, rating, drill });
 
       haptic('notificationOccurred', 'success')
       playSuccessChime()
@@ -441,6 +479,11 @@ export function PracticeSession({ mode, onComplete, onExit }: PracticeSessionPro
     if (pendingReview.replaySpliceIndex !== null) {
       queueState.removeAt(pendingReview.replaySpliceIndex);
     }
+    // Undo the drill bookkeeping too, or the re-answer would count as a
+    // repeat and never reach FSRS. Only when this rating WAS the
+    // measurement — undoing a repeat must leave the earlier answer on
+    // the record.
+    if (!pendingReview.drill) answeredThisSession.current.delete(pendingReview.id);
     queueState.rollback(pendingReview.previousIndex, pendingReview.previousStats);
     setIsRevealed(true);
     setPendingReview(null);

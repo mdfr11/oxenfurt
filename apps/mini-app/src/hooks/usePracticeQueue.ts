@@ -34,6 +34,11 @@ import { fingerprintCards, shouldReseed } from '../components/practiceHelpers'
 export interface PendingReview {
   id: string
   rating: Rating
+  /** Whether this answer was a repeat rather than a measurement (see
+   *  isDrillRepeat). Stashed here so the unmount flush posts the same
+   *  flag the delayed call would have — recomputing it there would look
+   *  at a card the user has since answered and get the opposite answer. */
+  drill: boolean
   timeoutId: number
   previousIndex: number
   previousStats: SessionStats

@@ -30,6 +30,9 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('loading');
   const [stats, setStats] = useState<SessionStats>({ total: 0, correct: 0 });
   const [practiceMode, setPracticeMode] = useState<PracticeMode>(() => loadPracticeMode());
+  // Which queue the practice screen should pull from. A prop, not a screen:
+  // the assignment reuses the practice screen wholesale.
+  const [assignmentMode, setAssignmentMode] = useState(false);
   // Deep-link target for Library — when set, Library auto-opens this
   // card after its list query lands. Used by AnswersScreen's "jump to
   // card" affordance; cleared as soon as Library consumes it so going
@@ -140,6 +143,7 @@ export default function App() {
           <motion.div key="practice" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-40">
             <PracticeSession
               mode={practiceMode}
+              assignmentMode={assignmentMode}
               onComplete={(total, correct) => {
                 setStats({ total, correct });
                 window.location.hash = '#summary';
@@ -154,7 +158,13 @@ export default function App() {
             <Summary
               stats={stats}
               onFinish={() => { window.location.hash = '#home'; }}
-              onRepeatHard={() => { window.location.hash = '#practice'; }}
+              // The assignment queue is spent by the time Summary shows, so
+              // a follow-up round is free practice — same as it was before
+              // assignments existed.
+              onRepeatHard={() => {
+                setAssignmentMode(false);
+                window.location.hash = '#practice';
+              }}
             />
           </motion.div>
         ) : screen === 'library' ? (
@@ -189,13 +199,20 @@ export default function App() {
           <motion.div key="home" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-10">
             <Home
               onStart={(mode) => {
+                setAssignmentMode(false);
                 setPracticeMode(mode);
                 window.location.hash = '#practice';
               }}
-              // Reuses the practice screen; feeding it the assignment's own
-              // queue instead of the due queue is the next step, so for now
-              // this lands on the same session free practice does.
-              onStartAssignment={() => setScreen('practice')}
+              // Same screen and the same navigation mechanism as free
+              // practice — only the queue behind it differs. Going through
+              // the hash matters: `onExit` leaves by assigning '#home', and
+              // that assignment is a no-op when the hash never moved off
+              // '#home' in the first place, which would strand the user on
+              // a practice screen whose exit button does nothing.
+              onStartAssignment={() => {
+                setAssignmentMode(true);
+                window.location.hash = '#practice';
+              }}
               onOpenLibrary={() => { window.location.hash = '#library'; }}
               onOpenStats={() => { window.location.hash = '#stats'; }}
               onOpenAnswers={() => { window.location.hash = '#answers'; }}
