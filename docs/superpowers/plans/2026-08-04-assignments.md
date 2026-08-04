@@ -592,12 +592,15 @@ git commit -m "feat(assignments): add shared wire schemas and DTO types"
 ### Task 3: Assignment service — expiry, load, completion
 
 **Files:**
+- Create: `apps/backend/src/cards/dto.ts`
 - Create: `apps/backend/src/assignments/service.ts`
+- Modify: `apps/backend/src/cards/router.ts` (import `toDueDto` instead of defining it)
 - Modify: `apps/backend/src/assignments/service.test.ts` (append)
 - Test: `apps/backend/src/assignments/service.test.ts`
 
 **Interfaces:**
 - Consumes: `assignments`, `assignmentItems`, `cards` from `../db/schema.ts`; `AssignmentDto`, `AssignmentItemDto`, `ActiveAssignmentResponse`, `AssignmentListItemDto` from `@oxenfurt/shared`.
+- Produces: `toDueDto(row: CardRow, hasQuestions?: boolean): DueCardDto` from `apps/backend/src/cards/dto.ts` — moved verbatim out of `cards/router.ts` so both the cards router and the assignment service share one mapper instead of duplicating it.
 - Produces:
   - `expireStaleAssignments(db: Db, now: Date): Promise<void>`
   - `loadActiveAssignment(db: Db, now: Date): Promise<ActiveAssignmentResponse>`
@@ -798,9 +801,28 @@ describe.skipIf(noDb)('listAssignments', () => {
 Run: `cd apps/backend && bun test src/assignments/service.test.ts`
 Expected: FAIL — cannot resolve `./service.ts`.
 
-- [ ] **Step 3: Write the service**
+- [ ] **Step 3: Extract the shared card mapper first**
 
-Create `apps/backend/src/assignments/service.ts`:
+Create `apps/backend/src/cards/dto.ts` by moving the private `toDueDto` function out of `apps/backend/src/cards/router.ts` (currently at line 438) **verbatim**, exported:
+
+```ts
+// Card → wire DTO for every read surface that hands a card to the practice
+// screen: GET /cards/due and the assignment service both need the identical
+// shape, so the mapper lives here rather than being copied.
+
+import type { DueCardDto, FsrsCardState } from '@oxenfurt/shared'
+import type { CardRow } from '../db/schema.ts'
+
+export function toDueDto(row: CardRow, hasQuestions?: boolean): DueCardDto {
+  // ... body moved verbatim from cards/router.ts, unchanged
+}
+```
+
+Then in `cards/router.ts`, delete the local definition and add `import { toDueDto } from './dto.ts'`. Run `cd apps/backend && bun test src/cards/router.test.ts` — it must still pass unchanged, proving the move was behaviour-preserving.
+
+- [ ] **Step 4: Write the service**
+
+Create `apps/backend/src/assignments/service.ts` (it imports the mapper from Step 3 — do **not** redefine it here):
 
 ```ts
 // Read-side and accounting helpers for assignments. Deliberately free of
@@ -827,13 +849,8 @@ import type {
   FsrsCardState,
 } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
-import {
-  assignmentItems,
-  assignments,
-  cards,
-  type AssignmentRow,
-  type CardRow,
-} from '../db/schema.ts'
+import { toDueDto } from '../cards/dto.ts'
+import { assignmentItems, assignments, cards, type AssignmentRow } from '../db/schema.ts'
 
 /** Anything that can run queries — the real Db or a Drizzle transaction. */
 type Queryable = Pick<Db, 'select' | 'update' | 'insert' | 'delete'>
@@ -978,47 +995,24 @@ function toAssignmentDto(row: AssignmentRow, items: AssignmentItemDto[]): Assign
     groups,
   }
 }
-
-/** Same shape `GET /cards/due` returns, duplicated here rather than
- *  imported because cards/router.ts keeps its mapper private. */
-function toDueDto(row: CardRow): DueCardDto {
-  const fsrs: FsrsCardState = {
-    fsrs_state: row.fsrsState as FsrsCardState['fsrs_state'],
-    due: row.due.toISOString(),
-    stability: row.stability,
-    difficulty: row.difficulty,
-    elapsed_days: row.elapsedDays,
-    scheduled_days: row.scheduledDays,
-    learning_steps: row.learningSteps,
-    reps: row.reps,
-    lapses: row.lapses,
-    last_review: row.lastReview === null ? null : row.lastReview.toISOString(),
-  }
-  return {
-    id: row.id,
-    type: row.type,
-    payload: row.payload,
-    source: row.source,
-    source_quote: row.sourceQuote,
-    fsrs,
-  }
-}
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+Drop `DueCardDto` and `FsrsCardState` from this file's type imports — the mapper now lives in `../cards/dto.ts` and neither type is referenced here.
+
+- [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `cd apps/backend && bun test src/assignments/service.test.ts`
-Expected: PASS — 16 tests. If `toDueDto` triggers a type error on `payload`, confirm `CardRow['payload']` is the union `VocabPayload | TheoryPayload | PhrasePayload`, which is what `DueCardDto.payload` expects.
+Expected: PASS — 16 tests.
 
-- [ ] **Step 5: Typecheck**
+- [ ] **Step 6: Verify the mapper move broke nothing**
 
-Run: `cd apps/backend && pnpm typecheck`
-Expected: no errors.
+Run: `cd apps/backend && bun test && pnpm typecheck`
+Expected: the full suite still passes — in particular every pre-existing `/cards/due` test, which now exercises the extracted mapper.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/backend/src/assignments/service.ts apps/backend/src/assignments/service.test.ts
+git add apps/backend/src/cards/dto.ts apps/backend/src/cards/router.ts apps/backend/src/assignments/service.ts apps/backend/src/assignments/service.test.ts
 git commit -m "feat(assignments): add lazy expiry, active load and completion accounting"
 ```
 
@@ -1741,8 +1735,18 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
     const endOfToday = new Date(at)
     endOfToday.setUTCHours(23, 59, 59, 999)
 
-    const [overdueRows, leechRows, fragileRows, activeCount, dueTodayCount, leechCount] =
-      await Promise.all([
+    // Note the split between rows and counts: the row lists are capped by
+    // `limit`, so the summary must come from real COUNTs or it would silently
+    // under-report the moment the learner has more than `limit` overdue cards.
+    const [
+      overdueRows,
+      leechRows,
+      fragileRows,
+      activeCount,
+      overdueCount,
+      dueTodayCount,
+      leechCount,
+    ] = await Promise.all([
         deps.db
           .select()
           .from(cards)
@@ -1771,6 +1775,10 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
         deps.db
           .select({ value: count() })
           .from(cards)
+          .where(and(eq(cards.status, 'active'), lte(cards.due, at))),
+        deps.db
+          .select({ value: count() })
+          .from(cards)
           .where(and(eq(cards.status, 'active'), lte(cards.due, endOfToday))),
         deps.db
           .select({ value: count() })
@@ -1793,7 +1801,7 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
     const response: DiagnosticsResponse = {
       summary: {
         active_cards: activeCount[0]?.value ?? 0,
-        overdue: overdueRows.length,
+        overdue: overdueCount[0]?.value ?? 0,
         due_today: dueTodayCount[0]?.value ?? 0,
         leeches: leechCount[0]?.value ?? 0,
       },
