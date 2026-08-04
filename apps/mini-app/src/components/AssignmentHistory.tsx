@@ -7,6 +7,7 @@ import { X } from 'lucide-react';
 import type { AssignmentListItemDto } from '@oxenfurt/shared';
 import { fetchWithAuth } from '../lib/api';
 import { BottomSheet } from './BottomSheet';
+import { formatDate } from '../lib/dates';
 import { useT } from '../lib/i18n/useT';
 
 interface AssignmentHistoryProps {
@@ -71,7 +72,9 @@ export function AssignmentHistory({ isOpen, onClose }: AssignmentHistoryProps) {
                     total: String(row.total),
                   })}
                 </span>
-                <span>{new Date(row.due_at).toLocaleDateString()}</span>
+                {/* App locale, not device locale — this screen is opened in
+                    front of the tutor and must speak the app's language. */}
+                <span>{formatDate(row.due_at, t)}</span>
               </div>
             </div>
           ))}

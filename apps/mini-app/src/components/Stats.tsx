@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { HeatmapCell, RecentSession, StatsResponse } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
 import { useT } from '../lib/i18n/useT'
-import { getLocale } from '../lib/i18n'
+import { formatDate, formatTime } from '../lib/dates'
 import { plurKey } from '../lib/i18n/plural'
 import { buildHeatmapCells } from '../lib/heatmap'
 
@@ -268,28 +268,6 @@ function SessionRow({ session }: { session: RecentSession }) {
       </div>
     </div>
   )
-}
-
-function formatDate(iso: string, t: ReturnType<typeof useT>): string {
-  const d = new Date(iso)
-  const today = new Date()
-  const yesterday = new Date(today.getTime() - 24 * 3600 * 1000)
-  if (sameDay(d, today)) return t('stats.date_today')
-  if (sameDay(d, yesterday)) return t('stats.date_yesterday')
-  // Use the current i18n locale's BCP-47 tag so the month renders natively.
-  const localeTag = getLocale() === 'ru' ? 'ru-RU' : 'en-US'
-  return d.toLocaleDateString(localeTag, { day: 'numeric', month: 'short' })
-}
-
-function formatTime(iso: string): string {
-  const localeTag = getLocale() === 'ru' ? 'ru-RU' : 'en-US'
-  return new Date(iso).toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' })
-}
-
-function sameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear()
-    && a.getMonth() === b.getMonth()
-    && a.getDate() === b.getDate()
 }
 
 // --- Heatmap ---
