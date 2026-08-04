@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { mainButton } from '@telegram-apps/sdk-react';
-import { Library as LibraryIcon, BarChart3, Settings, Flame, ChevronDown, GraduationCap, X } from 'lucide-react';
+import { Library as LibraryIcon, BarChart3, Settings, Flame, ChevronDown, GraduationCap, X, History } from 'lucide-react';
 import { fetchWithAuth, API_BASE } from '../lib/api';
 import { loadPracticeMode, type PracticeMode } from '../lib/practiceMode';
 import { primeSpeech } from '../lib/tts';
@@ -12,6 +12,7 @@ import { useT } from '../lib/i18n/useT';
 import { plurKey } from '../lib/i18n/plural';
 import { SettingsSheet } from './SettingsSheet';
 import { AssignmentCard } from './AssignmentCard';
+import { AssignmentHistory } from './AssignmentHistory';
 import { BottomSheet } from './BottomSheet';
 import { Markdown } from './Markdown';
 import { useActiveAssignment } from '../hooks/useActiveAssignment';
@@ -53,6 +54,7 @@ function getRank(t: T, count: number): string {
 export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, onOpenAnswers, userFirstName }: HomeProps) {
   const [mode, setMode] = useState<PracticeMode>(() => loadPracticeMode());
   const [isSettingsOpen, setIsSettingsOpen] = useState(() => window.location.hash === '#settings');
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const { settings } = useSettings();
   const t = useT();
 
@@ -212,13 +214,22 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
         </div>
         
         <div className="flex flex-col items-end gap-2 shrink-0">
-          <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-3 text-app-hint active:opacity-60 transition-opacity bg-app-surface border border-app-border rounded-2xl shadow-sm"
-            aria-label={t('home.aria_settings')}
-          >
-            <Settings size={22} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsHistoryOpen(true)}
+              className="p-3 text-app-hint active:opacity-60 transition-opacity bg-app-surface border border-app-border rounded-2xl shadow-sm"
+              aria-label={t('assignment.history_title')}
+            >
+              <History size={22} />
+            </button>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-3 text-app-hint active:opacity-60 transition-opacity bg-app-surface border border-app-border rounded-2xl shadow-sm"
+              aria-label={t('home.aria_settings')}
+            >
+              <Settings size={22} />
+            </button>
+          </div>
           <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest transition-colors ${
             health?.ok 
               ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' 
@@ -448,8 +459,10 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
         </BottomSheet>
       )}
 
-      <SettingsSheet 
-        isOpen={isSettingsOpen} 
+      <AssignmentHistory isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
+
+      <SettingsSheet
+        isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         currentMode={mode}
         onModeChange={(m) => setMode(m)}
