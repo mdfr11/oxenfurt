@@ -39,6 +39,20 @@ function isSingleActiveViolation(err: unknown): boolean {
   )
 }
 
+/**
+ * "There is already a live assignment and the caller didn't ask to replace
+ * it." Thrown from inside the create transaction so the check runs under the
+ * same lock as the insert, and caught outside it so the 409 stays a distinct
+ * outcome from a genuine rollback. A plain `c.json` return can't do this job:
+ * the transaction has to unwind first, and only an exception unwinds it.
+ */
+class AssignmentActiveError extends Error {
+  constructor(readonly assignmentId: string) {
+    super('assignment_active')
+    this.name = 'AssignmentActiveError'
+  }
+}
+
 export interface AgentAssignmentsRouterDeps {
   db: Db
   ingestToken: string
@@ -86,24 +100,39 @@ export function createAgentAssignmentsRouter(deps: AgentAssignmentsRouterDeps): 
       return c.json({ error: 'unknown_cards', card_ids: missing }, 400)
     }
 
-    // Deadlines that already passed must not count as "occupied" — expire
-    // them first so a stale assignment can't wedge the single-active slot.
-    await expireStaleAssignments(deps.db, at)
-
-    const [live] = await deps.db.select().from(assignments).where(eq(assignments.status, 'active'))
-    if (live !== undefined) {
-      if (!input.replace) {
-        return c.json({ error: 'assignment_active', assignment_id: live.id }, 409)
-      }
-      await deps.db
-        .update(assignments)
-        .set({ status: 'expired' })
-        .where(eq(assignments.id, live.id))
-    }
-
+    // Expire → check → replace → insert all happen in ONE transaction. They
+    // used to be four autocommits, which meant a failure anywhere after the
+    // `expired` UPDATE left the learner with no active assignment AND the
+    // previous one falsely marked expired: work destroyed, nothing to
+    // replace it. Rolling the lot into a transaction makes the replacement
+    // all-or-nothing.
     let created: typeof assignments.$inferSelect
     try {
       created = await deps.db.transaction(async (tx) => {
+        // Lock order is load-bearing. `applyReview` and `archiveCard` both
+        // take the card row first and the assignment row second; the item
+        // insert below takes the FK's KEY SHARE on exactly these cards, so
+        // taking it here — BEFORE we touch the assignment row — keeps this
+        // path in the same card-then-assignment order and no cycle is
+        // reachable. It also closes the window where a card is deleted
+        // between the existence check above and the insert.
+        await tx.select({ id: cards.id }).from(cards).where(inArray(cards.id, cardIds)).for('key share')
+
+        // Deadlines that already passed must not count as "occupied" —
+        // expire them first so a stale assignment can't wedge the
+        // single-active slot.
+        await expireStaleAssignments(tx, at)
+
+        const [live] = await tx
+          .select()
+          .from(assignments)
+          .where(eq(assignments.status, 'active'))
+          .for('update')
+        if (live !== undefined) {
+          if (!input.replace) throw new AssignmentActiveError(live.id)
+          await tx.update(assignments).set({ status: 'expired' }).where(eq(assignments.id, live.id))
+        }
+
         const [row] = await tx
           .insert(assignments)
           .values({
@@ -128,9 +157,14 @@ export function createAgentAssignmentsRouter(deps: AgentAssignmentsRouterDeps): 
         return row!
       })
     } catch (err) {
-      // A concurrent request won the race between our "no live assignment"
-      // read and our insert. Report the same 409 the check-then-act path
-      // above returns, so callers see one consistent contract either way.
+      // Occupied slot, seen under the lock. Same 409 the race below returns.
+      if (err instanceof AssignmentActiveError) {
+        return c.json({ error: 'assignment_active', assignment_id: err.assignmentId }, 409)
+      }
+      // A concurrent request won the race between our locked read and our
+      // insert — possible because the loser's `FOR UPDATE` can't see the
+      // winner's uncommitted row. Report the same 409, so callers see one
+      // consistent contract either way.
       if (isSingleActiveViolation(err)) {
         return c.json({ error: 'assignment_active' }, 409)
       }

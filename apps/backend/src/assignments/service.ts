@@ -99,9 +99,21 @@ export async function listAssignments(
  * non-archived item remains.
  *
  * Safe to call inside an outer transaction — pass the transaction as `db`.
+ *
+ * The `FOR UPDATE` here is hardening rather than a fix: it takes the same
+ * lock `settleActiveAssignment` takes below, one step earlier, so the row
+ * this function stamps against is provably the row that then gets settled.
+ * Without it a `replace` landing between the two reads would send the stamp
+ * to the just-expired assignment — which inflates a history count by one but
+ * cannot wrongly complete anything. Holding it across both reads means a
+ * reader doesn't have to reconstruct that argument.
  */
 export async function markCardCompleted(db: Queryable, cardId: string, at: Date): Promise<void> {
-  const [active] = await db.select().from(assignments).where(eq(assignments.status, 'active'))
+  const [active] = await db
+    .select()
+    .from(assignments)
+    .where(eq(assignments.status, 'active'))
+    .for('update')
   if (active === undefined) return
 
   const updated = await db
