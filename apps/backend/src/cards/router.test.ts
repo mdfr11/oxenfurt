@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { eq } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { FsrsService, RATING } from '@oxenfurt/shared'
 import { signSession } from '../auth/jwt.ts'
 import { getTestDb, resetTestDb } from '../db/testing.ts'
@@ -23,8 +23,6 @@ const buildApp = () =>
     fsrs,
     now: () => NOW,
   })
-
-const cardsApp = buildApp
 
 async function authHeader(userId = 99): Promise<{ authorization: string }> {
   const token = await signSession({ userId }, JWT_SECRET, { ttlSeconds: 900, now: NOW })
@@ -120,12 +118,12 @@ async function seedManyCards(count: number): Promise<string[]> {
     },
     NOW,
   )
-  const rows = await conn!.db.select({ id: cards.id }).from(cards)
+  const rows = await conn!.db.select({ id: cards.id }).from(cards).orderBy(asc(cards.createdAt))
   return rows.map((r) => r.id)
 }
 
 async function reviewRequest(id: string, body: Record<string, unknown>) {
-  return cardsApp().request(`/${id}/review`, {
+  return buildApp().request(`/${id}/review`, {
     method: 'POST',
     headers: { ...(await authHeader()), 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -282,14 +280,14 @@ describe.skipIf(noDb)('POST /:id/review', () => {
     expect(reviews[0]!.fsrsStateBefore).toBe(0)
   })
 
-  test('applyReview returns null for an archived card', async () => {
+  test("applyReview returns 'not_found' for an archived card", async () => {
     const id = await seedActiveVocab('archive-me')
     await conn!.db
       .update(cards)
       .set({ status: 'archived' })
       .where(eq(cards.id, id))
     const result = await applyReview(conn!.db, fsrs, id, RATING.Good, NOW)
-    expect(result).toBeNull()
+    expect(result).toBe('not_found')
   })
 
   test('theory cards from ingest enter the active queue immediately', async () => {
@@ -369,6 +367,19 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
     expect(item!.completedAt).toBeNull()
   })
 
+  test('rating Hard leaves the item unfinished', async () => {
+    const ids = await seedManyCards(3)
+    await seedActiveAssignment(ids)
+
+    await reviewRequest(ids[0]!, { rating: 2 })
+
+    const [item] = await conn!.db
+      .select()
+      .from(assignmentItems)
+      .where(eq(assignmentItems.cardId, ids[0]!))
+    expect(item!.completedAt).toBeNull()
+  })
+
   test('drill:true does not touch FSRS state or card_reviews', async () => {
     const ids = await seedManyCards(3)
     await seedActiveAssignment(ids)
@@ -396,6 +407,35 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
       .from(assignmentItems)
       .where(eq(assignmentItems.cardId, ids[0]!))
     expect(item!.completedAt).not.toBeNull()
+  })
+
+  test('drill:true on a nonexistent card returns 404 and stamps no assignment item', async () => {
+    const ids = await seedManyCards(3)
+    await seedActiveAssignment(ids)
+    const ghost = '99999999-9999-4999-8999-999999999999'
+
+    const res = await reviewRequest(ghost, { rating: 3, drill: true })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'not_found' })
+
+    const items = await conn!.db.select().from(assignmentItems)
+    expect(items.every((i) => i.completedAt === null)).toBe(true)
+  })
+
+  test('drill:true on an archived card returns 404 and stamps no assignment item', async () => {
+    const ids = await seedManyCards(3)
+    await seedActiveAssignment(ids)
+    await conn!.db.update(cards).set({ status: 'archived' }).where(eq(cards.id, ids[0]!))
+
+    const res = await reviewRequest(ids[0]!, { rating: 3, drill: true })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'not_found' })
+
+    const [item] = await conn!.db
+      .select()
+      .from(assignmentItems)
+      .where(eq(assignmentItems.cardId, ids[0]!))
+    expect(item!.completedAt).toBeNull()
   })
 
   test('drill:false still writes FSRS state and a review row', async () => {
@@ -426,7 +466,7 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
     await reviewRequest(ids[0]!, { rating: 3 })
     await reviewRequest(ids[1]!, { rating: 3 })
 
-    const res = await cardsApp().request(`/${ids[2]}/archive`, {
+    const res = await buildApp().request(`/${ids[2]}/archive`, {
       method: 'POST',
       headers: await authHeader(),
     })
@@ -441,7 +481,7 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
     const ids = await seedManyCards(3)
     const assignmentId = await seedActiveAssignment(ids)
 
-    await cardsApp().request(`/${ids[2]}/archive`, {
+    await buildApp().request(`/${ids[2]}/archive`, {
       method: 'POST',
       headers: await authHeader(),
     })

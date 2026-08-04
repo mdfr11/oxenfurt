@@ -256,10 +256,9 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
   app.post('/:id/archive', async (c) => {
     const id = c.req.param('id')
     if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
-    const result = await archiveCard(deps.db, id)
+    const result = await archiveCard(deps.db, id, now())
     if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
     if (result === 'not_active') return c.json({ error: 'not_active' }, 400)
-    await settleActiveAssignment(deps.db, now())
     return c.json({ status: 'archived' })
   })
 
@@ -285,15 +284,12 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
 
     const reviewedAt = now()
     const drill = parsed.output.drill
-    const updated = await applyReview(deps.db, deps.fsrs, id, parsed.output.rating, reviewedAt, {
+    const result = await applyReview(deps.db, deps.fsrs, id, parsed.output.rating, reviewedAt, {
       drill,
     })
-    // A drill never produces FSRS state, so `null` there is success — only a
-    // non-drill null means the card is gone or archived.
-    if (updated === null && !drill) {
-      return c.json({ error: 'not_found' }, 404)
-    }
-    return c.json({ fsrs: updated, drill })
+    if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
+    if (result === 'drilled') return c.json({ fsrs: null, drill: true })
+    return c.json({ fsrs: result, drill })
   })
 
   return app
@@ -314,20 +310,20 @@ export async function applyReview(
   rating: Rating,
   reviewedAt: Date,
   opts: ApplyReviewOptions = {},
-): Promise<FsrsCardState | null> {
+): Promise<FsrsCardState | 'not_found' | 'drilled'> {
   return await db.transaction(async (tx) => {
     const [row] = await tx
       .select()
       .from(cards)
       .where(eq(cards.id, cardId))
       .for('update')
-    if (row === undefined || row.status !== 'active') return null
+    if (row === undefined || row.status !== 'active') return 'not_found'
 
     if (rating >= 3) {
       await markCardCompleted(tx, cardId, reviewedAt)
     }
 
-    if (opts.drill === true) return null
+    if (opts.drill === true) return 'drilled'
 
     const before: FsrsCardState = {
       fsrs_state: row.fsrsState as FsrsCardState['fsrs_state'],
@@ -429,6 +425,7 @@ export async function updateCardPayload(
 export async function archiveCard(
   db: Db,
   cardId: string,
+  now: Date,
 ): Promise<'ok' | 'not_found' | 'not_active'> {
   return await db.transaction(async (tx) => {
     const [row] = await tx
@@ -439,6 +436,10 @@ export async function archiveCard(
     if (row === undefined) return 'not_found'
     if (row.status !== 'active') return 'not_active'
     await tx.update(cards).set({ status: 'archived' }).where(eq(cards.id, cardId))
+    // Same transaction as the archive itself — if settlement throws, the
+    // archive rolls back too, so a retry never lands on a stuck 400
+    // not_active with the assignment left stranded active.
+    await settleActiveAssignment(tx, now)
     return 'ok'
   })
 }
