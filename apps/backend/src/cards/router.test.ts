@@ -381,6 +381,75 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
     expect(item!.completedAt).toBeNull()
   })
 
+  // Lazy expiry has to run on the WRITE path too, not just the reads. It's
+  // the only surface where a rating could otherwise land on an assignment
+  // whose deadline had already passed — stamping an item, and with the last
+  // one settling the whole thing as `completed` after the fact.
+  test('a review past the deadline expires the assignment and stamps nothing', async () => {
+    const ids = await seedManyCards(3)
+    const [row] = await conn!.db
+      .insert(assignments)
+      .values({ title: 'Просроченное', dueAt: new Date('2025-12-31T12:00:00.000Z') })
+      .returning()
+    await conn!.db.insert(assignmentItems).values(
+      ids.map((cardId, i) => ({
+        assignmentId: row!.id,
+        cardId,
+        groupLabel: 'Тема',
+        groupKind: 'topic' as const,
+        position: i,
+      })),
+    )
+
+    const res = await reviewRequest(ids[0]!, { rating: 3 })
+    expect(res.status).toBe(200)
+
+    const [after] = await conn!.db.select().from(assignments).where(eq(assignments.id, row!.id))
+    expect(after!.status).toBe('expired')
+    const [item] = await conn!.db
+      .select()
+      .from(assignmentItems)
+      .where(eq(assignmentItems.cardId, ids[0]!))
+    expect(item!.completedAt).toBeNull()
+  })
+
+  test('an expired assignment cannot be settled by rating its last card', async () => {
+    const ids = await seedManyCards(1)
+    const [row] = await conn!.db
+      .insert(assignments)
+      .values({ title: 'Просроченное', dueAt: new Date('2025-12-31T12:00:00.000Z') })
+      .returning()
+    await conn!.db.insert(assignmentItems).values({
+      assignmentId: row!.id,
+      cardId: ids[0]!,
+      groupLabel: 'Тема',
+      groupKind: 'topic' as const,
+      position: 0,
+    })
+
+    await reviewRequest(ids[0]!, { rating: 4 })
+
+    const [after] = await conn!.db.select().from(assignments).where(eq(assignments.id, row!.id))
+    expect(after!.status).toBe('expired')
+    expect(after!.completedAt).toBeNull()
+  })
+
+  test('a review before the deadline still completes the item', async () => {
+    // The other side of the expiry guard: it must not touch a live one.
+    const ids = await seedManyCards(3)
+    const assignmentId = await seedActiveAssignment(ids)
+
+    await reviewRequest(ids[0]!, { rating: 3 })
+
+    const [after] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
+    expect(after!.status).toBe('active')
+    const [item] = await conn!.db
+      .select()
+      .from(assignmentItems)
+      .where(eq(assignmentItems.cardId, ids[0]!))
+    expect(item!.completedAt).not.toBeNull()
+  })
+
   test('drill:true does not touch FSRS state or card_reviews', async () => {
     const ids = await seedManyCards(3)
     await seedActiveAssignment(ids)

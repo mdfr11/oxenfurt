@@ -15,7 +15,11 @@ import {
 } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { cardQuestions, cardReviews, cards, type CardRow } from '../db/schema.ts'
-import { markCardCompleted, settleActiveAssignment } from '../assignments/service.ts'
+import {
+  expireStaleAssignments,
+  markCardCompleted,
+  settleActiveAssignment,
+} from '../assignments/service.ts'
 import { jwtAuth } from '../middleware/auth.ts'
 import { isUuid } from '../lib/uuid.ts'
 import { toDueDto } from './dto.ts'
@@ -322,6 +326,12 @@ export async function applyReview(
       .where(eq(cards.id, cardId))
       .for('update')
     if (row === undefined || row.status !== 'active') return 'not_found'
+
+    // Lazy expiry, same as every read path. Without it this was the one
+    // surface where an assignment past its deadline could still have items
+    // stamped — and, with the last one, be settled as `completed`. Runs
+    // after the card lock so the order stays card-then-assignment.
+    await expireStaleAssignments(tx, reviewedAt)
 
     if (rating >= 3) {
       await markCardCompleted(tx, cardId, reviewedAt)
