@@ -362,7 +362,6 @@ export const en: Record<keyof typeof ru, string> = {
 
   // --- Assignments ---
   'assignment.from_agent': '📓 Hermes',
-  'assignment.ring_label': 'Assignment',
   'assignment.due_days': 'due in {days}d',
   'assignment.due_today': 'due today',
   'assignment.continue': 'Continue assignment',

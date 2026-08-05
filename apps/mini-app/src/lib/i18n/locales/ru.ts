@@ -372,7 +372,6 @@ export const ru = {
 
   // --- Assignments ---
   'assignment.from_agent': '📓 Hermes',
-  'assignment.ring_label': 'Задание',
   'assignment.due_days': 'сдать через {days} дн.',
   'assignment.due_today': 'сдать сегодня',
   'assignment.continue': 'Продолжить задание',
