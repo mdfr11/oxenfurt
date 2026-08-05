@@ -291,139 +291,178 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
 
       {/* An assignment reorders the screen: the notification comes first
           because it is not part of the assignment, then the assignment
-          itself, then the flexible space that pushes the CTA to the bottom.
-          The middle scrolls rather than clips — on a 360×640 viewport a
-          five-group assignment with wrapping labels can outgrow the space
-          left between the header and the CTA, and the CTA is the one thing
-          that must never move off screen. */}
+          itself. This is the only flexible section, and it scrolls rather
+          than clips — on a 360×640 viewport a five-group assignment can
+          outgrow the space left between the header and the CTA, and the CTA
+          is the one thing that must never move off screen. */}
       {assignment && (
-        <>
-          {(unreadCount > 0 || pausedSession) && (
-            <div className="flex flex-col gap-2.5 mt-4 shrink-0 relative z-10">{notifications}</div>
-          )}
-          {/* Anchored to the top of the flexible space, not centred in it:
-              header → notification → assignment is one continuous read, and
-              centring pushed a 300 px hole between the notification and the
-              card on a tall phone. The slack lands under the assignment,
-              where it is margin above the CTA rather than a gap inside the
-              composition. */}
-          <div
-            className="flex-1 min-h-0 overflow-y-auto mt-4 pb-2 relative z-0"
-            style={{
-              // Fades the last 24 px so a list that runs past the CTA looks
-              // cut off rather than ending there. Costs nothing when the
-              // block fits: the faded band is then empty background.
-              maskImage: 'linear-gradient(to bottom, #000 calc(100% - 24px), transparent)',
-              WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 24px), transparent)',
-            }}
-          >
+        <div
+          className="flex-1 min-h-0 overflow-y-auto flex flex-col relative z-0"
+          style={{
+            // Fades the last 24 px so a list that runs past the CTA looks cut
+            // off rather than ending there. Costs nothing when the block fits:
+            // the faded band is then empty background.
+            maskImage: 'linear-gradient(to bottom, #000 calc(100% - 24px), transparent)',
+            WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 24px), transparent)',
+          }}
+        >
+          {/* Notification and assignment centre together as one block, so the
+              slack on a tall phone splits above and below them instead of
+              pooling into a third of a screen of nothing above the CTA.
+              Centring the card alone would leave the notification pinned under
+              the header with the hole underneath it — same hole, worse
+              reading order.
+
+              `my-auto` rather than `justify-center`: when the block outgrows
+              the space, auto margins collapse to zero and the top stays
+              reachable, where centred flex content scrolls off the top edge. */}
+          <div className="my-auto py-4">
+            {(unreadCount > 0 || pausedSession) && (
+              <div className="flex flex-col gap-2.5 mb-4">{notifications}</div>
+            )}
             <AssignmentCard assignment={assignment} onOpenRationale={() => setIsRationaleOpen(true)} />
           </div>
-        </>
+        </div>
       )}
 
+      {/* On a 360×640 viewport the ring, the pill and the agent-answered
+          banner together stand ~7 px taller than the space left between the
+          header and the CTA. The section used to let that overflow leak out of
+          both ends, and the footer paints above it (z-10 over z-0), so the
+          primary button was drawn across the bottom of the banner and took its
+          lower edge and chevron with it.
+
+          The composition now sits between two flexible spacers instead of
+          under `justify-center`. With room to spare they split it evenly and
+          the result is identical to centring. When the screen is short they
+          collapse to nothing, and the next thing to give is the 32 px gap
+          under the ring — whitespace, not a tap target. Only once that is
+          spent does the section scroll, and because the top spacer is already
+          at zero the ring is against the top and everything below it is
+          reachable, which is what centred overflow could never be.
+
+          Nothing moves when the content fits: even spacers reproduce
+          `justify-center` exactly, the gap is still the 32 px `mb-8` was, and
+          `overflow-y: auto` reserves no scrollbar space until it scrolls. */}
       {!assignment && (
-        <div className="flex-1 flex flex-col items-center justify-center relative z-0">
-          <div className="relative w-56 h-56 flex items-center justify-center mb-8">
-            {/* Background Ring */}
-            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 200 200">
-              <circle
-                cx="100"
-                cy="100"
-                r={radius}
-                stroke="currentColor"
-                strokeWidth="8"
-                fill="transparent"
-                className="text-app-primary/5"
-              />
-              {/* Progress Ring with soft glow */}
-              <motion.circle
-                cx="100"
-                cy="100"
-                r={radius}
-                stroke="currentColor"
-                strokeWidth="8"
-                fill="transparent"
-                strokeLinecap="round"
-                className="text-app-primary"
-                style={{ 
-                  strokeDasharray: circumference, 
-                  strokeDashoffset,
-                  filter: 'drop-shadow(0 0 3px rgba(79, 70, 229, 0.2))'
-                }}
-                initial={{ strokeDashoffset: circumference }}
-                animate={{ strokeDashoffset }}
-                transition={{ duration: 1.5, ease: 'circOut' }}
-              />
-            </svg>
-            <div className="flex flex-col items-center text-center mt-1 px-4 relative min-h-[120px] justify-center">
-              {isAssignmentPending ? null : due > 0 ? (
-                <>
-                  <span className={`font-black text-app-text tracking-tighter leading-none transition-all ${
-                    due > 999 ? 'text-4xl' : due > 99 ? 'text-5xl' : 'text-6xl'
-                  }`}>
-                    {due}
-                  </span>
-                  <div className="h-4 flex items-center mt-3">
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-app-hint opacity-60 leading-none">
-                      {t('home.ring_to_review')}
-                    </span>
-                  </div>
-                </>
-              ) : reviewed > 0 ? (
-                <>
-                  <motion.div
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="flex flex-col items-center"
-                  >
-                    <span className={`font-black text-app-primary tracking-tighter leading-none ${
-                      reviewed > 999 ? 'text-4xl' : reviewed > 99 ? 'text-5xl' : 'text-6xl'
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col relative z-0">
+          <div className="flex-1 min-h-0 flex flex-col items-center">
+            <div className="flex-1 min-h-0" />
+            <div className="relative w-56 h-56 shrink-0 flex items-center justify-center">
+              {/* Background Ring */}
+              <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 200 200">
+                <circle
+                  cx="100"
+                  cy="100"
+                  r={radius}
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  fill="transparent"
+                  className="text-app-primary/5"
+                />
+                {/* Progress Ring with soft glow */}
+                <motion.circle
+                  cx="100"
+                  cy="100"
+                  r={radius}
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  fill="transparent"
+                  strokeLinecap="round"
+                  className="text-app-primary"
+                  style={{ 
+                    strokeDasharray: circumference, 
+                    strokeDashoffset,
+                    filter: 'drop-shadow(0 0 3px rgba(79, 70, 229, 0.2))'
+                  }}
+                  initial={{ strokeDashoffset: circumference }}
+                  animate={{ strokeDashoffset }}
+                  transition={{ duration: 1.5, ease: 'circOut' }}
+                />
+              </svg>
+              <div className="flex flex-col items-center text-center mt-1 px-4 relative min-h-[120px] justify-center">
+                {isAssignmentPending ? null : due > 0 ? (
+                  <>
+                    <span className={`font-black text-app-text tracking-tighter leading-none transition-all ${
+                      due > 999 ? 'text-4xl' : due > 99 ? 'text-5xl' : 'text-6xl'
                     }`}>
-                      {reviewed}
+                      {due}
                     </span>
                     <div className="h-4 flex items-center mt-3">
                       <span className="text-[10px] font-black uppercase tracking-[0.2em] text-app-hint opacity-60 leading-none">
-                        {t('home.ring_done_label')}
+                        {t('home.ring_to_review')}
                       </span>
                     </div>
-                  </motion.div>
-                </>
-              ) : (
-                <>
-                  <span className="text-5xl opacity-20">📚</span>
-                  <div className="h-4 flex items-center mt-4">
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-app-hint text-center opacity-60 leading-none">
-                      {t('home.ring_empty')}
-                    </span>
-                  </div>
-                </>
-              )}
+                  </>
+                ) : reviewed > 0 ? (
+                  <>
+                    <motion.div
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="flex flex-col items-center"
+                    >
+                      <span className={`font-black text-app-primary tracking-tighter leading-none ${
+                        reviewed > 999 ? 'text-4xl' : reviewed > 99 ? 'text-5xl' : 'text-6xl'
+                      }`}>
+                        {reviewed}
+                      </span>
+                      <div className="h-4 flex items-center mt-3">
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-app-hint opacity-60 leading-none">
+                          {t('home.ring_done_label')}
+                        </span>
+                      </div>
+                    </motion.div>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-5xl opacity-20">📚</span>
+                    <div className="h-4 flex items-center mt-4">
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-app-hint text-center opacity-60 leading-none">
+                        {t('home.ring_empty')}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-col items-center gap-6 w-full max-w-[340px]">
-            {isAssignmentPending ? null : stats && stats.learnedCount === 0 && totalForToday === 0 ? (
-              <div className="bg-app-primary/10 border border-app-primary/20 rounded-2xl p-4 text-center">
-                <h3 className="font-bold text-app-primary text-sm mb-1">{t('home.welcome_title')}</h3>
-                <p className="text-xs text-app-text/80 leading-relaxed">{t('home.welcome_desc')}</p>
-              </div>
-            ) : (
-              <div className="bg-app-surface px-5 py-2 rounded-2xl border border-app-border shadow-sm">
-                <p className="text-app-hint text-center text-[11px] font-bold uppercase tracking-wide">
-                  {totalForToday === 0
-                    ? t('home.no_due')
-                    : due === 0
-                      ? t('home.progress_done_excellent', { reviewed })
-                      : t('home.progress_in_progress', { reviewed, total: totalForToday })
-                  }
-                </p>
-              </div>
-            )}
+            {/* The compressible gap. 32 px — what `mb-8` on the ring used to
+                be — and the only item here allowed to shrink. `min-h-0` is
+                what makes it shrinkable at all: a flex item's automatic
+                minimum size is its specified height, so without it the
+                spacer would hold all 32 px and the overflow would go back to
+                the banner. */}
+            <div className="h-8 min-h-0" />
 
-            {/* Rendered even when empty: it still costs its gap and top margin,
-                and this screen's vertical rhythm is built around that space. */}
-            <div className="flex flex-col gap-3 w-full mt-2">{notifications}</div>
+            <div className="flex flex-col items-center gap-6 w-full max-w-[340px] shrink-0">
+              {isAssignmentPending ? null : stats && stats.learnedCount === 0 && totalForToday === 0 ? (
+                <div className="bg-app-primary/10 border border-app-primary/20 rounded-2xl p-4 text-center">
+                  <h3 className="font-bold text-app-primary text-sm mb-1">{t('home.welcome_title')}</h3>
+                  <p className="text-xs text-app-text/80 leading-relaxed">{t('home.welcome_desc')}</p>
+                </div>
+              ) : (
+                <div className="bg-app-surface px-5 py-2 rounded-2xl border border-app-border shadow-sm">
+                  <p className="text-app-hint text-center text-[11px] font-bold uppercase tracking-wide">
+                    {totalForToday === 0
+                      ? t('home.no_due')
+                      : due === 0
+                        ? t('home.progress_done_excellent', { reviewed })
+                        : t('home.progress_in_progress', { reviewed, total: totalForToday })
+                    }
+                  </p>
+                </div>
+              )}
+
+              {/* Rendered even when empty: it still costs its gap and top margin,
+                  and this screen's vertical rhythm is built around that space. */}
+              <div className="flex flex-col gap-3 w-full mt-2">{notifications}</div>
+            </div>
+            {/* `min-h-3` is a floor, not a size. With room to spare the two
+                spacers are equal and far larger than 12 px, so it never binds
+                and centring is untouched; when the screen is tight it is what
+                keeps the notification from ending flush against the top of
+                the primary button. */}
+            <div className="flex-1 min-h-3" />
           </div>
         </div>
       )}
