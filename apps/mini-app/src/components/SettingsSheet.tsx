@@ -1,4 +1,4 @@
-import { Settings, Volume2, Vibrate, X, Play, Headphones, ArrowLeftRight, Languages, Sparkles, Layout, Globe, Mic2, MessageSquare } from 'lucide-react';
+import { Settings, Volume2, Vibrate, X, Play, Headphones, ArrowLeftRight, Languages, Sparkles, Layout, Globe, Mic2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings } from '../lib/settings';
 import { hapticFeedback } from '@telegram-apps/sdk-react';
@@ -253,13 +253,6 @@ export function SettingsSheet({
                     hint={t('settings.ai_hint')}
                     checked={settings.aiGradingEnabled}
                     onChange={(v) => updateSettings({ aiGradingEnabled: v })}
-                  />
-                  <SettingToggleRow
-                    icon={MessageSquare}
-                    label={t('settings.replay_label')}
-                    hint={t('settings.replay_hint')}
-                    checked={settings.inSessionReplay}
-                    onChange={(v) => updateSettings({ inSessionReplay: v })}
                   />
                 </div>
               </section>

@@ -130,26 +130,24 @@ describe('deadlineState', () => {
 });
 
 describe('shouldRequeueAfterRating', () => {
-  test('an assignment re-queues both Again and Hard', () => {
-    expect(shouldRequeueAfterRating(RATING.Again, true, false)).toBe(true);
-    expect(shouldRequeueAfterRating(RATING.Hard, true, false)).toBe(true);
+  test('Again never re-queues a card in the current session', () => {
+    expect(shouldRequeueAfterRating(RATING.Again, true)).toBe(false);
+    expect(shouldRequeueAfterRating(RATING.Again, false)).toBe(false);
+  });
+
+  test('an assignment still re-queues Hard', () => {
+    expect(shouldRequeueAfterRating(RATING.Hard, true)).toBe(true);
   });
 
   test('an assignment never re-queues a taken card', () => {
-    expect(shouldRequeueAfterRating(RATING.Good, true, true)).toBe(false);
-    expect(shouldRequeueAfterRating(RATING.Easy, true, true)).toBe(false);
+    expect(shouldRequeueAfterRating(RATING.Good, true)).toBe(false);
+    expect(shouldRequeueAfterRating(RATING.Easy, true)).toBe(false);
   });
 
-  test('the in-session replay setting does not apply to assignments', () => {
-    // Off in settings, still on in an assignment — the item stays owed
-    // regardless of what the learner prefers for free practice.
-    expect(shouldRequeueAfterRating(RATING.Again, true, false)).toBe(true);
-  });
-
-  test('free practice re-queues Again only, and only when opted in', () => {
-    expect(shouldRequeueAfterRating(RATING.Again, false, true)).toBe(true);
-    expect(shouldRequeueAfterRating(RATING.Hard, false, true)).toBe(false);
-    expect(shouldRequeueAfterRating(RATING.Again, false, false)).toBe(false);
+  test('free practice never re-queues cards', () => {
+    for (const rating of Object.values(RATING)) {
+      expect(shouldRequeueAfterRating(rating, false)).toBe(false);
+    }
   });
 });
 

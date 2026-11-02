@@ -69,19 +69,15 @@ export function deadlineState(dueAt: string, now: Date): { days: number; urgent:
 /**
  * Whether a rating sends the card back into the same sitting's queue.
  *
- * In an assignment this is the mechanic, not a preference: neither Again nor
- * Hard stamps the item completed on the server, so a card that leaves the
- * queue on either of them is owed but unreachable — the queue drains, Summary
- * fires, and Home still reads 17/20 with no way to the rest but re-entering.
- * Free practice is unchanged: Again only, and only when the user asked for it.
+ * Again leaves the card for a future sitting in both modes. Assignment
+ * items rated Again remain incomplete and return when the assignment is
+ * opened again. Only Hard in an assignment repeats in the current queue.
  */
 export function shouldRequeueAfterRating(
   rating: Rating,
   assignmentMode: boolean,
-  inSessionReplay: boolean,
 ): boolean {
-  if (assignmentMode) return rating === RATING.Again || rating === RATING.Hard;
-  return rating === RATING.Again && inSessionReplay;
+  return assignmentMode && rating === RATING.Hard;
 }
 
 export interface AssignmentOutcomeGroup {

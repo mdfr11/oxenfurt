@@ -68,7 +68,22 @@ export function loadSession(mode?: PracticeMode): PersistedSession | null {
       return null
     }
     if (mode !== undefined && parsed.mode !== mode) return null
-    return parsed as PersistedSession
+    const session = parsed as PersistedSession
+    // Older clients persisted cards inserted by Again. Keep the reviewed
+    // history and cursor for accurate progress, but never resume a repeat
+    // of an answered card or multiple copies of an unanswered card.
+    const history = session.cards.slice(0, session.currentIndex)
+    const seen = new Set(history.map(card => card.id))
+    const remaining = session.cards.slice(session.currentIndex).filter(card => {
+      if (seen.has(card.id)) return false
+      seen.add(card.id)
+      return true
+    })
+    if (remaining.length === 0) {
+      clearSession()
+      return null
+    }
+    return { ...session, cards: [...history, ...remaining] }
   } catch {
     return null
   }

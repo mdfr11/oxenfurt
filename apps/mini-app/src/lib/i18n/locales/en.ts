@@ -192,8 +192,6 @@ export const en: Record<keyof typeof ru, string> = {
   'settings.produce_hint': 'Active recall of the target language',
   'settings.ai_label': 'AI grading',
   'settings.ai_hint': 'Semantic check button on miss',
-  'settings.replay_label': 'Replay failed',
-  'settings.replay_hint': '"Again" re-queues the card this session',
   'settings.accent_label': 'Accent (TTS)',
   'settings.accent_us': 'US',
   'settings.accent_uk': 'UK',

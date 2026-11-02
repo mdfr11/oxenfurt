@@ -29,8 +29,7 @@ import { fingerprintCards, shouldReseed } from '../components/practiceHelpers'
 
 /** Snapshot needed to undo the last rating — restores both the queue
  *  position and the running stats. The replay-splice index is set when
- *  the user rated Again with in-session replay on, so undo can also
- *  unsplice. */
+ *  an assignment card is repeated after Hard, so undo can also unsplice. */
 export interface PendingReview {
   id: string
   rating: Rating
@@ -87,9 +86,8 @@ export interface UsePracticeQueueResult {
   resumed: boolean
 
   // ---- Queue / cursor mutations -----------------------------------
-  /** Splice the failed card a few positions ahead of the cursor.
-   *  Used by handleRate when rating === Again and in-session replay
-   *  is on. Returns the splice position so the caller can stash it
+  /** Splice a Hard assignment card a few positions ahead of the cursor.
+   *  Returns the splice position so the caller can stash it
    *  on PendingReview for undo. */
   spliceAhead: (card: DueCardDto, offset?: number) => number
   /** Reverse a previous splice (used by undo). */

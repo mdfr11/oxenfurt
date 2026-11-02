@@ -37,12 +37,6 @@ interface AppSettings {
   // who'd rather not lean on an LLM (or haven't configured one on the
   // backend at all — the button would just 503 anyway).
   aiGradingEnabled: boolean;
-  // When you rate "Снова", spliсe the failed card back into the working
-  // queue ~4 positions ahead so you re-see it before the session ends.
-  // Default OFF — surprised users (the queue can grow from 10 to 11+)
-  // outweighed the learning-step benefit. Power users who want Anki's
-  // learning-step behaviour can flip it on.
-  inSessionReplay: boolean;
   // Restrict the practice session to one card type. 'all' = no filter
   // (current behaviour). 'theory' is the obvious use case — grammar
   // notes get lost in a mixed-with-vocab session — but the option is
@@ -62,7 +56,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   produceDirection: false,
   sessionLimit: null,
   aiGradingEnabled: false,
-  inSessionReplay: false,
   cardTypeFilter: 'all',
 };
 

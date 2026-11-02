@@ -203,8 +203,6 @@ export const ru = {
   'settings.produce_hint': 'Активное вспоминание на изучаемом языке',
   'settings.ai_label': 'AI-проверка',
   'settings.ai_hint': 'Проверить смыслом',
-  'settings.replay_label': 'Повтор провалов',
-  'settings.replay_hint': '«Снова» возвращает карточку в этой сессии',
   'settings.accent_label': 'Акцент (озвучка)',
   'settings.accent_us': 'США',
   'settings.accent_uk': 'Великобритания',

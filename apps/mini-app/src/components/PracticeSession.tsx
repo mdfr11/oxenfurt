@@ -58,8 +58,8 @@ import { useT } from '../lib/i18n/useT';
 interface PracticeSessionProps {
   mode: PracticeMode;
   /** Session driven by the active assignment rather than the FSRS due
-   *  queue. Changes three things: where cards come from, that failed cards
-   *  always re-queue, and that repeats are sent as drills. */
+   *  queue. Changes three things: where cards come from, that Hard cards
+   *  re-queue, and that repeats are sent as drills. */
   assignmentMode?: boolean;
   /** `assignment` is non-null only for an assignment session, and carries
    *  the counts Summary needs — including when the assignment just finished
@@ -473,14 +473,11 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
       correct: sessionStats.correct + correctDelta,
     }
 
-    // Auto-replay: re-queue this card a few positions ahead so the user sees
-    // it again in the same session (Anki learning-steps style). In free
-    // practice that's Again only and gated by a setting (default off); in an
-    // assignment it's Again *or* Hard and not a preference — see
-    // shouldRequeueAfterRating.
+    // Only Hard in an assignment repeats in this sitting. Again always
+    // advances without extending the queue, including on the last card.
     let replaySpliceIndex: number | null = null;
     let workingLength = queue.length;
-    if (shouldRequeueAfterRating(rating, assignmentMode, getSettings().inSessionReplay)) {
+    if (shouldRequeueAfterRating(rating, assignmentMode)) {
       replaySpliceIndex = queueState.spliceAhead(currentCard);
       workingLength = queue.length + 1;
     }
@@ -541,7 +538,7 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   const handleUndo = () => {
     if (!pendingReview) return;
     clearTimeout(pendingReview.timeoutId);
-    // If the previous Again spliced the card into the queue, also remove
+    // If the previous Hard spliced the card into the queue, also remove
     // that splice so the future-position state is consistent with undo.
     if (pendingReview.replaySpliceIndex !== null) {
       queueState.removeAt(pendingReview.replaySpliceIndex);
