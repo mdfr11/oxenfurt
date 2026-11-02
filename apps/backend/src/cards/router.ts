@@ -168,8 +168,12 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
   })
 
   app.get('/due', async (c) => {
-    const limitRaw = c.req.query('limit') ?? '20'
-    const limit = Math.max(1, Math.min(100, Number.parseInt(limitRaw, 10) || 20))
+    // No limit means the full due queue (the session-size setting "All").
+    // Only cap sessions when the caller explicitly requests a size.
+    const limitRaw = c.req.query('limit')
+    const limit = limitRaw === undefined
+      ? undefined
+      : Math.max(1, Math.min(100, Number.parseInt(limitRaw, 10) || 20))
     // bypass_due=true → return all active cards regardless of FSRS schedule.
     // The "I want to drill anyway" escape hatch for when the user blew
     // through the queue but still has appetite. FSRS state updates on
@@ -187,12 +191,12 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
     if (typeFilter !== undefined) conds.push(eq(cards.type, typeFilter))
     const condition = and(...conds)
 
-    const rows = await deps.db
+    const query = deps.db
       .select()
       .from(cards)
       .where(condition)
       .orderBy(asc(cards.due))
-      .limit(limit)
+    const rows = await (limit === undefined ? query : query.limit(limit))
 
     const questionsSet = await fetchQuestionsMap(deps.db, rows.map(r => r.id))
     return c.json({ cards: rows.map(r => toDueDto(r, questionsSet.has(r.id))) })

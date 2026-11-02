@@ -29,9 +29,8 @@ interface AppSettings {
   // cards flip: translation on the front, term on the back. Forces the
   // user to recall the foreign form. Shares FSRS state with recognition.
   produceDirection: boolean;
-  // Soft cap on session size. `null` = no cap (take all due cards from
-  // the backend's default page). Respected by PracticeSession's /due
-  // fetch via the ?limit query parameter.
+  // Soft cap on session size. `null` = all due cards, without pagination.
+  // Respected by PracticeSession's /due fetch via the ?limit parameter.
   sessionLimit: number | null;
   // Show the "🤖 Проверить смыслом" button under miss feedback in
   // typed-answer modes. Off-by-default keeps the UI clean for people

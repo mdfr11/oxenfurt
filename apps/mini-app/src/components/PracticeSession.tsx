@@ -85,7 +85,7 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   // state — early-reviewed cards just get rescheduled normally.
   const [bypassDue, setBypassDue] = useState(false);
 
-  // Soft cap from settings — null = no override, let backend default kick in.
+  // Soft cap from settings — null requests the entire due queue.
   const sessionLimit = useMemo(() => getSettings().sessionLimit, [])
   // Card type filter — 'all' (default) means no filter, otherwise the
   // /due query only returns cards of that type. Captured once at mount;
@@ -143,6 +143,10 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   const dueQuery = useQuery({
     queryKey: ['cards', 'due', bypassDue, sessionLimit, cardTypeFilter],
     enabled: !hasResumedSession && !assignmentMode,
+    // A new sitting must fetch its own queue. Cached cards would seed the
+    // working queue before the refetch finishes, replaying the previous
+    // sitting and hiding the cards that are still due (seeding is one-shot).
+    gcTime: 0,
     queryFn: async () => {
       const params = new URLSearchParams()
       if (bypassDue) {

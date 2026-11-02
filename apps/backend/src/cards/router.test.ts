@@ -191,6 +191,45 @@ describe.skipIf(noDb)('GET /due', () => {
     expect(body.cards).toHaveLength(2)
   })
 
+  test('returns the entire due queue without an explicit limit, including more than 100 cards', async () => {
+    const ids = await seedManyCards(125)
+    const futureId = await seedActiveVocab('future', new Date(NOW.getTime() + 86_400_000))
+    const archivedId = await seedActiveVocab('archived')
+    await conn!.db.update(cards).set({ status: 'archived' }).where(eq(cards.id, archivedId))
+    const oldestId = ids[0]!
+    await conn!.db.update(cards).set({ due: new Date(NOW.getTime() - 86_400_000) }).where(eq(cards.id, oldestId))
+
+    const res = await buildApp().request('/due', { headers: await authHeader() })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { cards: Array<{ id: string }> }
+    expect(body.cards).toHaveLength(ids.length)
+    expect(new Set(body.cards.map((card) => card.id))).toEqual(new Set(ids))
+    expect(body.cards[0]!.id).toBe(oldestId)
+    expect(body.cards.some((card) => card.id === futureId || card.id === archivedId)).toBe(false)
+  })
+
+  test('limited sessions can exhaust the due queue without replaying completed cards', async () => {
+    const ids = await seedManyCards(25)
+    const seen = new Set<string>()
+    const app = buildApp()
+    const headers = await authHeader()
+
+    for (const expectedCount of [10, 10, 5, 0]) {
+      const res = await app.request('/due?limit=10', { headers })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { cards: Array<{ id: string }> }
+      expect(body.cards).toHaveLength(expectedCount)
+      for (const card of body.cards) {
+        expect(seen.has(card.id)).toBe(false)
+        seen.add(card.id)
+        const review = await reviewRequest(card.id, { rating: RATING.Easy })
+        expect(review.status).toBe(200)
+      }
+    }
+
+    expect(seen).toEqual(new Set(ids))
+  })
+
   test('?type=vocab returns only vocab cards', async () => {
     await seedActiveVocab('alpha', new Date(NOW.getTime() - 3000))
     await seedActivePhrase('on the other hand', new Date(NOW.getTime() - 2000))
