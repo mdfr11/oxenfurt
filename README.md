@@ -32,6 +32,9 @@ You finish a 60-minute session with your tutor. Your head is full of 20 new word
 ### 📋 Tutor-Style Assignments
 After each lesson the agent composes a bounded, deadline-bound set of ~20 existing cards — new material, the point you struggled with, and what you keep forgetting — and that assignment becomes the app's primary screen until it's done or its deadline passes. A finished assignment stays replayable in unlimited "circles" from Home or history, so one pass is never treated as proof of knowing it. Free practice over the full due queue stays available underneath, untouched.
 
+### 🎓 Multiple Scopes (Several Academies)
+One app, many decks. Declare scopes in the backend env (`SCOPES=english:English:🇬🇧:indigo,go:Go:🐹:emerald`) and give each Hermes profile its own ingest token (`INGEST_TOKENS=go=…`). Each agent then owns exactly one deck — its token *is* its scope, so a bot physically cannot write into another academy. Inside the Mini App a pill switcher under the header swaps the whole context: assignment, due queue, stats and accent color. Assignment slots, card dedup, streaks and heatmaps are all per-scope.
+
 ### 🧠 Advanced Spaced Repetition
 Powered by **FSRS-5** (Free Spaced Repetition Scheduler). Unlike basic Anki, it adapts to your memory curve per-card, minimizing review time.
 - **5 Practice Modes**: Recognition, Cloze (gap-fill), Translation, Listening (TTS), and Mixed.

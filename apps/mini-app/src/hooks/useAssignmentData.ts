@@ -15,16 +15,19 @@ import type {
   LatestAssignmentResponse,
 } from '@oxenfurt/shared';
 import { fetchWithAuth } from '../lib/api';
+import { getScopeSlug } from '../lib/scope';
 
-export const LATEST_ASSIGNMENT_KEY = ['assignments', 'latest'] as const;
+export function latestAssignmentKey(scope: string | null) {
+  return [scope ?? 'no-scope', 'assignments', 'latest'] as const;
+}
 
-export function assignmentDetailKey(assignmentId: string) {
-  return ['assignments', 'detail', assignmentId] as const;
+export function assignmentDetailKey(scope: string | null, assignmentId: string) {
+  return [scope ?? 'no-scope', 'assignments', 'detail', assignmentId] as const;
 }
 
 export function useLatestAssignment({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
-    queryKey: LATEST_ASSIGNMENT_KEY,
+    queryKey: latestAssignmentKey(getScopeSlug()),
     enabled,
     queryFn: async (): Promise<LatestAssignmentResponse> => {
       const res = await fetchWithAuth('/assignments/latest');
@@ -37,7 +40,7 @@ export function useLatestAssignment({ enabled = true }: { enabled?: boolean } = 
 
 export function useAssignmentDetail(assignmentId: string | null) {
   return useQuery({
-    queryKey: assignmentDetailKey(assignmentId ?? 'none'),
+    queryKey: assignmentDetailKey(getScopeSlug(), assignmentId ?? 'none'),
     enabled: assignmentId !== null,
     // Each round is its own mount and must see the cards as they are now.
     gcTime: 0,

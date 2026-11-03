@@ -50,6 +50,13 @@
       "when": 1785840000000,
       "tag": "0006_assignments",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785926400000,
+      "tag": "0007_scopes",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import type { AssignmentDetailResponse, AssignmentListItemDto } from '@oxenfurt/shared';
+import { getScopeSlug } from '../lib/scope'
 import { fetchWithAuth } from '../lib/api';
 import { BottomSheet } from './BottomSheet';
 import { Markdown } from './Markdown';
@@ -35,7 +36,7 @@ export function AssignmentHistory({ isOpen, onClose, onRepeat }: AssignmentHisto
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data, isPending } = useQuery({
-    queryKey: ['assignments', 'history'],
+    queryKey: [getScopeSlug() ?? 'no-scope', 'assignments', 'history'],
     enabled: isOpen,
     queryFn: async () => {
       const res = await fetchWithAuth('/assignments');
@@ -45,7 +46,7 @@ export function AssignmentHistory({ isOpen, onClose, onRepeat }: AssignmentHisto
   });
 
   const { data: detail, isPending: isDetailPending } = useQuery({
-    queryKey: ['assignments', 'detail', expandedId],
+    queryKey: [getScopeSlug() ?? 'no-scope', 'assignments', 'detail', expandedId],
     enabled: isOpen && expandedId !== null,
     queryFn: async (): Promise<AssignmentDetailResponse> => {
       const res = await fetchWithAuth(`/assignments/${expandedId}`);

@@ -19,6 +19,9 @@ export interface SessionStats {
 
 export interface PersistedSession {
   mode: PracticeMode
+  /** Which scope the paused cards belong to — a session never crosses
+   *  scopes, and Home must not offer to resume it under another one. */
+  scope: string | null
   cards: DueCardDto[]
   currentIndex: number
   stats: SessionStats
@@ -49,7 +52,7 @@ export function saveSession(s: PersistedSession): void {
   }
 }
 
-export function loadSession(mode?: PracticeMode): PersistedSession | null {
+export function loadSession(mode?: PracticeMode, scope?: string | null): PersistedSession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw === null) return null
@@ -68,7 +71,11 @@ export function loadSession(mode?: PracticeMode): PersistedSession | null {
       return null
     }
     if (mode !== undefined && parsed.mode !== mode) return null
-    const session = parsed as PersistedSession
+    // A pause belongs to the scope it was started in. When the caller
+    // names a scope, a session saved in another one simply doesn't exist
+    // for them — it stays persisted for when they switch back.
+    if (scope !== undefined && (parsed.scope ?? null) !== scope) return null
+    const session = { ...parsed, scope: parsed.scope ?? null } as PersistedSession
     // Older clients persisted cards inserted by Again. Keep the reviewed
     // history and cursor for accurate progress, but never resume a repeat
     // of an answered card or multiple copies of an unanswered card.

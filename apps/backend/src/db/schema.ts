@@ -14,10 +14,29 @@ import {
 } from 'drizzle-orm/pg-core'
 import type { CardStatus, CardType, PhrasePayload, TheoryPayload, VocabPayload } from '@oxenfurt/shared'
 
+// A scope is one "academy": one deck of cards, one agent, one assignment
+// slot, one stats history. Config-driven (see db/scopes.ts) — rows are
+// synced at boot and never deleted, because cards FK into them.
+export const scopes = pgTable('scopes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slug: text('slug').notNull().unique(),
+  title: text('title').notNull(),
+  emoji: text('emoji'),
+  accent: text('accent'),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+    .notNull()
+    .defaultNow(),
+})
+
+export type ScopeRow = typeof scopes.$inferSelect
+
 export const cards = pgTable(
   'cards',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    scopeId: uuid('scope_id')
+      .notNull()
+      .references(() => scopes.id),
     type: text('type').$type<CardType>().notNull(),
     status: text('status').$type<CardStatus>().notNull().default('active'),
     payload: jsonb('payload').$type<VocabPayload | TheoryPayload | PhrasePayload>().notNull(),
@@ -40,7 +59,7 @@ export const cards = pgTable(
   },
   (t) => [
     index('idx_cards_due_active')
-      .on(t.due)
+      .on(t.scopeId, t.due)
       .where(sql`status = 'active'`),
     index('idx_cards_status_type').on(t.status, t.type),
   ],
@@ -72,6 +91,9 @@ export const cardReviews = pgTable(
 
 export const sessions = pgTable('sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
+  scopeId: uuid('scope_id')
+    .notNull()
+    .references(() => scopes.id),
   startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' })
     .notNull()
     .defaultNow(),
@@ -106,6 +128,9 @@ export const assignments = pgTable(
   'assignments',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    scopeId: uuid('scope_id')
+      .notNull()
+      .references(() => scopes.id),
     title: text('title').notNull(),
     rationale: text('rationale'),
     status: text('status').$type<AssignmentStatus>().notNull().default('active'),
@@ -116,7 +141,7 @@ export const assignments = pgTable(
     dueAt: timestamp('due_at', { withTimezone: true, mode: 'date' }).notNull(),
     completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
   },
-  (t) => [index('idx_assignments_created').on(t.createdAt)],
+  (t) => [index('idx_assignments_created').on(t.scopeId, t.createdAt)],
 )
 
 export type AssignmentRow = typeof assignments.$inferSelect

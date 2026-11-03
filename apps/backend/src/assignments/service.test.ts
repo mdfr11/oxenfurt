@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { FsrsService } from '@oxenfurt/shared'
-import { getTestDb, resetTestDb } from '../db/testing.ts'
+import { getTestDb, resetTestDb, testScopeRef } from '../db/testing.ts'
 import { assignmentItems, assignments, cards } from '../db/schema.ts'
 import { ingestCards } from '../ingest/cards.ts'
 import {
@@ -23,6 +23,7 @@ beforeEach(async () => {
 async function seedCards(count: number): Promise<string[]> {
   await ingestCards(
     conn!.db,
+    testScopeRef(),
     fsrs,
     {
       cards: Array.from({ length: count }, (_, i) => ({
@@ -46,6 +47,7 @@ async function seedCards(count: number): Promise<string[]> {
 describe.skipIf(noDb)('assignments schema', () => {
   test('allows only one active assignment', async () => {
     await conn!.db.insert(assignments).values({
+      scopeId: testScopeRef().id,
       title: 'First',
       dueAt: new Date('2026-08-06T21:00:00.000Z'),
     })
@@ -53,6 +55,7 @@ describe.skipIf(noDb)('assignments schema', () => {
     let threw = false
     try {
       await conn!.db.insert(assignments).values({
+        scopeId: testScopeRef().id,
         title: 'Second',
         dueAt: new Date('2026-08-07T21:00:00.000Z'),
       })
@@ -64,9 +67,9 @@ describe.skipIf(noDb)('assignments schema', () => {
 
   test('allows many non-active assignments alongside one active', async () => {
     await conn!.db.insert(assignments).values([
-      { title: 'Done', status: 'completed', dueAt: NOW },
-      { title: 'Missed', status: 'expired', dueAt: NOW },
-      { title: 'Live', status: 'active', dueAt: new Date('2026-08-06T21:00:00.000Z') },
+      { scopeId: testScopeRef().id, title: 'Done', status: 'completed', dueAt: NOW },
+      { scopeId: testScopeRef().id, title: 'Missed', status: 'expired', dueAt: NOW },
+      { scopeId: testScopeRef().id, title: 'Live', status: 'active', dueAt: new Date('2026-08-06T21:00:00.000Z') },
     ])
     const rows = await conn!.db.select().from(assignments)
     expect(rows).toHaveLength(3)
@@ -76,7 +79,7 @@ describe.skipIf(noDb)('assignments schema', () => {
     const [cardId] = await seedCards(1)
     const [row] = await conn!.db
       .insert(assignments)
-      .values({ title: 'Live', dueAt: new Date('2026-08-06T21:00:00.000Z') })
+      .values({ scopeId: testScopeRef().id, title: 'Live', dueAt: new Date('2026-08-06T21:00:00.000Z') })
       .returning()
     await conn!.db.insert(assignmentItems).values({
       assignmentId: row!.id,
@@ -95,7 +98,7 @@ describe.skipIf(noDb)('assignments schema', () => {
 async function seedAssignment(cardIds: string[], dueAt: Date) {
   const [row] = await conn!.db
     .insert(assignments)
-    .values({ title: 'Условные предложения', dueAt, rationale: 'Сыпался на уроке.' })
+    .values({ scopeId: testScopeRef().id, title: 'Условные предложения', dueAt, rationale: 'Сыпался на уроке.' })
     .returning()
   await conn!.db.insert(assignmentItems).values(
     cardIds.map((cardId, i) => ({
@@ -143,7 +146,7 @@ describe.skipIf(noDb)('expireStaleAssignments', () => {
 
 describe.skipIf(noDb)('loadActiveAssignment', () => {
   test('returns null when nothing is active', async () => {
-    const result = await loadActiveAssignment(conn!.db, NOW)
+    const result = await loadActiveAssignment(conn!.db, NOW, testScopeRef().id)
     expect(result.assignment).toBeNull()
     expect(result.items).toEqual([])
   })
@@ -152,7 +155,7 @@ describe.skipIf(noDb)('loadActiveAssignment', () => {
     const ids = await seedCards(3)
     await seedAssignment(ids, new Date('2026-08-06T21:00:00.000Z'))
 
-    const result = await loadActiveAssignment(conn!.db, NOW)
+    const result = await loadActiveAssignment(conn!.db, NOW, testScopeRef().id)
 
     expect(result.assignment!.total).toBe(3)
     expect(result.assignment!.completed).toBe(0)
@@ -168,7 +171,7 @@ describe.skipIf(noDb)('loadActiveAssignment', () => {
     await seedAssignment(ids, new Date('2026-08-06T21:00:00.000Z'))
     await conn!.db.update(cards).set({ status: 'archived' }).where(eq(cards.id, ids[0]!))
 
-    const result = await loadActiveAssignment(conn!.db, NOW)
+    const result = await loadActiveAssignment(conn!.db, NOW, testScopeRef().id)
 
     expect(result.assignment!.total).toBe(2)
     expect(result.items).toHaveLength(2)
@@ -178,7 +181,7 @@ describe.skipIf(noDb)('loadActiveAssignment', () => {
   test('expires a stale assignment rather than returning it', async () => {
     const ids = await seedCards(3)
     await seedAssignment(ids, new Date('2026-08-03T21:00:00.000Z'))
-    const result = await loadActiveAssignment(conn!.db, NOW)
+    const result = await loadActiveAssignment(conn!.db, NOW, testScopeRef().id)
     expect(result.assignment).toBeNull()
   })
 })
@@ -188,7 +191,7 @@ describe.skipIf(noDb)('markCardCompleted', () => {
     const ids = await seedCards(3)
     const assignmentId = await seedAssignment(ids, new Date('2026-08-06T21:00:00.000Z'))
 
-    await markCardCompleted(conn!.db, ids[0]!, NOW)
+    await markCardCompleted(conn!.db, testScopeRef().id, ids[0]!, NOW)
 
     const [item] = await conn!.db
       .select()
@@ -203,8 +206,8 @@ describe.skipIf(noDb)('markCardCompleted', () => {
     const ids = await seedCards(3)
     await seedAssignment(ids, new Date('2026-08-06T21:00:00.000Z'))
     const first = new Date('2026-08-04T09:00:00.000Z')
-    await markCardCompleted(conn!.db, ids[0]!, first)
-    await markCardCompleted(conn!.db, ids[0]!, NOW)
+    await markCardCompleted(conn!.db, testScopeRef().id, ids[0]!, first)
+    await markCardCompleted(conn!.db, testScopeRef().id, ids[0]!, NOW)
 
     const [item] = await conn!.db
       .select()
@@ -217,7 +220,7 @@ describe.skipIf(noDb)('markCardCompleted', () => {
     const ids = await seedCards(3)
     const assignmentId = await seedAssignment(ids, new Date('2026-08-06T21:00:00.000Z'))
 
-    for (const id of ids) await markCardCompleted(conn!.db, id, NOW)
+    for (const id of ids) await markCardCompleted(conn!.db, testScopeRef().id, id, NOW)
 
     const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
     expect(row!.status).toBe('completed')
@@ -226,7 +229,7 @@ describe.skipIf(noDb)('markCardCompleted', () => {
 
   test('ignores cards that belong to no active assignment', async () => {
     const ids = await seedCards(3)
-    await markCardCompleted(conn!.db, ids[0]!, NOW)
+    await markCardCompleted(conn!.db, testScopeRef().id, ids[0]!, NOW)
     const items = await conn!.db.select().from(assignmentItems)
     expect(items).toHaveLength(0)
   })
@@ -236,8 +239,8 @@ describe.skipIf(noDb)('markCardCompleted', () => {
     const assignmentId = await seedAssignment(ids, new Date('2026-08-06T21:00:00.000Z'))
     await conn!.db.update(cards).set({ status: 'archived' }).where(eq(cards.id, ids[2]!))
 
-    await markCardCompleted(conn!.db, ids[0]!, NOW)
-    await markCardCompleted(conn!.db, ids[1]!, NOW)
+    await markCardCompleted(conn!.db, testScopeRef().id, ids[0]!, NOW)
+    await markCardCompleted(conn!.db, testScopeRef().id, ids[1]!, NOW)
 
     const [row] = await conn!.db.select().from(assignments).where(eq(assignments.id, assignmentId))
     expect(row!.status).toBe('completed')
@@ -248,15 +251,16 @@ describe.skipIf(noDb)('listAssignments', () => {
   test('returns newest first with progress counts', async () => {
     const ids = await seedCards(3)
     await conn!.db.insert(assignments).values({
+      scopeId: testScopeRef().id,
       title: 'Старое',
       status: 'expired',
       dueAt: new Date('2026-07-30T21:00:00.000Z'),
       createdAt: new Date('2026-07-28T10:00:00.000Z'),
     })
     await seedAssignment(ids, new Date('2026-08-06T21:00:00.000Z'))
-    await markCardCompleted(conn!.db, ids[0]!, NOW)
+    await markCardCompleted(conn!.db, testScopeRef().id, ids[0]!, NOW)
 
-    const rows = await listAssignments(conn!.db, NOW)
+    const rows = await listAssignments(conn!.db, NOW, 50, testScopeRef().id)
 
     expect(rows).toHaveLength(2)
     expect(rows[0]!.title).toBe('Условные предложения')

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { FsrsService } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
-import { getTestDb, resetTestDb } from '../db/testing.ts'
+import { getTestDb, resetTestDb, testScopeRef, testScopes } from '../db/testing.ts'
 import { assignmentItems, assignments, cards } from '../db/schema.ts'
 import { ingestCards } from '../ingest/cards.ts'
 import { signSession } from '../auth/jwt.ts'
@@ -22,6 +22,7 @@ beforeEach(async () => {
 async function seedCards(count: number): Promise<string[]> {
   await ingestCards(
     conn!.db,
+    testScopeRef(),
     fsrs,
     {
       cards: Array.from({ length: count }, (_, i) => ({
@@ -43,7 +44,8 @@ async function seedCards(count: number): Promise<string[]> {
 }
 
 function agentApp() {
-  return createAgentAssignmentsRouter({ db: conn!.db, ingestToken: INGEST_TOKEN, now: () => NOW })
+  return createAgentAssignmentsRouter({ db: conn!.db, tokenScopes: new Map([[INGEST_TOKEN, testScopeRef()]]),
+    now: () => NOW, })
 }
 
 /**
@@ -220,7 +222,7 @@ describe.skipIf(noDb)('POST /agent/assignments', () => {
 
     const app = createAgentAssignmentsRouter({
       db: dbFailingOnInsert(2),
-      ingestToken: INGEST_TOKEN,
+      tokenScopes: new Map([[INGEST_TOKEN, testScopeRef()]]),
       now: () => NOW,
     })
     const res = await app.request('/', {
@@ -240,7 +242,7 @@ describe.skipIf(noDb)('POST /agent/assignments', () => {
     const ids = await seedCards(3)
     const app = createAgentAssignmentsRouter({
       db: dbFailingOnInsert(2),
-      ingestToken: INGEST_TOKEN,
+      tokenScopes: new Map([[INGEST_TOKEN, testScopeRef()]]),
       now: () => NOW,
     })
     const res = await app.request('/', {
@@ -277,7 +279,8 @@ function userApp() {
   return createUserAssignmentsRouter({
     db: conn!.db,
     jwtSecret: JWT_SECRET,
-    ingestToken: INGEST_TOKEN,
+    tokenScopes: new Map([[INGEST_TOKEN, testScopeRef()]]),
+    scopes: testScopes(),
     now: () => NOW,
   })
 }

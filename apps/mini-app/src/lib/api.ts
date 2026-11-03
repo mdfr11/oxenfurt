@@ -8,6 +8,8 @@
 // `??` here previously left API_BASE='' which made every fetch resolve
 // against the current page (`/auth/session` instead of `/api/auth/session`)
 // and Caddy's SPA fallback served `index.html` to the data layer.
+import { getScopeSlug } from './scope.ts';
+
 export const API_BASE: string = resolveApiBase()
 
 function resolveApiBase(): string {
@@ -37,6 +39,12 @@ export async function fetchWithAuth(path: string, options: RequestInit = {}): Pr
   const token = getToken();
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
+  }
+  // The active scope rides every request; the backend falls back to the
+  // default scope when the header is absent.
+  const scope = getScopeSlug();
+  if (scope) {
+    headers.set('X-Scope', scope);
   }
   // Hono's c.req.json() requires the content-type header to start with
   // application/json. Set it whenever a body is being sent.

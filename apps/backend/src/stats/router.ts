@@ -11,12 +11,14 @@
 
 import { Hono } from 'hono'
 import type { Db } from '../db/client.ts'
-import { jwtAuth } from '../middleware/auth.ts'
+import type { ScopeRow } from '../db/schema.ts'
+import { jwtAuthWithScope } from '../middleware/scope.ts'
 import { computeStats } from '../sessions/router.ts'
 
 export interface StatsRouterDeps {
   db: Db
   jwtSecret: string
+  scopes: ScopeRow[]
   now?: () => Date
 }
 
@@ -24,10 +26,13 @@ export function createStatsRouter(deps: StatsRouterDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
 
-  app.use('*', jwtAuth({ jwtSecret: deps.jwtSecret, now }))
+  app.use(
+    '*',
+    jwtAuthWithScope({ jwtSecret: deps.jwtSecret, scopes: deps.scopes, now }),
+  )
 
   app.get('/today', async (c) => {
-    const stats = await computeStats(deps.db, now())
+    const stats = await computeStats(deps.db, now(), c.get('scope').id)
     return c.json({
       reviewedToday: stats.reviews.today.count,
       dueCount: stats.forecast.due_now,
@@ -37,7 +42,7 @@ export function createStatsRouter(deps: StatsRouterDeps): Hono {
   })
 
   app.get('/heatmap', async (c) => {
-    const stats = await computeStats(deps.db, now())
+    const stats = await computeStats(deps.db, now(), c.get('scope').id)
     return c.json({ history: stats.heatmap })
   })
 

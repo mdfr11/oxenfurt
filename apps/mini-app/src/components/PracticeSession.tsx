@@ -42,8 +42,9 @@ import {
 } from './assignmentHelpers';
 import { stopSpeaking } from '../lib/tts';
 import { useCardAudio } from '../hooks/useCardAudio';
-import { ACTIVE_ASSIGNMENT_KEY, useActiveAssignment } from '../hooks/useActiveAssignment';
-import { LATEST_ASSIGNMENT_KEY, useAssignmentDetail } from '../hooks/useAssignmentData';
+import { activeAssignmentKey, useActiveAssignment } from '../hooks/useActiveAssignment';
+import { latestAssignmentKey, useAssignmentDetail } from '../hooks/useAssignmentData';
+import { getScopeSlug } from '../lib/scope';
 import { Markdown } from './Markdown';
 import { getSettings } from '../lib/settings';
 import { loadSession } from '../lib/sessionPersist';
@@ -144,7 +145,7 @@ export function PracticeSession({
   // or drill never resumes from that store, so it must not claim to here
   // either.
   const hasResumedSession = useMemo(
-    () => !assignmentMode && !drillMode && loadSession(mode) !== null,
+    () => !assignmentMode && !drillMode && loadSession(mode, getScopeSlug()) !== null,
     [assignmentMode, drillMode, mode],
   )
 
@@ -185,7 +186,7 @@ export function PracticeSession({
   // (bypassDue, sessionLimit); background refetches are ignored by the
   // hook's shouldReseed guard.
   const dueQuery = useQuery({
-    queryKey: ['cards', 'due', bypassDue, sessionLimit, cardTypeFilter],
+    queryKey: [getScopeSlug() ?? 'no-scope', 'cards', 'due', bypassDue, sessionLimit, cardTypeFilter],
     enabled: !hasResumedSession && !assignmentMode && !drillMode,
     // A new sitting must fetch its own queue. Cached cards would seed the
     // working queue before the refetch finishes, replaying the previous
@@ -305,8 +306,8 @@ export function PracticeSession({
       // user backs out mid-assignment. A drill can also close items of an
       // assignment that is still live, so it invalidates the same keys.
       if (assignmentMode || drillMode) {
-        void queryClient.invalidateQueries({ queryKey: ACTIVE_ASSIGNMENT_KEY });
-        void queryClient.invalidateQueries({ queryKey: LATEST_ASSIGNMENT_KEY });
+        void queryClient.invalidateQueries({ queryKey: activeAssignmentKey(getScopeSlug()) });
+        void queryClient.invalidateQueries({ queryKey: latestAssignmentKey(getScopeSlug()) });
       }
     },
   });

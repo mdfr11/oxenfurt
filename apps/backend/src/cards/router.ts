@@ -14,20 +14,22 @@ import {
   type VocabPayload,
 } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
+import type { ScopeRow } from '../db/schema.ts'
 import { cardQuestions, cardReviews, cards, type CardRow } from '../db/schema.ts'
 import {
   expireStaleAssignments,
   markCardCompleted,
   settleActiveAssignment,
 } from '../assignments/service.ts'
-import { jwtAuth } from '../middleware/auth.ts'
+import { dualAuth, type ScopeRef } from '../middleware/scope.ts'
 import { isUuid } from '../lib/uuid.ts'
 import { toDueDto } from './dto.ts'
 
 export interface CardsRouterDeps {
   db: Db
   jwtSecret: string
-  ingestToken: string
+  tokenScopes: ReadonlyMap<string, ScopeRef>
+  scopes: ScopeRow[]
   fsrs: FsrsService
   now?: () => Date
 }
@@ -51,24 +53,21 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
 
-  app.use('*', async (c, next) => {
-    const auth = c.req.header('authorization') ?? ''
-    const bearerMatch = auth.match(/^bearer\s+(.+)$/i)
-    const token = bearerMatch ? bearerMatch[1] : null
-
-    if (token === deps.ingestToken) {
-      // Agent bypass
-      return next()
-    }
-
-    // Fall back to standard JWT auth for users
-    return jwtAuth({ jwtSecret: deps.jwtSecret, now })(c, next)
-  })
+  app.use(
+    '*',
+    dualAuth({
+      tokenScopes: deps.tokenScopes,
+      jwtSecret: deps.jwtSecret,
+      scopes: deps.scopes,
+      now,
+    }),
+  )
 
   // List + filter + search for the Library screen. Defaults to active cards
   // sorted newest-first. The `q` query parameter does case-insensitive
   // contains-match against vocab term/translation and theory question.
   app.get('/', async (c) => {
+    const scope = c.get('scope')
     const statusRaw = c.req.query('status') ?? 'active'
     const status: 'active' | 'archived' | 'draft' =
       statusRaw === 'archived' ? 'archived'
@@ -85,7 +84,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
     // value `__none__` is a sentinel for the "no source" bucket (Postgres
     // doesn't make NULL filterable via query string).
     const sourceRaw = c.req.query('source')
-    const conditions = [eq(cards.status, status)]
+    const conditions = [eq(cards.scopeId, scope.id), eq(cards.status, status)]
     if (typeFilter) conditions.push(eq(cards.type, typeFilter))
     if (sourceRaw === '__none__') {
       conditions.push(sql`source IS NULL`)
@@ -124,11 +123,12 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
   // Cards with no source land in a synthetic "Без источника" bucket so the
   // user can still find them.
   app.get('/sources', async (c) => {
+    const scope = c.get('scope')
     const statusRaw = c.req.query('status') ?? 'active'
     const status: 'active' | 'archived' | 'draft' =
       statusRaw === 'archived' ? 'archived'
-        : statusRaw === 'draft' ? 'draft'
-        : 'active'
+      : statusRaw === 'draft' ? 'draft'
+      : 'active'
 
     const rows = await deps.db.execute<{
       source: string | null
@@ -149,7 +149,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
         COUNT(*) FILTER (WHERE type = 'theory')::int AS theory_count,
         MAX(created_at) AS latest
       FROM ${cards}
-      WHERE status = ${status}
+      WHERE scope_id = ${scope.id} AND status = ${status}
       GROUP BY source
       ORDER BY latest DESC NULLS LAST
     `)
@@ -168,6 +168,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
   })
 
   app.get('/due', async (c) => {
+    const scope = c.get('scope')
     // No limit means the full due queue (the session-size setting "All").
     // Only cap sessions when the caller explicitly requests a size.
     const limitRaw = c.req.query('limit')
@@ -186,7 +187,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
     const typeFilter: 'vocab' | 'theory' | 'phrase' | undefined =
       typeRaw === 'vocab' || typeRaw === 'theory' || typeRaw === 'phrase' ? typeRaw : undefined
 
-    const conds = [eq(cards.status, 'active')]
+    const conds = [eq(cards.scopeId, scope.id), eq(cards.status, 'active')]
     if (!bypassDue) conds.push(lte(cards.due, now()))
     if (typeFilter !== undefined) conds.push(eq(cards.type, typeFilter))
     const condition = and(...conds)
@@ -207,9 +208,13 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
   // lesson — turns isolated atoms into connected sets. Excludes the
   // anchor card itself; returns active cards only, newest first.
   app.get('/:id/related', async (c) => {
+    const scope = c.get('scope')
     const id = c.req.param('id')
     if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
-    const [anchor] = await deps.db.select().from(cards).where(eq(cards.id, id))
+    const [anchor] = await deps.db
+      .select()
+      .from(cards)
+      .where(and(eq(cards.id, id), eq(cards.scopeId, scope.id)))
     if (anchor === undefined) return c.json({ error: 'not_found' }, 404)
     if (anchor.source === null) return c.json({ cards: [] })
 
@@ -218,6 +223,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
       .from(cards)
       .where(
         and(
+          eq(cards.scopeId, scope.id),
           eq(cards.source, anchor.source),
           eq(cards.status, 'active'),
           // exclude self
@@ -236,6 +242,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
   // the term offsets are recomputed server-side so the client doesn't have
   // to track them when the user edits the term or context.
   app.patch('/:id', async (c) => {
+    const scope = c.get('scope')
     const id = c.req.param('id')
     if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
 
@@ -250,7 +257,7 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
       return c.json({ error: 'invalid_payload', issues: parsed.issues }, 400)
     }
 
-    const result = await updateCardPayload(deps.db, id, parsed.output)
+    const result = await updateCardPayload(deps.db, id, parsed.output, scope.id)
     if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
     if (result === 'type_mismatch') return c.json({ error: 'type_mismatch' }, 400)
     
@@ -262,9 +269,10 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
   // the default Library filter. Idempotency: only `active → archived` is
   // permitted; archiving a draft or already-archived card returns 400.
   app.post('/:id/archive', async (c) => {
+    const scope = c.get('scope')
     const id = c.req.param('id')
     if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
-    const result = await archiveCard(deps.db, id, now())
+    const result = await archiveCard(deps.db, id, scope.id, now())
     if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
     if (result === 'not_active') return c.json({ error: 'not_active' }, 400)
     return c.json({ status: 'archived' })
@@ -292,9 +300,17 @@ export function createCardsRouter(deps: CardsRouterDeps): Hono {
 
     const reviewedAt = now()
     const drill = parsed.output.drill
-    const result = await applyReview(deps.db, deps.fsrs, id, parsed.output.rating, reviewedAt, {
-      drill,
-    })
+    const result = await applyReview(
+      deps.db,
+      deps.fsrs,
+      id,
+      parsed.output.rating,
+      reviewedAt,
+      {
+        drill,
+        scopeId: c.get('scope').id,
+      },
+    )
     if (result === 'not_found') return c.json({ error: 'not_found' }, 404)
     if (result === 'drilled') return c.json({ fsrs: null, drill: true })
     return c.json({ fsrs: result, drill })
@@ -313,6 +329,10 @@ export interface ApplyReviewOptions {
    *  five times in a sitting to clear it, and only the first of those is
    *  an honest measurement. */
   drill?: boolean
+  /** The scope the request came through. A card from another scope is
+   *  not_found here, not 500 — a stale client that switched scopes must
+   *  not reach across decks. */
+  scopeId?: string
 }
 
 export async function applyReview(
@@ -327,7 +347,11 @@ export async function applyReview(
     const [row] = await tx
       .select()
       .from(cards)
-      .where(eq(cards.id, cardId))
+      .where(
+        opts.scopeId === undefined
+          ? eq(cards.id, cardId)
+          : and(eq(cards.id, cardId), eq(cards.scopeId, opts.scopeId)),
+      )
       .for('update')
     if (row === undefined || row.status !== 'active') return 'not_found'
 
@@ -338,7 +362,9 @@ export async function applyReview(
     await expireStaleAssignments(tx, reviewedAt)
 
     if (rating >= 3) {
-      await markCardCompleted(tx, cardId, reviewedAt)
+      // The card's own scope owns the assignment slot it can complete —
+      // reviewing an english card must never settle the go assignment.
+      await markCardCompleted(tx, row.scopeId, cardId, reviewedAt)
     }
 
     if (opts.drill === true) return 'drilled'
@@ -394,12 +420,17 @@ export async function updateCardPayload(
   db: Db,
   cardId: string,
   input: CardUpdateInput,
+  scopeId?: string,
 ): Promise<CardRow | 'not_found' | 'type_mismatch'> {
   return await db.transaction(async (tx) => {
     const [row] = await tx
       .select()
       .from(cards)
-      .where(eq(cards.id, cardId))
+      .where(
+        scopeId === undefined
+          ? eq(cards.id, cardId)
+          : and(eq(cards.id, cardId), eq(cards.scopeId, scopeId)),
+      )
       .for('update')
     if (row === undefined) return 'not_found'
     if (row.type !== input.type) return 'type_mismatch'
@@ -443,13 +474,14 @@ export async function updateCardPayload(
 export async function archiveCard(
   db: Db,
   cardId: string,
+  scopeId: string,
   now: Date,
 ): Promise<'ok' | 'not_found' | 'not_active'> {
   return await db.transaction(async (tx) => {
     const [row] = await tx
       .select()
       .from(cards)
-      .where(eq(cards.id, cardId))
+      .where(and(eq(cards.id, cardId), eq(cards.scopeId, scopeId)))
       .for('update')
     if (row === undefined) return 'not_found'
     if (row.status !== 'active') return 'not_active'
@@ -457,7 +489,7 @@ export async function archiveCard(
     // Same transaction as the archive itself — if settlement throws, the
     // archive rolls back too, so a retry never lands on a stuck 400
     // not_active with the assignment left stranded active.
-    await settleActiveAssignment(tx, now)
+    await settleActiveAssignment(tx, row.scopeId, now)
     return 'ok'
   })
 }

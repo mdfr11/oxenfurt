@@ -4,10 +4,12 @@ import { FsrsService } from '@oxenfurt/shared'
 import { validateInitData } from '../auth/initData.ts'
 import { signSession } from '../auth/jwt.ts'
 import type { Db } from '../db/client.ts'
+import type { ScopeRow } from '../db/schema.ts'
 import { createIngestRouter } from '../ingest/cards.ts'
 import { createCardsRouter } from '../cards/router.ts'
 import { createSessionsRouter } from '../sessions/router.ts'
 import { createStatsRouter } from '../stats/router.ts'
+import { createScopesRouter } from '../scopes/router.ts'
 import { createTtsRouter } from '../tts/router.ts'
 import { createTranslateRouter } from '../translate/router.ts'
 import { createGradeRouter } from '../grade/router.ts'
@@ -15,11 +17,15 @@ import { createAgentQuestionsRouter, createUserQuestionsRouter } from '../questi
 import { createAgentAssignmentsRouter, createUserAssignmentsRouter } from '../assignments/router.ts'
 import { createDiagnosticsRouter } from '../diagnostics/router.ts'
 import { createLlmClient, type LlmClient } from '../llm/client.ts'
+import type { ScopeRef } from '../middleware/scope.ts'
 
 export interface AppDeps {
   botToken: string
   jwtSecret: string
-  ingestToken: string
+  /** Scope rows in config order; the first is the default scope. */
+  scopes: ScopeRow[]
+  /** token → scope for every configured agent token. */
+  tokenScopes: ReadonlyMap<string, ScopeRef>
   ownerTelegramUserId: number
   initDataMaxAgeSeconds: number
   jwtTtlSeconds: number
@@ -159,8 +165,18 @@ export function createApp(deps: AppDeps): Hono {
     '/ingest',
     createIngestRouter({
       db: deps.db,
-      ingestToken: deps.ingestToken,
+      tokenScopes: deps.tokenScopes,
       fsrs,
+      now,
+    }),
+  )
+
+  app.route(
+    '/scopes',
+    createScopesRouter({
+      db: deps.db,
+      jwtSecret: deps.jwtSecret,
+      scopes: deps.scopes,
       now,
     }),
   )
@@ -170,7 +186,8 @@ export function createApp(deps: AppDeps): Hono {
     createCardsRouter({
       db: deps.db,
       jwtSecret: deps.jwtSecret,
-      ingestToken: deps.ingestToken,
+      tokenScopes: deps.tokenScopes,
+      scopes: deps.scopes,
       fsrs,
       now,
     }),
@@ -181,6 +198,7 @@ export function createApp(deps: AppDeps): Hono {
     createSessionsRouter({
       db: deps.db,
       jwtSecret: deps.jwtSecret,
+      scopes: deps.scopes,
       now,
     }),
   )
@@ -190,6 +208,7 @@ export function createApp(deps: AppDeps): Hono {
     createStatsRouter({
       db: deps.db,
       jwtSecret: deps.jwtSecret,
+      scopes: deps.scopes,
       now,
     }),
   )
@@ -216,6 +235,7 @@ export function createApp(deps: AppDeps): Hono {
     createUserQuestionsRouter({
       db: deps.db,
       jwtSecret: deps.jwtSecret,
+      scopes: deps.scopes,
       now,
     }),
   )
@@ -224,7 +244,7 @@ export function createApp(deps: AppDeps): Hono {
     '/agent/questions',
     createAgentQuestionsRouter({
       db: deps.db,
-      ingestToken: deps.ingestToken,
+      tokenScopes: deps.tokenScopes,
       now,
     }),
   )
@@ -234,7 +254,8 @@ export function createApp(deps: AppDeps): Hono {
     createUserAssignmentsRouter({
       db: deps.db,
       jwtSecret: deps.jwtSecret,
-      ingestToken: deps.ingestToken,
+      tokenScopes: deps.tokenScopes,
+      scopes: deps.scopes,
       now,
     }),
   )
@@ -243,7 +264,7 @@ export function createApp(deps: AppDeps): Hono {
     '/agent/assignments',
     createAgentAssignmentsRouter({
       db: deps.db,
-      ingestToken: deps.ingestToken,
+      tokenScopes: deps.tokenScopes,
       now,
     }),
   )
@@ -252,7 +273,7 @@ export function createApp(deps: AppDeps): Hono {
     '/agent/diagnostics',
     createDiagnosticsRouter({
       db: deps.db,
-      ingestToken: deps.ingestToken,
+      tokenScopes: deps.tokenScopes,
       now,
     }),
   )

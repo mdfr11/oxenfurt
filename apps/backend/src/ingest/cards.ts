@@ -5,11 +5,12 @@ import { FsrsService } from '@oxenfurt/shared'
 import { IngestBatchSchema } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { cards } from '../db/schema.ts'
-import { ingestTokenAuth } from '../middleware/ingest-token.ts'
+import { ingestScopeAuth } from '../middleware/ingest-token.ts'
+import type { ScopeRef } from '../middleware/scope.ts'
 
 export interface IngestRouterDeps {
   db: Db
-  ingestToken: string
+  tokenScopes: ReadonlyMap<string, ScopeRef>
   fsrs: FsrsService
   now?: () => Date
 }
@@ -23,7 +24,7 @@ export function createIngestRouter(deps: IngestRouterDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
 
-  app.use('*', ingestTokenAuth({ ingestToken: deps.ingestToken }))
+  app.use('*', ingestScopeAuth({ tokens: deps.tokenScopes }))
 
   app.post('/cards', async (c) => {
     let body: unknown
@@ -37,7 +38,8 @@ export function createIngestRouter(deps: IngestRouterDeps): Hono {
       return c.json({ error: 'invalid_payload', issues: parsed.issues }, 400)
     }
 
-    const summary = await ingestCards(deps.db, deps.fsrs, parsed.output, now())
+    const scope = c.get('scope')
+    const summary = await ingestCards(deps.db, scope, deps.fsrs, parsed.output, now())
     return c.json(summary)
   })
 
@@ -46,6 +48,7 @@ export function createIngestRouter(deps: IngestRouterDeps): Hono {
 
 export async function ingestCards(
   db: Db,
+  scope: ScopeRef,
   fsrs: FsrsService,
   batch: v.InferOutput<typeof IngestBatchSchema>,
   whenIngested: Date,
@@ -59,6 +62,7 @@ export async function ingestCards(
       'source_quote' in item && item.source_quote ? item.source_quote : null
 
     const values = {
+      scopeId: scope.id,
       type: item.type,
       // All cards — vocab and theory alike — enter the review queue
       // immediately. The previous draft-gate (theory → status='draft' awaiting
@@ -82,44 +86,45 @@ export async function ingestCards(
     }
 
     if (item.type === 'vocab') {
-      // Partial expressional unique index on (LOWER(payload->>'term')) WHERE type='vocab'.
-      // Drizzle's onConflict API can't reference partial expressional indexes
+      // Partial expressional unique index on
+      // (scope_id, LOWER(payload->>'term')) WHERE type='vocab'. Drizzle's
+      // onConflict API can't reference partial expressional indexes
       // cleanly, so we use raw SQL with the inference clause that matches.
       const result = await db.execute<{ id: string }>(sql`
         INSERT INTO cards (
-          type, status, payload, source, source_quote,
+          scope_id, type, status, payload, source, source_quote,
           fsrs_state, due, stability, difficulty,
           elapsed_days, scheduled_days, learning_steps,
           reps, lapses, last_review
         ) VALUES (
-          ${values.type}, ${values.status}, ${JSON.stringify(values.payload)}::jsonb,
+          ${values.scopeId}, ${values.type}, ${values.status}, ${JSON.stringify(values.payload)}::jsonb,
           ${values.source}, ${values.sourceQuote},
           ${values.fsrsState}, ${values.due.toISOString()}, ${values.stability}, ${values.difficulty},
           ${values.elapsedDays}, ${values.scheduledDays}, ${values.learningSteps},
           ${values.reps}, ${values.lapses}, ${values.lastReview === null ? null : values.lastReview.toISOString()}
         )
-        ON CONFLICT ((LOWER(payload->>'term'))) WHERE type = 'vocab'
+        ON CONFLICT (scope_id, (LOWER(payload->>'term'))) WHERE type = 'vocab'
         DO NOTHING
         RETURNING id
       `)
       if (result.length > 0) created++
       else skipped++
     } else if (item.type === 'phrase') {
-      // Phrase dedup is case-insensitive on the phrase text.
+      // Phrase dedup is case-insensitive on the phrase text, per scope.
       const result = await db.execute<{ id: string }>(sql`
         INSERT INTO cards (
-          type, status, payload, source, source_quote,
+          scope_id, type, status, payload, source, source_quote,
           fsrs_state, due, stability, difficulty,
           elapsed_days, scheduled_days, learning_steps,
           reps, lapses, last_review
         ) VALUES (
-          ${values.type}, ${values.status}, ${JSON.stringify(values.payload)}::jsonb,
+          ${values.scopeId}, ${values.type}, ${values.status}, ${JSON.stringify(values.payload)}::jsonb,
           ${values.source}, ${values.sourceQuote},
           ${values.fsrsState}, ${values.due.toISOString()}, ${values.stability}, ${values.difficulty},
           ${values.elapsedDays}, ${values.scheduledDays}, ${values.learningSteps},
           ${values.reps}, ${values.lapses}, ${values.lastReview === null ? null : values.lastReview.toISOString()}
         )
-        ON CONFLICT ((LOWER(payload->>'phrase'))) WHERE type = 'phrase'
+        ON CONFLICT (scope_id, (LOWER(payload->>'phrase'))) WHERE type = 'phrase'
         DO NOTHING
         RETURNING id
       `)

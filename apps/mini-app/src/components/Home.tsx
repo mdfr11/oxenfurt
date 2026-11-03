@@ -7,12 +7,15 @@ import { loadPracticeMode, type PracticeMode } from '../lib/practiceMode';
 import { primeSpeech } from '../lib/tts';
 import { primeAudio } from '../lib/audio';
 import { useSettings } from '../lib/settings';
+import { useScopeSlug } from '../lib/scope';
 import { clearSession, loadSession, subscribeToSession } from '../lib/sessionPersist';
 import { useT } from '../lib/i18n/useT';
 import { plurKey } from '../lib/i18n/plural';
 import { SettingsSheet } from './SettingsSheet';
 import { AssignmentCard } from './AssignmentCard';
 import { AssignmentHistory } from './AssignmentHistory';
+import { ScopeSwitcher } from './ScopeSwitcher';
+import { useScopes } from '../hooks/useScopes';
 import { BottomSheet } from './BottomSheet';
 import { Markdown } from './Markdown';
 import { useActiveAssignment } from '../hooks/useActiveAssignment';
@@ -67,16 +70,31 @@ export function Home({ onStart, onStartAssignment, onRepeatAssignment, onOpenLib
     return () => window.removeEventListener('hashchange', h)
   }, [])
 
-  const [pausedSession, setPausedSession] = useState(() => loadSession())
-  useEffect(() => subscribeToSession(() => setPausedSession(loadSession())), [])
+  const scopeSlug = useScopeSlug()
+  // The paused session is derived, not held in state: the store's pub/sub
+  // bumps a version counter and the memo re-reads localStorage (cheap).
+  // This keeps it naturally in step with the active scope — a pause saved
+  // under another scope simply reads as null here and stays persisted for
+  // when the user switches back.
+  const [sessionVersion, setSessionVersion] = useState(0)
+  useEffect(() => subscribeToSession(() => setSessionVersion((v) => v + 1)), [])
+  const pausedSession = useMemo(
+    () => loadSession(undefined, scopeSlug),
+    // sessionVersion is the invalidation signal for the external store;
+    // loadSession reads it, the linter cannot see that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scopeSlug, sessionVersion],
+  )
 
   const handleDiscardPaused = () => {
     clearSession()
-    setPausedSession(null)
   }
 
+  const scopesQuery = useScopes();
+  const scopes = scopesQuery.data?.scopes;
+
   const { data: stats } = useQuery({
-    queryKey: ['stats', 'today'],
+    queryKey: [scopeSlug ?? 'no-scope', 'stats', 'today'],
     queryFn: async () => {
       const res = await fetchWithAuth('/stats/today');
       if (!res.ok) throw new Error('Failed to fetch stats');
@@ -117,7 +135,7 @@ export function Home({ onStart, onStartAssignment, onRepeatAssignment, onOpenLib
   const [isRationaleOpen, setIsRationaleOpen] = useState(false);
 
   const { data: unreadData } = useQuery({
-    queryKey: ['questions', 'count'],
+    queryKey: [scopeSlug ?? 'no-scope', 'questions', 'count'],
     queryFn: async () => {
       const res = await fetchWithAuth('/questions/count');
       if (!res.ok) throw new Error('Failed to load')
@@ -320,6 +338,8 @@ export function Home({ onStart, onStartAssignment, onRepeatAssignment, onOpenLib
           </div>
         </div>
       </div>
+
+      <ScopeSwitcher scopes={scopes ?? []} />
 
       {/* An assignment reorders the screen: the notification comes first
           because it is not part of the assignment, then the assignment

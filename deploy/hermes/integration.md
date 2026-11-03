@@ -185,3 +185,77 @@ per the [official getting-started guide](https://hermes-agent.nousresearch.com/d
 then come back here. The Telegram bot for the `english` profile should
 be set up before you wire Oxenfurt to it. The Oxenfurt deploy doesn't
 install or manage Hermes itself — that's the user's existing setup.
+
+## Adding a scope (a second agent, e.g. `go`)
+
+Scopes are declared in the backend env, not created in the app. One
+scope = one Hermes profile = one deck of cards. The Mini App grows a
+scope switcher the moment there are two.
+
+### 1. Declare the scope and its token
+
+Edit `/etc/oxenfurt/backend.env`:
+
+```ini
+# First entry stays the default scope and owns INGEST_TOKEN.
+SCOPES=english:English:🇬🇧:indigo,go:Go:🐹:emerald
+INGEST_TOKENS=go=<openssl rand -hex 32>
+```
+
+Accent keys: `indigo`, `emerald`, `amber`, `rose`, `sky`, `violet`.
+Slug rules: lowercase letters/digits/hyphens, ≤ 32 chars.
+
+### 2. Restart the backend, then check the list
+
+```sh
+sudo systemctl restart oxenfurt-backend
+sudo journalctl -u oxenfurt-backend -n 5 | grep listening
+# → oxenfurt-backend listening on 127.0.0.1:3000 (scopes: english, go)
+```
+
+The `scopes` table is upserted at boot; the migration that created it
+(`0007_scopes.sql`) backfilled every pre-existing row into `english`,
+so existing data is untouched.
+
+### 3. Wire the new Hermes profile
+
+Install the same skills into the new profile and give it its own env
+leaf:
+
+```sh
+sudo -u <hermes-user> hermes -p go skills install \
+  /tmp/oxenfurt-deploy/hermes/skills/oxenfurt_ingest.md
+# …same for oxenfurt_assignments.md and oxenfurt_answer_questions.md
+
+printf 'OXENFURT_API_URL=http://127.0.0.1:3000\nOXENFURT_INGEST_TOKEN=<the go=... token>\n' \
+  | sudo tee /etc/oxenfurt/hermes-go.env >/dev/null
+sudo chown root:<hermes-group> /etc/oxenfurt/hermes-go.env
+sudo chmod 0640 /etc/oxenfurt/hermes-go.env
+
+sudo systemctl edit hermes-go.service
+# [Service]
+# EnvironmentFile=/etc/oxenfurt/hermes-go.env
+sudo systemctl daemon-reload && sudo systemctl restart hermes-go
+```
+
+### 4. Smoke test
+
+Send a transcript to the new profile's bot and confirm:
+
+```sh
+sudo journalctl -u oxenfurt-backend -f   # → POST /ingest/cards 200
+```
+
+Open the Mini App — the scope pills appear under the header, and the
+new scope shows its own empty deck until the agent posts cards.
+
+### What isolation means here
+
+- The `go` agent's token resolves to the `go` scope on every request —
+  it cannot ingest, assign, answer or even *see* `english` cards,
+  questions or diagnostics. Prompt injection cannot cross the deck
+  boundary because there is no route for it.
+- Assignment slots, card dedup (the same term in two scopes is two
+  cards), streaks, heatmaps and stats are all per-scope.
+- The Mini App stays a single entry point: switching a pill switches
+  the whole context (assignment, queue, stats, accent color).

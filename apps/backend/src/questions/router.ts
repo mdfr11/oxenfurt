@@ -14,9 +14,10 @@ import { Hono } from 'hono'
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm'
 import * as v from 'valibot'
 import type { Db } from '../db/client.ts'
+import type { ScopeRow } from '../db/schema.ts'
 import { cardQuestions, cards } from '../db/schema.ts'
-import { ingestTokenAuth } from '../middleware/ingest-token.ts'
-import { jwtAuth } from '../middleware/auth.ts'
+import { ingestScopeAuth } from '../middleware/ingest-token.ts'
+import { jwtAuthWithScope, type ScopeRef } from '../middleware/scope.ts'
 import { isUuid } from '../lib/uuid.ts'
 
 // Routers ------------------------------------------------------------------
@@ -24,6 +25,7 @@ import { isUuid } from '../lib/uuid.ts'
 export interface UserRouterDeps {
   db: Db
   jwtSecret: string
+  scopes: ScopeRow[]
   now?: () => Date
 }
 
@@ -34,11 +36,15 @@ const PostQuestionSchema = v.object({
 export function createUserQuestionsRouter(deps: UserRouterDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
-  app.use('*', jwtAuth({ jwtSecret: deps.jwtSecret, now }))
+  app.use(
+    '*',
+    jwtAuthWithScope({ jwtSecret: deps.jwtSecret, scopes: deps.scopes, now }),
+  )
 
   // POST /cards/:cardId — create a new question against a specific card.
   // Mounted under /cards/:cardId to keep the URL grammar honest.
   app.post('/cards/:cardId', async (c) => {
+    const scope = c.get('scope')
     const cardId = c.req.param('cardId')
     if (!isUuid(cardId)) return c.json({ error: 'invalid_id' }, 400)
 
@@ -53,7 +59,10 @@ export function createUserQuestionsRouter(deps: UserRouterDeps): Hono {
       return c.json({ error: 'invalid_payload', issues: parsed.issues }, 400)
     }
 
-    const [card] = await deps.db.select({ id: cards.id }).from(cards).where(eq(cards.id, cardId))
+    const [card] = await deps.db
+      .select({ id: cards.id })
+      .from(cards)
+      .where(and(eq(cards.id, cardId), eq(cards.scopeId, scope.id)))
     if (card === undefined) return c.json({ error: 'not_found' }, 404)
 
     const [row] = await deps.db
@@ -70,6 +79,7 @@ export function createUserQuestionsRouter(deps: UserRouterDeps): Hono {
   // to the most identifying field per card type — term for vocab,
   // phrase for phrase, question for theory.
   app.get('/unread', async (c) => {
+    const scope = c.get('scope')
     const rows = await deps.db.execute<{
       id: string
       card_id: string
@@ -92,6 +102,7 @@ export function createUserQuestionsRouter(deps: UserRouterDeps): Hono {
       FROM card_questions q
       JOIN cards c ON c.id = q.card_id
       WHERE q.status = 'answered' AND q.seen_at IS NULL
+        AND c.scope_id = ${scope.id}
       ORDER BY q.answered_at DESC
       LIMIT 50
     `)
@@ -122,23 +133,33 @@ export function createUserQuestionsRouter(deps: UserRouterDeps): Hono {
 
   // GET /count — just the unread number (cheap, polled by the badge).
   app.get('/count', async (c) => {
+    const scope = c.get('scope')
     const [row] = await deps.db
       .select({ value: count() })
       .from(cardQuestions)
-      .where(and(eq(cardQuestions.status, 'answered'), isNull(cardQuestions.seenAt)))
+      .innerJoin(cards, eq(cards.id, cardQuestions.cardId))
+      .where(
+        and(
+          eq(cardQuestions.status, 'answered'),
+          isNull(cardQuestions.seenAt),
+          eq(cards.scopeId, scope.id),
+        ),
+      )
     return c.json({ unread: row?.value ?? 0 })
   })
 
   // GET /card/:cardId — all questions tied to one card (any status), newest first.
   app.get('/card/:cardId', async (c) => {
+    const scope = c.get('scope')
     const cardId = c.req.param('cardId')
     if (!isUuid(cardId)) return c.json({ error: 'invalid_id' }, 400)
     const rows = await deps.db
-      .select()
+      .select({ question: cardQuestions })
       .from(cardQuestions)
-      .where(eq(cardQuestions.cardId, cardId))
+      .innerJoin(cards, eq(cards.id, cardQuestions.cardId))
+      .where(and(eq(cardQuestions.cardId, cardId), eq(cards.scopeId, scope.id)))
       .orderBy(desc(cardQuestions.createdAt))
-    return c.json({ questions: rows.map(rowToDto) })
+    return c.json({ questions: rows.map((r) => rowToDto(r.question)) })
   })
 
   // POST /:id/seen — mark a single answered question as read so it stops
@@ -172,7 +193,7 @@ export function createUserQuestionsRouter(deps: UserRouterDeps): Hono {
 
 export interface AgentRouterDeps {
   db: Db
-  ingestToken: string
+  tokenScopes: ReadonlyMap<string, ScopeRef>
   now?: () => Date
 }
 
@@ -183,11 +204,14 @@ const RespondSchema = v.object({
 export function createAgentQuestionsRouter(deps: AgentRouterDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
-  app.use('*', ingestTokenAuth({ ingestToken: deps.ingestToken }))
+  app.use('*', ingestScopeAuth({ tokens: deps.tokenScopes }))
 
   // GET /pending — Hermes polls for up-to-50 unanswered questions with
-  // the full card payload + source so it can build a rich prompt.
+  // the full card payload + source so it can build a rich prompt. Only
+  // the agent's OWN scope: the medicine bot never sees english lesson
+  // questions.
   app.get('/pending', async (c) => {
+    const scope = c.get('scope')
     const limitRaw = c.req.query('limit') ?? '20'
     const limit = Math.max(1, Math.min(50, Number.parseInt(limitRaw, 10) || 20))
     const rows = await deps.db.execute<{
@@ -212,6 +236,7 @@ export function createAgentQuestionsRouter(deps: AgentRouterDeps): Hono {
       FROM card_questions q
       JOIN cards c ON c.id = q.card_id
       WHERE q.status = 'pending'
+        AND c.scope_id = ${scope.id}
       ORDER BY q.created_at ASC
       LIMIT ${limit}
     `)
@@ -242,8 +267,10 @@ export function createAgentQuestionsRouter(deps: AgentRouterDeps): Hono {
 
   // POST /:id/response — Hermes writes back. Flips status to 'answered'
   // and stamps answered_at. Idempotent-ish: a second response just
-  // overwrites the previous one.
+  // overwrites the previous one. The scope check rides the same UPDATE:
+  // an agent may only answer questions about cards in its own scope.
   app.post('/:id/response', async (c) => {
+    const scope = c.get('scope')
     const id = c.req.param('id')
     if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
     let body: unknown
@@ -256,15 +283,17 @@ export function createAgentQuestionsRouter(deps: AgentRouterDeps): Hono {
     if (!parsed.success) {
       return c.json({ error: 'invalid_payload', issues: parsed.issues }, 400)
     }
-    const result = await deps.db
-      .update(cardQuestions)
-      .set({
-        status: 'answered',
-        response: parsed.output.response,
-        answeredAt: now(),
-      })
-      .where(eq(cardQuestions.id, id))
-      .returning()
+    const result = await deps.db.execute<{ id: string }>(sql`
+      UPDATE card_questions q
+      SET status = 'answered',
+          response = ${parsed.output.response},
+          answered_at = ${now().toISOString()}
+      FROM cards c
+      WHERE q.card_id = c.id
+        AND q.id = ${id}
+        AND c.scope_id = ${scope.id}
+      RETURNING q.id
+    `)
     if (result.length === 0) return c.json({ error: 'not_found' }, 404)
     return c.json({ ok: true })
   })

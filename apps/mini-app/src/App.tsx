@@ -12,6 +12,7 @@ import { Library } from './components/Library';
 import { Stats } from './components/Stats';
 import { AnswersScreen } from './components/AnswersScreen';
 import { loadPracticeMode, type PracticeMode } from './lib/practiceMode';
+import { useScopeAccent } from './hooks/useScopes';
 import type { AssignmentOutcome, DrillOutcome } from './components/assignmentHelpers';
 
 type Screen = 'home' | 'practice' | 'summary' | 'loading' | 'library' | 'stats' | 'answers';
@@ -28,6 +29,9 @@ const pageVariants = {
 };
 
 export default function App() {
+  // The active scope's accent overrides the theme's primary color for the
+  // whole tree — every `*-app-primary` class recolors with the deck.
+  const scopeAccent = useScopeAccent();
   const [screen, setScreen] = useState<Screen>('loading');
   const [stats, setStats] = useState<SessionStats>({ total: 0, correct: 0 });
   const [practiceMode, setPracticeMode] = useState<PracticeMode>(() => loadPracticeMode());
@@ -161,7 +165,11 @@ export default function App() {
   }, [initDataRaw]);
 
   return (
-    <div data-testid="app-ready" className="app-container overflow-hidden relative">
+    <div
+      data-testid="app-ready"
+      className="app-container overflow-hidden relative"
+      style={scopeAccent === null ? undefined : ({ '--app-primary': scopeAccent } as React.CSSProperties)}
+    >
       <AnimatePresence mode="wait">
         {screen === 'loading' ? (
           <motion.div key="loading" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="flex-1 flex flex-col h-full absolute inset-0 bg-app-bg z-50">

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { and, asc, eq } from 'drizzle-orm'
 import { FsrsService, RATING } from '@oxenfurt/shared'
 import { signSession } from '../auth/jwt.ts'
-import { getTestDb, resetTestDb } from '../db/testing.ts'
+import { getTestDb, resetTestDb, testScopeRef, testScopes } from '../db/testing.ts'
 import { assignmentItems, assignments, cardReviews, cards } from '../db/schema.ts'
 import { ingestCards } from '../ingest/cards.ts'
 import { settleActiveAssignment } from '../assignments/service.ts'
@@ -20,7 +20,8 @@ const buildApp = () =>
   createCardsRouter({
     db: conn!.db,
     jwtSecret: JWT_SECRET,
-    ingestToken: INGEST_TOKEN,
+    tokenScopes: new Map([[INGEST_TOKEN, testScopeRef()]]),
+    scopes: testScopes(),
     fsrs,
     now: () => NOW,
   })
@@ -33,6 +34,7 @@ async function authHeader(userId = 99): Promise<{ authorization: string }> {
 async function seedActiveVocab(term: string, dueAt: Date = NOW, source?: string): Promise<string> {
   await ingestCards(
     conn!.db,
+    testScopeRef(),
     fsrs,
     {
       cards: [
@@ -58,6 +60,7 @@ async function seedActiveVocab(term: string, dueAt: Date = NOW, source?: string)
 async function seedActivePhrase(phrase: string, dueAt: Date = NOW, source?: string): Promise<string> {
   await ingestCards(
     conn!.db,
+    testScopeRef(),
     fsrs,
     {
       cards: [
@@ -81,6 +84,7 @@ async function seedActivePhrase(phrase: string, dueAt: Date = NOW, source?: stri
 async function seedActiveTheory(question: string, source?: string): Promise<string> {
   await ingestCards(
     conn!.db,
+    testScopeRef(),
     fsrs,
     {
       cards: [
@@ -104,6 +108,7 @@ async function seedActiveTheory(question: string, source?: string): Promise<stri
 async function seedManyCards(count: number): Promise<string[]> {
   await ingestCards(
     conn!.db,
+    testScopeRef(),
     fsrs,
     {
       cards: Array.from({ length: count }, (_, i) => ({
@@ -165,6 +170,7 @@ describe.skipIf(noDb)('GET /due', () => {
     await seedActiveVocab('one')
     await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       {
         cards: [
@@ -333,6 +339,7 @@ describe.skipIf(noDb)('POST /:id/review', () => {
   test('theory cards from ingest enter the active queue immediately', async () => {
     await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       {
         cards: [
@@ -366,7 +373,7 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
   async function seedActiveAssignment(cardIds: string[]) {
     const [row] = await conn!.db
       .insert(assignments)
-      .values({ title: 'Задание', dueAt: new Date('2026-08-06T21:00:00.000Z') })
+      .values({ scopeId: testScopeRef().id, title: 'Задание', dueAt: new Date('2026-08-06T21:00:00.000Z') })
       .returning()
     await conn!.db.insert(assignmentItems).values(
       cardIds.map((cardId, i) => ({
@@ -428,7 +435,7 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
     const ids = await seedManyCards(3)
     const [row] = await conn!.db
       .insert(assignments)
-      .values({ title: 'Просроченное', dueAt: new Date('2025-12-31T12:00:00.000Z') })
+      .values({ scopeId: testScopeRef().id, title: 'Просроченное', dueAt: new Date('2025-12-31T12:00:00.000Z') })
       .returning()
     await conn!.db.insert(assignmentItems).values(
       ids.map((cardId, i) => ({
@@ -456,7 +463,7 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
     const ids = await seedManyCards(1)
     const [row] = await conn!.db
       .insert(assignments)
-      .values({ title: 'Просроченное', dueAt: new Date('2025-12-31T12:00:00.000Z') })
+      .values({ scopeId: testScopeRef().id, title: 'Просроченное', dueAt: new Date('2025-12-31T12:00:00.000Z') })
       .returning()
     await conn!.db.insert(assignmentItems).values({
       assignmentId: row!.id,
@@ -626,7 +633,7 @@ describe.skipIf(noDb)('POST /cards/:id/review — drill and assignment completio
           )
         markSelfStamped()
         await waitForOther
-        await settleActiveAssignment(tx, NOW)
+        await settleActiveAssignment(tx, testScopeRef().id, NOW)
       })
     }
 
@@ -698,6 +705,7 @@ describe.skipIf(noDb)('GET / (list)', () => {
     await seedActiveVocab('one')
     await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       {
         cards: [{ type: 'theory', payload: { question: 'q', answer: 'a' }, source_quote: 'q' }],

@@ -5,8 +5,11 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ActiveAssignmentResponse } from '@oxenfurt/shared';
 import { fetchWithAuth } from '../lib/api';
+import { getScopeSlug } from '../lib/scope';
 
-export const ACTIVE_ASSIGNMENT_KEY = ['assignments', 'active'] as const;
+export function activeAssignmentKey(scope: string | null) {
+  return [scope ?? 'no-scope', 'assignments', 'active'] as const;
+}
 
 export interface UseActiveAssignmentOptions {
   /** Off for a free practice session, which must not read the assignment
@@ -16,7 +19,7 @@ export interface UseActiveAssignmentOptions {
 
 export function useActiveAssignment({ enabled = true }: UseActiveAssignmentOptions = {}) {
   return useQuery({
-    queryKey: ACTIVE_ASSIGNMENT_KEY,
+    queryKey: activeAssignmentKey(getScopeSlug()),
     enabled,
     queryFn: async (): Promise<ActiveAssignmentResponse> => {
       const res = await fetchWithAuth('/assignments/active');

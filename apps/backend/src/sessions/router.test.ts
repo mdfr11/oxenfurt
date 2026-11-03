@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { signSession } from '../auth/jwt.ts'
-import { getTestDb, resetTestDb } from '../db/testing.ts'
+import { getTestDb, resetTestDb, testScopeRef, testScopes } from '../db/testing.ts'
 import { sessions } from '../db/schema.ts'
 import { createSessionsRouter, finishSession } from './router.ts'
 
@@ -14,6 +14,7 @@ const NOW = new Date('2026-01-01T12:00:00.000Z')
 const buildApp = () =>
   createSessionsRouter({
     db: conn!.db,
+    scopes: testScopes(),
     jwtSecret: JWT_SECRET,
     now: () => NOW,
   })

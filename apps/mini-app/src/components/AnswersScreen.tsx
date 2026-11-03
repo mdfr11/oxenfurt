@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { backButton } from '@telegram-apps/sdk-react'
 import { ArrowLeft, MessageCircle, Trash2, Quote, Type, BookOpen, ChevronRight } from 'lucide-react'
+import { getScopeSlug } from '../lib/scope'
 import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
 import { useT } from '../lib/i18n/useT'
@@ -58,7 +59,7 @@ export function AnswersScreen({ onExit, onJumpToCard }: Props) {
   }, [onExit])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['questions', 'unread'],
+    queryKey: [getScopeSlug() ?? 'no-scope', 'questions', 'unread'],
     queryFn: async () => {
       const res = await fetchWithAuth('/questions/unread')
       if (!res.ok) throw new Error('Failed to load')

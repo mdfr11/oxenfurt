@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X, Save, CheckCircle2, Clock } from 'lucide-react'
 import type { DueCardDto, VocabPayload, TheoryPayload, PhrasePayload } from '@oxenfurt/shared'
+import { getScopeSlug } from '../lib/scope'
 import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
 import { useT } from '../lib/i18n/useT'
@@ -49,7 +50,7 @@ export function EditCardSheet({ card, isOpen, onClose, onSaved }: Props) {
   // from Library / AnswersScreen already shows what's been asked.
   const { data: historyData } = useQuery({
     enabled: isOpen && card !== null,
-    queryKey: ['questions', 'card', card?.id ?? ''],
+    queryKey: [getScopeSlug() ?? 'no-scope', 'questions', 'card', card?.id ?? ''],
     queryFn: async () => {
       const res = await fetchWithAuth(`/questions/card/${card!.id}`)
       if (!res.ok) throw new Error('Failed to load')

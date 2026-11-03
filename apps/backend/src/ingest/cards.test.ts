@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { FsrsService } from '@oxenfurt/shared'
-import { getTestDb, resetTestDb } from '../db/testing.ts'
+import { getTestDb, resetTestDb, testScopeRef, testScopes } from '../db/testing.ts'
 import { cards } from '../db/schema.ts'
 import { createIngestRouter, ingestCards } from './cards.ts'
 
@@ -22,6 +22,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
   test('inserts a vocab card with status=active and an initial FSRS state', async () => {
     const summary = await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       {
         cards: [
@@ -52,6 +53,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
   test('inserts a theory card directly into the active queue', async () => {
     const summary = await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       {
         cards: [
@@ -88,6 +90,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
     })
     const summary = await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       { cards: [make('Get Rid Of', 'X'), make('get rid of', 'Y'), make('different', 'Z')] },
       NOW,
@@ -108,8 +111,8 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
         context_term_end: 11,
       },
     }
-    await ingestCards(conn!.db, fsrs, { cards: [term] }, NOW)
-    const second = await ingestCards(conn!.db, fsrs, { cards: [term] }, NOW)
+    await ingestCards(conn!.db, testScopeRef(), fsrs, { cards: [term] }, NOW)
+    const second = await ingestCards(conn!.db, testScopeRef(), fsrs, { cards: [term] }, NOW)
     expect(second).toEqual({ created: 0, skipped: 1 })
   })
 
@@ -119,7 +122,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
       payload: { question: 'Q', answer: 'A' },
       source_quote: 'quote',
     }
-    await ingestCards(conn!.db, fsrs, { cards: [theory, theory] }, NOW)
+    await ingestCards(conn!.db, testScopeRef(), fsrs, { cards: [theory, theory] }, NOW)
     const rows = await conn!.db.select().from(cards).where(eq(cards.type, 'theory'))
     expect(rows).toHaveLength(2)
   })
@@ -127,6 +130,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
   test('inserts a phrase card with status=active', async () => {
     const summary = await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       {
         cards: [
@@ -161,6 +165,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
     })
     const summary = await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       { cards: [mk('On The Other Hand'), mk('on the other hand'), mk('by no means')] },
       NOW,
@@ -182,6 +187,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
     })
     const summary = await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       { cards: [mk('take  into   account'), mk('take into account')] },
       NOW,
@@ -198,8 +204,8 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
         context_sentence: 'By all means, go ahead.',
       },
     }
-    await ingestCards(conn!.db, fsrs, { cards: [p] }, NOW)
-    const second = await ingestCards(conn!.db, fsrs, { cards: [p] }, NOW)
+    await ingestCards(conn!.db, testScopeRef(), fsrs, { cards: [p] }, NOW)
+    const second = await ingestCards(conn!.db, testScopeRef(), fsrs, { cards: [p] }, NOW)
     expect(second).toEqual({ created: 0, skipped: 1 })
   })
 
@@ -208,6 +214,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
     // different dedup spaces. Practically rare but the index is partial.
     await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       {
         cards: [
@@ -227,6 +234,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
     )
     const result = await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       {
         cards: [
@@ -248,6 +256,7 @@ describe.skipIf(noDb)('ingestCards (DB)', () => {
   test('mixed batch — vocab, phrase, theory — all land correctly', async () => {
     const summary = await ingestCards(
       conn!.db,
+      testScopeRef(),
       fsrs,
       {
         cards: [
@@ -288,7 +297,7 @@ describe.skipIf(noDb)('POST /ingest/cards (HTTP)', () => {
   const buildApp = () =>
     createIngestRouter({
       db: conn!.db,
-      ingestToken: INGEST_TOKEN,
+      tokenScopes: new Map([[INGEST_TOKEN, testScopeRef()]]),
       fsrs,
       now: () => NOW,
     })

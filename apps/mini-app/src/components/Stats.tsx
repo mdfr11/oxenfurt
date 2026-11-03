@@ -5,6 +5,7 @@ import { Spinner } from '@telegram-apps/telegram-ui'
 import { ArrowLeft, Scroll, Trophy, Key, FlaskConical, Feather } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { HeatmapCell, RecentSession, StatsResponse } from '@oxenfurt/shared'
+import { getScopeSlug } from '../lib/scope'
 import { fetchWithAuth } from '../lib/api'
 import { useT } from '../lib/i18n/useT'
 import { formatDate, formatTime } from '../lib/dates'
@@ -36,7 +37,7 @@ export function Stats({ onExit }: StatsProps) {
   }, [onExit])
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['sessions', 'stats'],
+    queryKey: [getScopeSlug() ?? 'no-scope', 'sessions', 'stats'],
     queryFn: async () => {
       const res = await fetchWithAuth('/sessions/stats')
       if (!res.ok) throw new Error(`stats fetch failed: ${res.status}`)

@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oxenfurt · несколько скоупов — UX-макет</title>
+<style>
+  :root {
+    --app-bg: #f4f4f5;
+    --app-surface: #ffffff;
+    --app-text: #09090b;
+    --app-hint: #71717a;
+    --app-primary: #4f46e5;
+    --app-primary-text: #ffffff;
+    --app-border: #e4e4e7;
+    --page-bg: #09090b;
+    --page-text: #fafafa;
+    --page-hint: #a1a1aa;
+    --phone-frame: #27272a;
+  }
+  [data-theme="dark"] {
+    --app-bg: #09090b;
+    --app-surface: #18181b;
+    --app-text: #fafafa;
+    --app-hint: #a1a1aa;
+    --app-primary: #6366f1;
+    --app-primary-text: #ffffff;
+    --app-border: #27272a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--page-bg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--page-text);
+    padding: 40px 32px 64px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- page chrome ---------- */
+  .page-head { max-width: 1240px; margin: 0 auto 36px; }
+  .page-head h1 { font-size: 22px; font-weight: 900; letter-spacing: -0.02em; }
+  .page-head p { color: var(--page-hint); font-size: 13px; margin-top: 8px; line-height: 1.6; }
+  .page-head .hint {
+    display: inline-flex; align-items: center; gap: 8px; margin-top: 14px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #a5b4fc; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25);
+    padding: 7px 12px; border-radius: 999px;
+  }
+  .theme-toggle {
+    position: absolute; top: 32px; right: 32px;
+    background: var(--phone-frame); color: var(--page-hint); border: 1px solid #3f3f46;
+    border-radius: 12px; padding: 8px 14px; font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  .theme-toggle:hover { color: var(--page-text); }
+
+  .board {
+    display: flex; gap: 36px; justify-content: center; align-items: flex-start;
+    overflow-x: auto; padding-bottom: 24px;
+  }
+  .slot { flex-shrink: 0; }
+  .slot-caption { width: 390px; margin: 18px auto 0; }
+  .slot-caption .num {
+    font-size: 10px; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #a5b4fc; margin-bottom: 6px;
+  }
+  .slot-caption p { color: var(--page-hint); font-size: 12.5px; line-height: 1.65; }
+
+  /* ---------- phone ---------- */
+  .phone {
+    width: 390px; height: 800px;
+    background: var(--phone-frame);
+    border-radius: 54px; padding: 10px;
+    box-shadow: 0 30px 80px -20px rgba(0,0,0,0.7), 0 0 0 1px #3f3f46;
+    position: relative;
+  }
+  .screen {
+    width: 100%; height: 100%;
+    background: var(--app-bg);
+    color: var(--app-text);
+    border-radius: 44px; overflow: hidden;
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+  .statusbar {
+    height: 44px; flex-shrink: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 28px 0; font-size: 13px; font-weight: 700; color: var(--app-text);
+  }
+  .statusbar .icons { display: flex; gap: 6px; align-items: center; font-size: 11px; }
+  .notch {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 28px; background: var(--phone-frame); border-radius: 999px; z-index: 50;
+  }
+  .app-content { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ---------- home ---------- */
+  .home { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 24px 20px; overflow-y: auto; }
+  .home-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .greeting { font-size: 22px; font-weight: 900; letter-spacing: -0.02em; line-height: 1.1; }
+  .home-chips { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 6px 10px; border-radius: 999px; height: 28px;
+  }
+  .chip-streak { color: #f97316; background: rgba(249,115,22,0.1); border: 1px solid rgba(249,115,22,0.2); }
+  .chip-rank {
+    color: var(--app-primary); background: var(--app-surface);
+    border: 1px solid color-mix(in srgb, var(--app-primary) 30%, transparent);
+  }
+  .home-actions { display: flex; gap: 8px; }
+  .icon-btn {
+    width: 44px; height: 44px; border-radius: 16px;
+    background: var(--app-surface); border: 1px solid var(--app-border);
+    color: var(--app-hint); display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .hermes-pill {
+    margin-top: 8px;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.14em;
+    color: #10b981; background: rgba(16,185,129,0.1);
+    border: 1px solid rgba(16,185,129,0.2);
+    padding: 4px 8px; border-radius: 8px;
+  }
+  .hermes-pill i { width: 4px; height: 4px; border-radius: 999px; background: #10b981; box-shadow: 0 0 4px rgba(16,185,129,0.6); }
+
+  /* ---------- the new element: scope switcher ---------- */
+  .scope-row {
+    display: flex; gap: 8px; margin: 16px 0 4px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .scope-row::-webkit-scrollbar { display: none; }
+  .scope-pill {
+    flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 10px; border-radius: 999px; cursor: pointer;
+    font-size: 11px; font-weight: 800; letter-spacing: -0.01em;
+    background: var(--app-surface); border: 1px solid var(--app-border); color: var(--app-hint);
+    transition: all .18s ease; user-select: none;
+  }
+  .scope-pill:hover { border-color: color-mix(in srgb, var(--sc-accent) 45%, var(--app-border)); }
+  .scope-pill .cnt {
+    font-size: 10px; font-weight: 900; font-variant-numeric: tabular-nums;
+    background: color-mix(in srgb, var(--app-hint) 12%, transparent);
+    padding: 2px 6px; border-radius: 999px; line-height: 1.3;
+  }
+  .scope-pill.active {
+    background: color-mix(in srgb, var(--sc-accent) 12%, var(--app-surface));
+    border-color: color-mix(in srgb, var(--sc-accent) 45%, transparent);
+    color: color-mix(in srgb, var(--sc-accent) 80%, var(--app-text));
+  }
+  .scope-pill.active .cnt {
+    background: var(--sc-accent); color: #fff;
+  }
+  .scope-pill .cnt.zero { opacity: .8; }
+
+  /* ---------- assignment card ---------- */
+  .assignment { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; flex: 1; justify-content: center; }
+  .asg-card {
+    display: flex; align-items: center; gap: 14px; width: 100%;
+    background: var(--app-surface); border: 1px solid var(--app-border);
+    border-radius: 16px; padding: 14px; text-align: left; cursor: pointer;
+  }
+  .asg-ring { position: relative; width: 64px; height: 64px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .asg-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+  .asg-count { position: relative; font-weight: 900; font-size: 17px; letter-spacing: -0.04em; color: var(--app-text); font-variant-numeric: tabular-nums; }
+  .asg-count small { font-size: 10px; opacity: .4; font-weight: 900; }
+  .asg-meta { flex: 1; min-width: 0; }
+  .asg-meta .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .asg-from { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--app-hint); opacity: .75; }
+  .asg-due { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--app-hint); opacity: .75; }
+  .asg-due.urgent { color: #fb923c; opacity: 1; }
+  .asg-title {
+    display: block; margin-top: 6px; font-size: 13px; font-weight: 900;
+    letter-spacing: -0.01em; line-height: 1.35; color: var(--app-text);
+  }
+  .asg-groups { display: flex; flex-direction: column; gap: 12px; padding: 0 4px; }
+  .asg-group .lbl { display: flex; align-items: center; gap: 10px; font-size: 11px; margin-bottom: 6px; }
+  .asg-group .dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
+  .asg-group .name { font-weight: 700; color: var(--app-text); flex: 1; }
+  .asg-group .frac { font-weight: 800; color: var(--app-hint); font-variant-numeric: tabular-nums; font-size: 10px; }
+  .asg-group .track { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--sc-accent) 10%, transparent); overflow: hidden; }
+  .asg-group .fill { height: 100%; border-radius: 999px; background: var(--sc-accent); }
+  .asg-group.weak .track { background: rgba(251,146,60,0.12); }
+  .asg-group.weak .fill { background: #fb923c; }
+  .asg-group.weak .dot { background: #fb923c; }
+  .asg-group:not(.weak) .dot { background: var(--sc-accent); }
+
+  /* ---------- free-ring state (no assignment) ---------- */
+  .ring-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; }
+  .big-ring { position: relative; width: 224px; height: 224px; display: flex; align-items: center; justify-content: center; }
+  .big-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+  .big-ring .inner { position: relative; display: flex; flex-direction: column; align-items: center; min-height: 120px; justify-content: center; }
+  .big-ring .num { font-weight: 900; font-size: 60px; letter-spacing: -0.05em; line-height: 1; color: var(--app-text); }
+  .big-ring .cap { margin-top: 12px; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.2em; color: var(--app-hint); opacity: .6; }
+  .ring-pill {
+    background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 16px;
+    padding: 8px 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--app-hint);
+  }
+  .welcome-box {
+    background: color-mix(in srgb, var(--sc-accent) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sc-accent) 20%, transparent);
+    border-radius: 16px; padding: 16px; text-align: center; max-width: 320px;
+  }
+  .welcome-box h3 { font-size: 13px; font-weight: 800; color: var(--sc-accent); margin-bottom: 4px; }
+  .welcome-box p { font-size: 12px; line-height: 1.6; color: var(--app-text); opacity: .8; }
+
+  /* ---------- bottom CTA ---------- */
+  .cta-zone { display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
+  .cta {
+    width: 100%; padding: 16px; border: none; border-radius: 16px;
+    background: var(--sc-accent); color: #fff;
+    font-size: 17px; font-weight: 800; letter-spacing: -0.01em; cursor: pointer;
+    box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--sc-accent) 55%, transparent);
+    transition: transform .1s ease;
+  }
+  .cta:active { transform: scale(0.97); }
+  .cta-sub {
+    align-self: center; background: none; border: none; cursor: pointer;
+    font-size: 11px; font-weight: 700; color: var(--app-hint);
+    text-decoration: underline; text-underline-offset: 4px; text-decoration-color: color-mix(in srgb, var(--app-hint) 30%, transparent);
+  }
+  .mode-cap { text-align: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--app-hint); opacity: .7; margin-top: 10px; }
+  .mode-cap b { color: var(--app-text); }
+  .nav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+  .nav-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 12px; border-radius: 16px; font-size: 14px; font-weight: 600; color: var(--app-text);
+    background: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;
+  }
+  .nav-btn svg { color: var(--app-hint); }
+
+  /* ---------- practice ---------- */
+  .practice { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 20px 20px; }
+  .pr-top { display: flex; align-items: center; justify-content: space-between; padding: 6px 0 14px; }
+  .pr-scope-chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: color-mix(in srgb, var(--sc-accent) 12%, var(--app-surface));
+    border: 1px solid color-mix(in srgb, var(--sc-accent) 35%, transparent);
+    color: color-mix(in srgb, var(--sc-accent) 80%, var(--app-text));
+    font-size: 12px; font-weight: 800; padding: 7px 12px; border-radius: 999px;
+  }
+  .pr-progress { font-size: 13px; font-weight: 900; color: var(--app-text); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .pr-progress small { color: var(--app-hint); font-weight: 700; }
+  .pr-card-wrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; }
+  .pr-card-bg {
+    position: absolute; width: 92%; height: 96%; border-radius: 26px;
+    background: var(--app-surface); border: 1px solid var(--app-border);
+    transform: rotate(3deg) translateY(8px); opacity: .55;
+  }
+  .pr-card {
+    position: relative; width: 100%; height: 98%; border-radius: 26px;
+    background: var(--app-surface); border: 1px solid var(--app-border);
+    box-shadow: 0 24px 60px -18px rgba(0,0,0,0.28);
+    padding: 26px 22px; display: flex; flex-direction: column; cursor: pointer;
+    transition: transform .15s ease;
+  }
+  .pr-card:active { transform: scale(0.985); }
+  .pr-type {
+    align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
+    font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.16em;
+    color: var(--sc-accent); background: color-mix(in srgb, var(--sc-accent) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sc-accent) 25%, transparent);
+    padding: 6px 11px; border-radius: 999px;
+  }
+  .pr-q { margin-top: auto; margin-bottom: auto; padding: 26px 0; }
+  .pr-q h2 { font-size: 21px; font-weight: 900; letter-spacing: -0.02em; line-height: 1.35; color: var(--app-text); }
+  .pr-q .code {
+    margin-top: 18px; background: color-mix(in srgb, var(--app-text) 94%, var(--app-surface));
+    color: #e4e4e7; border-radius: 14px; padding: 16px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; line-height: 1.7;
+  }
+  .pr-q .code .kw { color: #93c5fd; } .pr-q .code .fn { color: #fbbf24; } .pr-q .code .str { color: #86efac; }
+  .pr-q .code .cm { color: #71717a; }
+  .pr-a { font-size: 14px; line-height: 1.7; color: var(--app-text); opacity: .9; }
+  .pr-a b { color: var(--sc-accent); }
+  .pr-flip-hint { margin-top: auto; text-align: center; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.18em; color: var(--app-hint); opacity: .55; }
+  .rate-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; flex-shrink: 0; }
+  .rate-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 12px 4px 10px; border-radius: 14px; border: 1px solid var(--app-border);
+    background: var(--app-surface); cursor: pointer;
+  }
+  .rate-btn .lbl { font-size: 11px; font-weight: 800; color: var(--app-text); }
+  .rate-btn .ivl { font-size: 9px; font-weight: 700; color: var(--app-hint); font-variant-numeric: tabular-nums; }
+  .rate-btn.again { background: rgba(244,63,94,0.09); border-color: rgba(244,63,94,0.3); }
+  .rate-btn.again .lbl { color: #f43f5e; }
+  .rate-btn.easy { background: rgba(16,185,129,0.09); border-color: rgba(16,185,129,0.3); }
+  .rate-btn.easy .lbl { color: #10b981; }
+  .rate-btn.good { background: color-mix(in srgb, var(--sc-accent) 9%, transparent); border-color: color-mix(in srgb, var(--sc-accent) 30%, transparent); }
+  .rate-btn.good .lbl { color: var(--sc-accent); }
+  .rate-hidden { visibility: hidden; }
+
+  /* ---------- stats ---------- */
+  .stats { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 24px 24px; display: flex; flex-direction: column; gap: 14px; justify-content: space-between; }
+  .stats h2 { font-size: 20px; font-weight: 900; letter-spacing: -0.02em; }
+  .stats-sub { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; color: var(--app-hint); margin-top: -12px; }
+  .stat-card { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 16px; padding: 16px; }
+  .hm-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--app-hint); margin-bottom: 10px; display: flex; justify-content: space-between; }
+  .hm-title span:last-child { text-transform: none; letter-spacing: 0; font-weight: 700; }
+  .heatmap { display: grid; grid-template-rows: repeat(7, 11px); grid-auto-flow: column; gap: 3px; }
+  .hm-cell { width: 11px; height: 11px; border-radius: 3px; background: color-mix(in srgb, var(--app-text) 7%, transparent); }
+  .hm-l1 { background: color-mix(in srgb, var(--sc-accent) 25%, transparent); }
+  .hm-l2 { background: color-mix(in srgb, var(--sc-accent) 45%, transparent); }
+  .hm-l3 { background: color-mix(in srgb, var(--sc-accent) 70%, transparent); }
+  .hm-l4 { background: var(--sc-accent); }
+  .stat-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat-num .v { font-size: 22px; font-weight: 900; letter-spacing: -0.03em; color: var(--app-text); font-variant-numeric: tabular-nums; }
+  .stat-num .k { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--app-hint); margin-top: 2px; }
+  .relics { display: flex; gap: 12px; }
+  .relic {
+    width: 52px; height: 52px; border-radius: 18px; flex-shrink: 0;
+    background: color-mix(in srgb, var(--sc-accent) 9%, var(--app-surface));
+    border: 1px solid color-mix(in srgb, var(--sc-accent) 22%, transparent);
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+  }
+  .relic.locked { filter: grayscale(1); opacity: .35; }
+
+  /* annotations on the page */
+  .legend { max-width: 1240px; margin: 28px auto 0; border-top: 1px solid #27272a; padding-top: 20px; }
+  .legend p { color: var(--page-hint); font-size: 12.5px; line-height: 1.7; }
+  .legend b { color: var(--page-text); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" onclick="toggleTheme()">🌙 Тёмная тема</button>
+
+<div class="page-head">
+  <h1>Oxenfurt · несколько скоупов</h1>
+  <p>Один Mini App, один вход — N ботов-агентов. Скоуп задаёт весь контекст экрана: задание, очередь, CTA, статистику. Переключение — пилюли сверху.</p>
+  <span class="hint">🖱 Пилюли скоупов кликабельны · карточку в «Практике» можно тапнуть</span>
+</div>
+
+<div class="board">
+
+  <!-- ═══════════ SLOT 1: Home, default English ═══════════ -->
+  <div class="slot">
+    <div class="phone"><div class="notch"></div><div class="screen" id="phone-home-1">
+      <div class="statusbar"><span>21:47</span><span class="icons">●●●● 📶 🔋</span></div>
+      <div class="app-content" data-mount="home"></div>
+    </div></div>
+    <div class="slot-caption">
+      <div class="num">1 · Home — скоуп English</div>
+      <p>Экран почти как сегодня. Новое — ряд пилюль скоупов с числом due в каждом. Активный скоуп определяет всё содержимое ниже: задание от своего агента, свой акцент цвета, свой CTA.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLOT 2: Home, default Go ═══════════ -->
+  <div class="slot">
+    <div class="phone"><div class="notch"></div><div class="screen" id="phone-home-2">
+      <div class="statusbar"><span>21:47</span><span class="icons">●●●● 📶 🔋</span></div>
+      <div class="app-content" data-mount="home"></div>
+    </div></div>
+    <div class="slot-caption">
+      <div class="num">2 · Home — скоуп Go (профессия)</div>
+      <p>Тот же экран в другом скоупе: другой агент, своё задание (тут — срочное, дедлайн сегодня), другой акцент. Карточки двух скоупов никогда не встречаются в одной очереди.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLOT 3: Practice inside Go ═══════════ -->
+  <div class="slot">
+    <div class="phone"><div class="notch"></div><div class="screen" id="phone-practice">
+      <div class="statusbar"><span>21:47</span><span class="icons">●●●● 📶 🔋</span></div>
+      <div class="app-content" data-mount="practice"></div>
+    </div></div>
+    <div class="slot-caption">
+      <div class="num">3 · Практика — всегда внутри одного скоупа</div>
+      <p>В практике скоуп не переключается — только чип сверху напоминает, где ты. Тапни карточку: перевернётся и покажет ответ с FSRS-кнопками.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLOT 4: Stats per scope ═══════════ -->
+  <div class="slot">
+    <div class="phone"><div class="notch"></div><div class="screen" id="phone-stats">
+      <div class="statusbar"><span>21:47</span><span class="icons">●●●● 📶 🔋</span></div>
+      <div class="app-content" data-mount="stats"></div>
+    </div></div>
+    <div class="slot-caption">
+      <div class="num">4 · Архив — статистика по скоупу</div>
+      <p>Heatmap, реликвии и числа — в цвете активного скоупа. Общего «смешанного» прогресса нет: каждый скоуп — отдельная академия со своей историей.</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="legend">
+  <p><b>Почему так:</b> N ботов-чатов (по Hermes-профилю на скоуп) + один Mini App. Бот английского и бот-профессия живут в своих чатах и постят карточки каждый в свой скоуп по своему ingest-токену — а практиковаться ты заходишь в одно место. Сессия, задание и очередь всегда принадлежат ровно одному скоупу; смешивание — единственное, что тут нельзя.</p>
+</div>
+
+<script>
+/* ───────────────────────── scope data ───────────────────────── */
+const SCOPES = {
+  english: {
+    emoji: '🇬🇧', name: 'English', accent: '#4f46e5', accentDark: '#818cf8',
+    due: 12, learned: 523, rank: 'Магистр',
+    agent: 'Hermes',
+    assignment: {
+      from: 'От агента · Hermes', dueLabel: 'через 2 дня', urgent: false,
+      title: 'Past Simple vs Present Perfect — разбор ошибок из урока',
+      completed: 14, total: 20,
+      groups: [
+        { label: 'Новое из урока 12.11', kind: 'new',    c: 8, t: 8 },
+        { label: 'Слабые места',        kind: 'weak',   c: 4, t: 7 },
+        { label: 'Из ранних уроков',    kind: 'topic',  c: 2, t: 5 },
+      ],
+    },
+  },
+  go: {
+    emoji: '🐹', name: 'Go', accent: '#059669', accentDark: '#34d399',
+    due: 5, learned: 187, rank: 'Бакалавр',
+    agent: 'Hermes',
+    assignment: {
+      from: 'От агента · Hermes', dueLabel: 'сдать сегодня', urgent: true,
+      title: 'Goroutines и каналы: где случается deadlock',
+      completed: 6, total: 18,
+      groups: [
+        { label: 'Новые концепции',   kind: 'new',   c: 3, t: 6 },
+        { label: 'Забытые карточки',  kind: 'weak',  c: 2, t: 6 },
+        { label: 'Разбор кода',       kind: 'topic', c: 1, t: 6 },
+      ],
+    },
+  },
+  medicine: {
+    emoji: '🩺', name: 'Медицина', accent: '#d97706', accentDark: '#fbbf24',
+    due: 0, learned: 0, rank: 'Новичок',
+    agent: 'Hermes',
+    assignment: null,
+  },
+}
+const ORDER = ['english', 'go', 'medicine']
+
+/* ───────────────────────── helpers ───────────────────────── */
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+function accent(scope) {
+  return document.documentElement.dataset.theme === 'dark' ? scope.accentDark : scope.accent
+}
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0
+    let t = Math.imul(a ^ a >>> 15, 1 | a)
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t
+    return ((t ^ t >>> 14) >>> 0) / 4294967296
+  }
+}
+
+function scopeRow(activeId) {
+  return `<div class="scope-row">${ORDER.map(id => {
+    const s = SCOPES[id]
+    const cnt = s.due > 0 ? `<span class="cnt">${s.due}</span>` : `<span class="cnt zero">✓</span>`
+    return `<button class="scope-pill ${id === activeId ? 'active' : ''}" data-scope="${id}"
+              style="--sc-accent: ${accent(s)}" onclick="switchScope(this)">
+              <span>${s.emoji}</span><span>${s.name}</span>${cnt}
+            </button>`
+  }).join('')}</div>`
+}
+
+function assignmentBlock(sc) {
+  const a = sc.assignment
+  const pct = a.total > 0 ? (a.completed / a.total) * 100 : 0
+  const C = 2 * Math.PI * 80
+  return `
+  <div class="assignment">
+    <div class="asg-card">
+      <div class="asg-ring">
+        <svg viewBox="0 0 200 200">
+          <circle cx="100" cy="100" r="80" fill="none" stroke="${accent(sc)}" stroke-opacity=".18" stroke-width="16"/>
+          <circle cx="100" cy="100" r="80" fill="none" stroke="${accent(sc)}" stroke-width="16"
+                  stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C - pct / 100 * C}"/>
+        </svg>
+        <div class="asg-count">${a.completed}<small>/${a.total}</small></div>
+      </div>
+      <div class="asg-meta">
+        <div class="row1">
+          <span class="asg-from">${a.from}</span>
+          <span class="asg-due ${a.urgent ? 'urgent' : ''}">${a.dueLabel}</span>
+        </div>
+        <span class="asg-title">${a.title}</span>
+      </div>
+    </div>
+    <div class="asg-groups">
+      ${a.groups.map(g => `
+        <div class="asg-group ${g.kind === 'weak' ? 'weak' : ''}">
+          <div class="lbl"><span class="dot"></span><span class="name">${g.label}</span><span class="frac">${g.c}/${g.t}</span></div>
+          <div class="track"><div class="fill" style="width:${g.t ? g.c / g.t * 100 : 0}%"></div></div>
+        </div>`).join('')}
+    </div>
+  </div>`
+}
+
+function ringBlock(sc) {
+  const empty = sc.due === 0
+  const C = 2 * Math.PI * 72
+  return `
+  <div class="ring-state">
+    <div class="big-ring">
+      <svg viewBox="0 0 200 200">
+        <circle cx="100" cy="100" r="72" fill="none" stroke="${accent(sc)}" stroke-opacity=".08" stroke-width="8"/>
+        ${empty ? '' : `<circle cx="100" cy="100" r="72" fill="none" stroke="${accent(sc)}" stroke-width="8"
+                 stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * 0.62}"/>`}
+      </svg>
+      <div class="inner">
+        ${empty
+          ? `<span style="font-size:44px; opacity:.25">📚</span><div class="cap">Очередь пуста</div>`
+          : `<span class="num">${sc.due}</span><div class="cap">к повторению</div>`}
+      </div>
+    </div>
+    ${empty
+      ? `<div class="welcome-box">
+           <h3>Новая академия</h3>
+           <p>Этот скоуп пока пуст. Отправь первый конспект или транскрипт боту-медику в Telegram — карточки появятся здесь сами.</p>
+         </div>`
+      : `<div class="ring-pill">Прогресс 4 из ${sc.due + 4} на сегодня</div>`}
+  </div>`
+}
+
+/* ───────────────────────── renderers ───────────────────────── */
+function renderHome(mount, activeId) {
+  const sc = SCOPES[activeId]
+  const hasAsg = sc.assignment !== null
+  mount.innerHTML = `
+  <div class="home">
+    <div class="home-top">
+      <div style="flex:1; min-width:0; padding-top:4px">
+        <div class="greeting">Добрый вечер</div>
+        <div class="home-chips">
+          <span class="chip chip-streak">🔥 12 дней</span>
+          <span class="chip chip-rank" style="--sc-accent:${accent(sc)}; color:${accent(sc)}; border-color:${accent(sc)}55">🎓 ${sc.rank}</span>
+        </div>
+      </div>
+      <div class="home-actions">
+        <div class="icon-btn" title="История заданий">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+        </div>
+        <div class="icon-btn" title="Настройки">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+      </div>
+    </div>
+    <div style="text-align:right"><span class="hermes-pill"><i></i>Hermes</span></div>
+
+    ${scopeRow(activeId)}
+
+    ${hasAsg ? assignmentBlock(sc) : ringBlock(sc)}
+
+    <div class="cta-zone" style="--sc-accent:${accent(sc)}">
+      <button class="cta">${hasAsg ? 'Продолжить задание' : (sc.due > 0 ? 'Начать сессию' : 'Начать сессию')}</button>
+      ${hasAsg ? '<button class="cta-sub">Свободная практика</button>' : '<div class="mode-cap">Режим: <b>Смешанный</b> · 20</div>'}
+      <div class="nav-grid">
+        <div class="nav-btn">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 6l4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/></svg>
+          Библиотека
+        </div>
+        <div class="nav-btn">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+          Статистика
+        </div>
+      </div>
+    </div>
+  </div>`
+  mount.dataset.scope = activeId
+}
+
+function renderPractice(mount) {
+  const sc = SCOPES.go
+  mount.innerHTML = `
+  <div class="practice" style="--sc-accent:${accent(sc)}">
+    <div class="pr-top">
+      <div class="icon-btn" style="width:38px;height:38px;border-radius:12px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </div>
+      <div class="pr-scope-chip">${sc.emoji} ${sc.name}</div>
+      <div class="pr-progress">7<small>/18</small></div>
+    </div>
+    <div class="pr-card-wrap">
+      <div class="pr-card-bg"></div>
+      <div class="pr-card" id="practice-card" onclick="flipCard(this)">
+        <span class="pr-type">Теория · Задание</span>
+        <div class="pr-q" id="card-front">
+          <h2>Чем goroutine отличается от потока ОС?</h2>
+          <div class="code"><span class="cm">// почему это не создаёт 10 000 потоков?</span><br>
+go <span class="fn">Goroutine</span>(func() { <br>&nbsp;&nbsp;<span class="kw">for</span> i := 0; i &lt; 10_000; i++ {<br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">go</span> <span class="fn">work</span>(i)<br>&nbsp;&nbsp;}<br>})</div>
+        </div>
+        <div class="pr-q" id="card-back" style="display:none">
+          <p class="pr-a"><b>Goroutine</b> — легковесный поток рантайма Go, а не ОС: стартует с ~2&nbsp;КБ стека (поток — ~1&nbsp;МБ), управляется планировщиком Go по модели <b>M:N</b>. Ten тысяч goroutine — норма; десять тысяч потоков ОС — смерть.</p>
+        </div>
+        <div class="pr-flip-hint" id="flip-hint">Нажми, чтобы перевернуть</div>
+        <div class="rate-row rate-hidden" id="rate-row">
+          <div class="rate-btn again"><span class="lbl">Снова</span><span class="ivl">&lt;1 м</span></div>
+          <div class="rate-btn hard"><span class="lbl">Трудно</span><span class="ivl">8 м</span></div>
+          <div class="rate-btn good"><span class="lbl">Хорошо</span><span class="ivl">2 д</span></div>
+          <div class="rate-btn easy"><span class="lbl">Легко</span><span class="ivl">5 д</span></div>
+        </div>
+      </div>
+    </div>
+  </div>`
+}
+
+function renderStats(mount, activeId) {
+  const sc = SCOPES[activeId]
+  const rnd = mulberry32(activeId.length * 7919 + sc.learned)
+  let hm = ''
+  for (let i = 0; i < 20 * 7; i++) {
+    const r = rnd()
+    const lvl = r < .52 ? '' : r < .72 ? 'hm-l1' : r < .86 ? 'hm-l2' : r < .95 ? 'hm-l3' : 'hm-l4'
+    hm += `<div class="hm-cell ${lvl}"></div>`
+  }
+  const accuracy = activeId === 'english' ? 91 : activeId === 'go' ? 84 : 0
+  const reviews = activeId === 'english' ? 2841 : activeId === 'go' ? 620 : 0
+  const RANKS = [
+    { at: 2000, name: 'Ректор' }, { at: 1000, name: 'Доктор' }, { at: 500, name: 'Магистр' },
+    { at: 200, name: 'Бакалавр' }, { at: 50, name: 'Студент' }, { at: 0, name: 'Новичок' },
+  ]
+  const nextUp = RANKS.find(r => sc.learned < r.at) ?? RANKS[RANKS.length - 1]
+  const rankNext = { name: nextUp.name, at: nextUp.at || 50, left: `ещё ${Math.max(0, nextUp.at - sc.learned)}` }
+  mount.innerHTML = `
+  <div class="stats" style="--sc-accent:${accent(sc)}">
+    <div>
+      <h2>Академический архив</h2>
+      <div class="stats-sub" style="margin-top:6px">${sc.emoji} ${sc.name} · ${sc.rank.toLowerCase()}</div>
+    </div>
+    ${scopeRow(activeId)}
+    <div class="stat-card">
+      <div class="hm-title"><span>Повторения за год</span><span>${reviews}</span></div>
+      <div class="heatmap">${hm}</div>
+    </div>
+    <div class="stat-card stat-nums">
+      <div class="stat-num"><div class="v">${sc.learned}</div><div class="k">Выучено</div></div>
+      <div class="stat-num"><div class="v">${reviews}</div><div class="k">Повторений</div></div>
+      <div class="stat-num"><div class="v">${accuracy}%</div><div class="k">Точность</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="hm-title"><span>Реликвии</span><span>${activeId === 'medicine' ? '0 / 24' : activeId === 'go' ? '7 / 24' : '16 / 24'}</span></div>
+      <div class="relics">
+        <div class="relic">🔥</div>
+        <div class="relic">🦉</div>
+        <div class="relic">${activeId === 'medicine' ? '🔒' : '⚔️'}</div>
+        <div class="relic">🔒</div>
+        <div class="relic locked">👑</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="hm-title"><span>Путь к следующему рангу</span><span>${rankNext.name}</span></div>
+      <div class="asg-group" style="padding:0">
+        <div class="lbl"><span class="name">${sc.learned} / ${rankNext.at}</div><span class="frac">${rankNext.left}</span></div>
+        <div class="track"><div class="fill" style="width:${Math.min(100, sc.learned / rankNext.at * 100)}%"></div></div>
+      </div>
+    </div>
+  </div>`
+  mount.dataset.scope = activeId
+}
+
+/* ───────────────────────── interactions ───────────────────────── */
+function switchScope(btn) {
+  const id = btn.dataset.scope
+  const phone = btn.closest('.screen')
+  const mount = phone.querySelector('.app-content')
+  if (mount.dataset.mount === 'home') renderHome(mount, id)
+  if (mount.dataset.mount === 'stats') renderStats(mount, id)
+}
+
+function flipCard(card) {
+  const front = document.getElementById('card-front')
+  const back = document.getElementById('card-back')
+  const hint = document.getElementById('flip-hint')
+  const rates = document.getElementById('rate-row')
+  const showing = back.style.display === 'none'
+  front.style.display = showing ? 'none' : 'block'
+  back.style.display = showing ? 'block' : 'none'
+  hint.style.display = showing ? 'none' : 'block'
+  rates.classList.toggle('rate-hidden', !showing)
+}
+
+function toggleTheme() {
+  const root = document.documentElement
+  const dark = root.dataset.theme === 'dark'
+  root.dataset.theme = dark ? 'light' : 'dark'
+  document.querySelector('.theme-toggle').textContent = dark ? '🌙 Тёмная тема' : '☀️ Светлая тема'
+  rerenderAll()
+}
+
+function rerenderAll() {
+  document.querySelectorAll('[data-mount="home"]').forEach(m => renderHome(m, m.dataset.scope || 'english'))
+  document.querySelectorAll('[data-mount="stats"]').forEach(m => renderStats(m, m.dataset.scope || 'english'))
+  document.querySelectorAll('[data-mount="practice"]').forEach(m => renderPractice(m))
+}
+
+/* initial state */
+renderHome(document.querySelector('#phone-home-1 .app-content'), 'english')
+renderHome(document.querySelector('#phone-home-2 .app-content'), 'go')
+renderPractice(document.querySelector('#phone-practice .app-content'))
+renderStats(document.querySelector('#phone-stats .app-content'), 'english')
+</script>
+</body>
+</html>

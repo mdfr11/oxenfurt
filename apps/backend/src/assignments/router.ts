@@ -16,9 +16,10 @@ import * as v from 'valibot'
 import postgres from 'postgres'
 import { ASSIGNMENT_MAX_DUE_DAYS, CreateAssignmentSchema } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
+import type { ScopeRow } from '../db/schema.ts'
 import { assignmentItems, assignments, cards } from '../db/schema.ts'
-import { ingestTokenAuth } from '../middleware/ingest-token.ts'
-import { jwtAuth } from '../middleware/auth.ts'
+import { ingestScopeAuth } from '../middleware/ingest-token.ts'
+import { dualAuth, type ScopeRef } from '../middleware/scope.ts'
 import { isUuid } from '../lib/uuid.ts'
 import {
   expireStaleAssignments,
@@ -62,16 +63,17 @@ class AssignmentActiveError extends Error {
 
 export interface AgentAssignmentsRouterDeps {
   db: Db
-  ingestToken: string
+  tokenScopes: ReadonlyMap<string, ScopeRef>
   now?: () => Date
 }
 
 export function createAgentAssignmentsRouter(deps: AgentAssignmentsRouterDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
-  app.use('*', ingestTokenAuth({ ingestToken: deps.ingestToken }))
+  app.use('*', ingestScopeAuth({ tokens: deps.tokenScopes }))
 
   app.post('/', async (c) => {
+    const scope = c.get('scope')
     let raw: unknown
     try {
       raw = await c.req.json()
@@ -100,7 +102,16 @@ export function createAgentAssignmentsRouter(deps: AgentAssignmentsRouterDeps): 
     const found = await deps.db
       .select({ id: cards.id })
       .from(cards)
-      .where(and(inArray(cards.id, cardIds), eq(cards.status, 'active')))
+      .where(
+        and(
+          inArray(cards.id, cardIds),
+          eq(cards.status, 'active'),
+          // An agent may only assign cards of ITS OWN scope — the token's
+          // scope is the whole authority, and a card from another deck is
+          // unknown here even though the row exists.
+          eq(cards.scopeId, scope.id),
+        ),
+      )
     const foundIds = new Set(found.map((r) => r.id))
     const missing = cardIds.filter((id) => !foundIds.has(id))
     if (missing.length > 0) {
@@ -133,7 +144,7 @@ export function createAgentAssignmentsRouter(deps: AgentAssignmentsRouterDeps): 
         const [live] = await tx
           .select()
           .from(assignments)
-          .where(eq(assignments.status, 'active'))
+          .where(and(eq(assignments.status, 'active'), eq(assignments.scopeId, scope.id)))
           .for('update')
         if (live !== undefined) {
           if (!input.replace) throw new AssignmentActiveError(live.id)
@@ -143,6 +154,7 @@ export function createAgentAssignmentsRouter(deps: AgentAssignmentsRouterDeps): 
         const [row] = await tx
           .insert(assignments)
           .values({
+            scopeId: scope.id,
             title: input.title,
             rationale: input.rationale ?? null,
             source: input.source ?? null,
@@ -188,7 +200,8 @@ export interface UserAssignmentsRouterDeps {
   db: Db
   jwtSecret: string
   /** Hermes reads its own history back through the same routes. */
-  ingestToken: string
+  tokenScopes: ReadonlyMap<string, ScopeRef>
+  scopes: ScopeRow[]
   now?: () => Date
 }
 
@@ -196,31 +209,36 @@ export function createUserAssignmentsRouter(deps: UserAssignmentsRouterDeps): Ho
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
 
-  // Same dual-auth shape as the cards router: agent bypass first, JWT
-  // otherwise. Keeps one read surface instead of mirroring these routes
-  // under /agent.
-  app.use('*', async (c, next) => {
-    const auth = c.req.header('authorization') ?? ''
-    const match = auth.match(/^bearer\s+(.+)$/i)
-    if (match && match[1] === deps.ingestToken) return next()
-    return jwtAuth({ jwtSecret: deps.jwtSecret, now })(c, next)
-  })
+  // Same dual-auth shape as the cards router: agent branch first, JWT +
+  // X-Scope otherwise. Keeps one read surface instead of mirroring these
+  // routes under /agent.
+  app.use(
+    '*',
+    dualAuth({
+      tokenScopes: deps.tokenScopes,
+      jwtSecret: deps.jwtSecret,
+      scopes: deps.scopes,
+      now,
+    }),
+  )
 
   app.get('/active', async (c) => {
-    return c.json(await loadActiveAssignment(deps.db, now()))
+    return c.json(await loadActiveAssignment(deps.db, now(), c.get('scope').id))
   })
 
   // Home reads this to keep a completed assignment visible until its
   // deadline, so it can be replayed without opening the history sheet.
   // Registered before `/:id` so the literal segment wins over the param.
   app.get('/latest', async (c) => {
-    return c.json({ assignment: await loadLatestAssignment(deps.db, now()) })
+    return c.json({ assignment: await loadLatestAssignment(deps.db, now(), c.get('scope').id) })
   })
 
   app.get('/', async (c) => {
     const limitRaw = c.req.query('limit') ?? '50'
     const limit = Math.max(1, Math.min(100, Number.parseInt(limitRaw, 10) || 50))
-    return c.json({ assignments: await listAssignments(deps.db, now(), limit) })
+    return c.json({
+      assignments: await listAssignments(deps.db, now(), limit, c.get('scope').id),
+    })
   })
 
   // Detail for the history sheet and for drill sessions: the assignment's
@@ -229,7 +247,7 @@ export function createUserAssignmentsRouter(deps: UserAssignmentsRouterDeps): Ho
   app.get('/:id', async (c) => {
     const id = c.req.param('id')
     if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
-    const detail = await loadAssignmentById(deps.db, id, now())
+    const detail = await loadAssignmentById(deps.db, id, now(), c.get('scope').id)
     if (detail === null) return c.json({ error: 'not_found' }, 404)
     return c.json(detail)
   })

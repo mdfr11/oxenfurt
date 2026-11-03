@@ -20,6 +20,7 @@
 import { sql } from 'drizzle-orm'
 import { FsrsService } from '@oxenfurt/shared'
 import { createDb } from './client.ts'
+import { scopeBySlug } from './scopes.ts'
 
 interface SeedCard {
   type: 'vocab' | 'phrase' | 'theory'
@@ -142,6 +143,13 @@ export async function seedDemo(databaseUrl: string): Promise<{ inserted: number;
       return { inserted: 0, skipped: true }
     }
 
+    // Demo data belongs to the default scope (the first configured one,
+    // 'english' on a stock install).
+    const scope = await scopeBySlug(db, 'english')
+    if (scope === undefined) {
+      throw new Error('scope "english" not found — run migrations first')
+    }
+
     const fsrs = new FsrsService({ enableFuzz: false })
     let inserted = 0
 
@@ -162,12 +170,12 @@ export async function seedDemo(databaseUrl: string): Promise<{ inserted: number;
       const lastReviewIso = state.last_review === null ? null : new Date(state.last_review).toISOString()
       await db.execute(sql`
         INSERT INTO cards (
-          type, status, payload, source, source_quote,
+          scope_id, type, status, payload, source, source_quote,
           fsrs_state, due, stability, difficulty,
           elapsed_days, scheduled_days, learning_steps,
           reps, lapses, last_review
         ) VALUES (
-          ${card.type}, 'active', ${JSON.stringify(card.payload)}::jsonb,
+          ${scope.id}, ${card.type}, 'active', ${JSON.stringify(card.payload)}::jsonb,
           ${card.source}, ${card.source_quote ?? null},
           ${state.fsrs_state}, ${dueIso}, ${state.stability}, ${state.difficulty},
           ${state.elapsed_days}, ${state.scheduled_days}, ${state.learning_steps},

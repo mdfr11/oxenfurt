@@ -14,7 +14,8 @@ import { and, asc, count, desc, eq, gte, isNotNull, lt, lte, sql } from 'drizzle
 import type { DiagnosticsCardDto, DiagnosticsResponse } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { assignmentItems, assignments, cards, type CardRow } from '../db/schema.ts'
-import { ingestTokenAuth } from '../middleware/ingest-token.ts'
+import { ingestScopeAuth } from '../middleware/ingest-token.ts'
+import type { ScopeRef } from '../middleware/scope.ts'
 import { expireStaleAssignments } from '../assignments/service.ts'
 
 /** Lapse count at which a card stops being "hard" and starts being a leech. */
@@ -27,16 +28,17 @@ const DEFAULT_LIMIT = 200
 
 export interface DiagnosticsRouterDeps {
   db: Db
-  ingestToken: string
+  tokenScopes: ReadonlyMap<string, ScopeRef>
   now?: () => Date
 }
 
 export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
-  app.use('*', ingestTokenAuth({ ingestToken: deps.ingestToken }))
+  app.use('*', ingestScopeAuth({ tokens: deps.tokenScopes }))
 
   app.get('/', async (c) => {
+    const scope = c.get('scope')
     const at = now()
     const limitRaw = c.req.query('limit') ?? String(DEFAULT_LIMIT)
     const limit = Math.max(1, Math.min(DEFAULT_LIMIT, Number.parseInt(limitRaw, 10) || DEFAULT_LIMIT))
@@ -46,9 +48,12 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
     const endOfToday = new Date(at)
     endOfToday.setUTCHours(23, 59, 59, 999)
 
-    // Note the split between rows and counts: the row lists are capped by
-    // `limit`, so the summary must come from real COUNTs or it would silently
-    // under-report the moment the learner has more than `limit` overdue cards.
+    // Every lens is scope-filtered: the agent composing a go assignment
+    // must never diagnose english cards. Note the split between rows and
+    // counts: the row lists are capped by `limit`, so the summary must
+    // come from real COUNTs or it would silently under-report the moment
+    // the learner has more than `limit` overdue cards.
+    const scopeCond = eq(cards.scopeId, scope.id)
     const [
       overdueRows,
       leechRows,
@@ -68,13 +73,13 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
       deps.db
         .select()
         .from(cards)
-        .where(and(eq(cards.status, 'active'), lt(cards.due, at), isNotNull(cards.lastReview)))
+        .where(and(scopeCond, eq(cards.status, 'active'), lt(cards.due, at), isNotNull(cards.lastReview)))
         .orderBy(asc(cards.due))
         .limit(limit),
       deps.db
         .select()
         .from(cards)
-        .where(and(eq(cards.status, 'active'), gte(cards.lapses, LEECH_LAPSES)))
+        .where(and(scopeCond, eq(cards.status, 'active'), gte(cards.lapses, LEECH_LAPSES)))
         .orderBy(desc(cards.lapses))
         .limit(limit),
       deps.db
@@ -82,6 +87,7 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
         .from(cards)
         .where(
           and(
+            scopeCond,
             eq(cards.status, 'active'),
             gte(cards.difficulty, FRAGILE_DIFFICULTY),
             lte(cards.stability, FRAGILE_STABILITY_DAYS),
@@ -89,19 +95,19 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
         )
         .orderBy(asc(cards.stability))
         .limit(limit),
-      deps.db.select({ value: count() }).from(cards).where(eq(cards.status, 'active')),
+      deps.db.select({ value: count() }).from(cards).where(and(scopeCond, eq(cards.status, 'active'))),
       deps.db
         .select({ value: count() })
         .from(cards)
-        .where(and(eq(cards.status, 'active'), lt(cards.due, at), isNotNull(cards.lastReview))),
+        .where(and(scopeCond, eq(cards.status, 'active'), lt(cards.due, at), isNotNull(cards.lastReview))),
       deps.db
         .select({ value: count() })
         .from(cards)
-        .where(and(eq(cards.status, 'active'), lte(cards.due, endOfToday))),
+        .where(and(scopeCond, eq(cards.status, 'active'), lte(cards.due, endOfToday))),
       deps.db
         .select({ value: count() })
         .from(cards)
-        .where(and(eq(cards.status, 'active'), gte(cards.lapses, LEECH_LAPSES))),
+        .where(and(scopeCond, eq(cards.status, 'active'), gte(cards.lapses, LEECH_LAPSES))),
     ])
 
     const recentSources = await deps.db
@@ -111,7 +117,7 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
         latest: sql<string>`max(${cards.createdAt})`,
       })
       .from(cards)
-      .where(and(eq(cards.status, 'active'), sql`${cards.source} IS NOT NULL`))
+      .where(and(scopeCond, eq(cards.status, 'active'), sql`${cards.source} IS NOT NULL`))
       .groupBy(cards.source)
       .orderBy(desc(sql`max(${cards.createdAt})`))
       .limit(10)
@@ -131,7 +137,7 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
         cards: Number(r.cards),
         latest: new Date(r.latest).toISOString(),
       })),
-      last_assignment: await loadLastAssignment(deps.db),
+      last_assignment: await loadLastAssignment(deps.db, scope.id),
     }
 
     return c.json(response)
@@ -140,10 +146,14 @@ export function createDiagnosticsRouter(deps: DiagnosticsRouterDeps): Hono {
   return app
 }
 
-async function loadLastAssignment(db: Db): Promise<DiagnosticsResponse['last_assignment']> {
+async function loadLastAssignment(
+  db: Db,
+  scopeId: string,
+): Promise<DiagnosticsResponse['last_assignment']> {
   const [row] = await db
     .select()
     .from(assignments)
+    .where(eq(assignments.scopeId, scopeId))
     .orderBy(desc(assignments.createdAt))
     .limit(1)
   if (row === undefined) return null

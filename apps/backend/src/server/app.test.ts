@@ -7,6 +7,16 @@ import type { Db } from '../db/client.ts'
 const BOT_TOKEN = '1234567890:ABCDEF_test_bot_token'
 const JWT_SECRET = '0123456789abcdef0123456789abcdef-test'
 const INGEST_TOKEN = 'test-ingest-token-1234567890'
+// Static scope fixture — the /health and /auth/session paths under test
+// never touch the DB, so the rows are shape-only.
+const SCOPE_ROW = {
+  id: '00000000-0000-4000-8000-000000000001',
+  slug: 'english',
+  title: 'English',
+  emoji: '🇬🇧',
+  accent: 'indigo',
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+}
 const OWNER_ID = 99
 const NOW_MS = Date.parse('2026-01-01T12:00:00.000Z')
 const NOW = new Date(NOW_MS)
@@ -19,7 +29,8 @@ const stubDb = {} as Db
 const defaultDeps: AppDeps = {
   botToken: BOT_TOKEN,
   jwtSecret: JWT_SECRET,
-  ingestToken: INGEST_TOKEN,
+  scopes: [SCOPE_ROW],
+  tokenScopes: new Map([[INGEST_TOKEN, { slug: 'english', id: SCOPE_ROW.id }]]),
   ownerTelegramUserId: OWNER_ID,
   initDataMaxAgeSeconds: 3600,
   jwtTtlSeconds: 900,

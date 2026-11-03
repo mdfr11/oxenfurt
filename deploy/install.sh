@@ -189,7 +189,9 @@ trap 'rm -f "$ENV_TMP"' EXIT
   printf 'BOT_TOKEN=%s\n'                "$OXENFURT_BOT_TOKEN"
   printf 'OWNER_TELEGRAM_USER_ID=%s\n\n' "$OXENFURT_OWNER_ID"
   printf 'JWT_SECRET=%s\n'               "$JWT_SECRET"
-  printf 'INGEST_TOKEN=%s\n\n'           "$INGEST_TOKEN"
+  printf 'INGEST_TOKEN=%s\n'             "$INGEST_TOKEN"
+  printf '# Optional multi-scope setup: see deploy/env/backend.env.example\n'
+  printf '# (SCOPES=slug:Title:emoji:accent,... and INGEST_TOKENS=slug=token,...).\n\n'
   printf 'DATABASE_URL=postgres://oxenfurt:%s@127.0.0.1:5432/oxenfurt\n\n' "$PG_PASS"
   printf 'PORT=3000\n'
   printf 'INITDATA_MAX_AGE_SECONDS=3600\n'

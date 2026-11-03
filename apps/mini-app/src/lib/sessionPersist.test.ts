@@ -35,6 +35,7 @@ function card(id: string): DueCardDto {
 function session(ids: string[], currentIndex: number): PersistedSession {
   return {
     mode: 'recognition',
+    scope: null,
     cards: ids.map(card),
     currentIndex,
     stats: { total: currentIndex, correct: 0 },

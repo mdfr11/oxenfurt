@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { X, Send, Clock, CheckCircle2 } from 'lucide-react'
+import { getScopeSlug } from '../lib/scope'
 import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
 import { useT } from '../lib/i18n/useT'
@@ -41,7 +42,7 @@ export function QuestionSheet({ cardId, isOpen, onClose }: Props) {
 
   const { data: historyData } = useQuery({
     enabled: isOpen && cardId !== null,
-    queryKey: ['questions', 'card', cardId],
+    queryKey: [getScopeSlug() ?? 'no-scope', 'questions', 'card', cardId],
     queryFn: async () => {
       const res = await fetchWithAuth(`/questions/card/${cardId}`)
       if (!res.ok) throw new Error('Failed to load')
@@ -62,7 +63,7 @@ export function QuestionSheet({ cardId, isOpen, onClose }: Props) {
       setState('sent')
       setText('')
       // Refresh history so the new question shows up immediately.
-      void queryClient.invalidateQueries({ queryKey: ['questions', 'card', cardId] })
+      void queryClient.invalidateQueries({ queryKey: [getScopeSlug() ?? 'no-scope', 'questions', 'card', cardId] })
       void queryClient.invalidateQueries({ queryKey: ['questions', 'count'] })
       setTimeout(() => {
         setState('idle')

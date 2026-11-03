@@ -23,6 +23,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DueCardDto, Rating } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
+import { getScopeSlug } from '../lib/scope'
 import { clearSession, loadSession, saveSession } from '../lib/sessionPersist'
 import type { PracticeMode } from '../lib/practiceMode'
 import { fingerprintCards, shouldReseed } from '../components/practiceHelpers'
@@ -124,7 +125,10 @@ export function usePracticeQueue({
   // is intentional. Subsequent writes go back through saveSession.
   // Non-resumable sessions never look: whatever is in that slot belongs
   // to free practice and would replace their queue outright.
-  const resumedSnapshot = useMemo(() => (resumable ? loadSession(mode) : null), [mode, resumable])
+  const resumedSnapshot = useMemo(
+    () => (resumable ? loadSession(mode, getScopeSlug()) : null),
+    [mode, resumable],
+  )
   const resumed = resumedSnapshot !== null
 
   const [queue, setQueue] = useState<DueCardDto[]>(() => resumedSnapshot?.cards ?? [])
@@ -180,6 +184,7 @@ export function usePracticeQueue({
     if (queue.length === 0 || currentIndex >= queue.length) return
     saveSession({
       mode,
+      scope: getScopeSlug(),
       cards: queue,
       currentIndex,
       stats: sessionStats,

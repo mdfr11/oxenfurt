@@ -1,15 +1,17 @@
 import { Hono } from 'hono'
-import { desc, eq, isNotNull, sql } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm'
 import * as v from 'valibot'
 import type { StatsResponse } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
-import { sessions } from '../db/schema.ts'
-import { jwtAuth } from '../middleware/auth.ts'
+import type { ScopeRow } from '../db/schema.ts'
+import { cards, sessions } from '../db/schema.ts'
+import { jwtAuthWithScope } from '../middleware/scope.ts'
 import { isUuid } from '../lib/uuid.ts'
 
 export interface SessionsRouterDeps {
   db: Db
   jwtSecret: string
+  scopes: ScopeRow[]
   now?: () => Date
 }
 
@@ -22,11 +24,14 @@ export function createSessionsRouter(deps: SessionsRouterDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
 
-  app.use('*', jwtAuth({ jwtSecret: deps.jwtSecret, now }))
+  app.use(
+    '*',
+    jwtAuthWithScope({ jwtSecret: deps.jwtSecret, scopes: deps.scopes, now }),
+  )
 
   // Aggregated stats — single round-trip for the Stats screen.
   app.get('/stats', async (c) => {
-    const stats = await computeStats(deps.db, now())
+    const stats = await computeStats(deps.db, now(), c.get('scope').id)
     return c.json(stats)
   })
 
@@ -36,7 +41,7 @@ export function createSessionsRouter(deps: SessionsRouterDeps): Hono {
   app.post('/', async (c) => {
     const [row] = await deps.db
       .insert(sessions)
-      .values({ startedAt: now() })
+      .values({ scopeId: c.get('scope').id, startedAt: now() })
       .returning({ id: sessions.id, startedAt: sessions.startedAt })
     return c.json({
       id: row!.id,
@@ -83,12 +88,13 @@ export function createSessionsRouter(deps: SessionsRouterDeps): Hono {
 }
 
 /**
- * Aggregated stats for the mobile Stats screen. All dates are computed in
- * UTC — clients render in their local zone if they want. Single-user
- * deployments don't need per-user filtering; if/when this becomes
- * multi-tenant, add a userId filter to every WHERE.
+ * Aggregated stats for the mobile Stats screen, one scope at a time.
+ * Reviews reach their scope through the card (card_reviews has no
+ * scope_id by design — the FK is the single source of the boundary);
+ * sessions and cards carry scope_id directly. All dates are computed in
+ * UTC — clients render in their local zone if they want.
  */
-export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
+export async function computeStats(db: Db, when: Date, scopeId?: string): Promise<StatsResponse> {
   // Convert dates to epoch ms for SQL interpolation — postgres-js doesn't
   // accept raw JS Date objects in parameterized queries.
   const whenTs = when.getTime()
@@ -118,19 +124,22 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
       month_correct: string
     }>(sql`
       SELECT
-        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${dayStartTs / 1000}))                                   AS today_count,
-        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${dayStartTs / 1000})  AND rating >= 3)                  AS today_correct,
-        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${weekStartTs / 1000}))                                  AS week_count,
-        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${weekStartTs / 1000}) AND rating >= 3)                  AS week_correct,
-        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${monthStartTs / 1000}))                                 AS month_count,
-        COUNT(*) FILTER (WHERE reviewed_at >= to_timestamp(${monthStartTs / 1000}) AND rating >= 3)                 AS month_correct
-      FROM card_reviews
+        COUNT(*) FILTER (WHERE r.reviewed_at >= to_timestamp(${dayStartTs / 1000}))                                   AS today_count,
+        COUNT(*) FILTER (WHERE r.reviewed_at >= to_timestamp(${dayStartTs / 1000})  AND r.rating >= 3)              AS today_correct,
+        COUNT(*) FILTER (WHERE r.reviewed_at >= to_timestamp(${weekStartTs / 1000}))                                 AS week_count,
+        COUNT(*) FILTER (WHERE r.reviewed_at >= to_timestamp(${weekStartTs / 1000}) AND r.rating >= 3)              AS week_correct,
+        COUNT(*) FILTER (WHERE r.reviewed_at >= to_timestamp(${monthStartTs / 1000}))                                AS month_count,
+        COUNT(*) FILTER (WHERE r.reviewed_at >= to_timestamp(${monthStartTs / 1000}) AND r.rating >= 3)             AS month_correct
+      FROM card_reviews r
+      JOIN cards c ON c.id = r.card_id
+      ${scopeId === undefined ? sql`` : sql`WHERE c.scope_id = ${scopeId}`}
     `),
     db.execute<{ today_count: string; week_count: string }>(sql`
       SELECT
         COUNT(*) FILTER (WHERE started_at >= to_timestamp(${dayStartTs / 1000}))  AS today_count,
         COUNT(*) FILTER (WHERE started_at >= to_timestamp(${weekStartTs / 1000})) AS week_count
       FROM sessions
+      ${scopeId === undefined ? sql`` : sql`WHERE scope_id = ${scopeId}`}
     `),
     db.execute<{ due_now: string; due_next_24h: string; active_total: string }>(sql`
       SELECT
@@ -138,14 +147,16 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
         COUNT(*) FILTER (WHERE due >  to_timestamp(${whenTs / 1000}) AND due <= to_timestamp(${next24hTs / 1000}))                 AS due_next_24h,
         COUNT(*)                                                                     AS active_total
       FROM cards
-      WHERE status = 'active'
+      WHERE status = 'active' ${scopeId === undefined ? sql`` : sql`AND scope_id = ${scopeId}`}
     `),
     db.execute<{ day: string; cnt: string }>(sql`
       SELECT
-        TO_CHAR(DATE_TRUNC('day', reviewed_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
+        TO_CHAR(DATE_TRUNC('day', r.reviewed_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
         COUNT(*)                                                                  AS cnt
-      FROM card_reviews
-      WHERE reviewed_at >= to_timestamp(${yearStartTs / 1000})
+      FROM card_reviews r
+      JOIN cards c ON c.id = r.card_id
+      WHERE r.reviewed_at >= to_timestamp(${yearStartTs / 1000})
+        ${scopeId === undefined ? sql`` : sql`AND c.scope_id = ${scopeId}`}
       GROUP BY day
       ORDER BY day
     `),
@@ -158,7 +169,11 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
         cardsCorrect: sessions.cardsCorrect,
       })
       .from(sessions)
-      .where(isNotNull(sessions.finishedAt))
+      .where(
+        scopeId === undefined
+          ? isNotNull(sessions.finishedAt)
+          : and(isNotNull(sessions.finishedAt), eq(sessions.scopeId, scopeId)),
+      )
       .orderBy(desc(sessions.startedAt))
       .limit(10),
     // FSRS state is stored as flat columns on `cards`, not as a JSON column.
@@ -168,15 +183,18 @@ export async function computeStats(db: Db, when: Date): Promise<StatsResponse> {
       SELECT COUNT(*) as count
       FROM cards
       WHERE status = 'active' AND stability >= 10
+      ${scopeId === undefined ? sql`` : sql`AND scope_id = ${scopeId}`}
     `),
     // Bounded streak window. The streak loop stops at the first gap
     // day, so anything older than ~2 months is dead weight; the prior
     // unbounded SELECT DISTINCT scanned the entire card_reviews table.
     // 90 days covers any realistic streak comfortably.
     db.execute<{ review_date: Date | string }>(sql`
-      SELECT DISTINCT date_trunc('day', reviewed_at) as review_date
-      FROM card_reviews
-      WHERE reviewed_at >= to_timestamp(${(whenTs - 90 * 24 * 3600 * 1000) / 1000})
+      SELECT DISTINCT date_trunc('day', r.reviewed_at) as review_date
+      FROM card_reviews r
+      JOIN cards c ON c.id = r.card_id
+      WHERE r.reviewed_at >= to_timestamp(${(whenTs - 90 * 24 * 3600 * 1000) / 1000})
+        ${scopeId === undefined ? sql`` : sql`AND c.scope_id = ${scopeId}`}
       ORDER BY review_date DESC
     `),
   ])

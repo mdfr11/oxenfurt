@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { FsrsService } from '@oxenfurt/shared'
-import { getTestDb, resetTestDb } from '../db/testing.ts'
+import { getTestDb, resetTestDb, testScopeRef, testScopes } from '../db/testing.ts'
 import { assignmentItems, assignments, cards } from '../db/schema.ts'
 import { ingestCards } from '../ingest/cards.ts'
 import { createDiagnosticsRouter } from './router.ts'
@@ -19,6 +19,7 @@ beforeEach(async () => {
 async function seedCards(count: number, source = 'lesson-2026-07-28'): Promise<string[]> {
   await ingestCards(
     conn!.db,
+    testScopeRef(),
     fsrs,
     {
       cards: Array.from({ length: count }, (_, i) => ({
@@ -40,7 +41,8 @@ async function seedCards(count: number, source = 'lesson-2026-07-28'): Promise<s
 }
 
 function app() {
-  return createDiagnosticsRouter({ db: conn!.db, ingestToken: INGEST_TOKEN, now: () => NOW })
+  return createDiagnosticsRouter({ db: conn!.db, tokenScopes: new Map([[INGEST_TOKEN, testScopeRef()]]),
+    now: () => NOW, })
 }
 
 function get() {
@@ -125,7 +127,7 @@ describe.skipIf(noDb)('GET /agent/diagnostics', () => {
     // denominator and the unfinished list, not just get marked "completed".
     const [row] = await conn!.db
       .insert(assignments)
-      .values({ title: 'Тест на архив', status: 'active', dueAt: new Date('2026-08-10T21:00:00.000Z') })
+      .values({ scopeId: testScopeRef().id, title: 'Тест на архив', status: 'active', dueAt: new Date('2026-08-10T21:00:00.000Z') })
       .returning()
     await conn!.db.insert(assignmentItems).values([
       { assignmentId: row!.id, cardId: ids[0]!, groupLabel: 'Тема', groupKind: 'topic' as const, position: 0, completedAt: null },
@@ -186,7 +188,7 @@ describe.skipIf(noDb)('GET /agent/diagnostics', () => {
     const ids = await seedCards(3)
     const [row] = await conn!.db
       .insert(assignments)
-      .values({ title: 'Пассивный залог', status: 'expired', dueAt: new Date('2026-08-01T21:00:00.000Z') })
+      .values({ scopeId: testScopeRef().id, title: 'Пассивный залог', status: 'expired', dueAt: new Date('2026-08-01T21:00:00.000Z') })
       .returning()
     await conn!.db.insert(assignmentItems).values(
       ids.map((cardId, i) => ({

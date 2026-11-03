@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { FsrsService } from '@oxenfurt/shared'
-import { getTestDb, resetTestDb } from '../db/testing.ts'
+import { getTestDb, resetTestDb, testScopeRef, testScopes } from '../db/testing.ts'
 import { cardQuestions, cards } from '../db/schema.ts'
 import { ingestCards } from '../ingest/cards.ts'
 import { signSession } from '../auth/jwt.ts'
@@ -27,6 +27,7 @@ async function authHeader(): Promise<string> {
 async function seedVocabCard(): Promise<string> {
   await ingestCards(
     conn!.db,
+    testScopeRef(),
     fsrs,
     {
       cards: [
@@ -50,10 +51,11 @@ async function seedVocabCard(): Promise<string> {
 }
 
 function userApp() {
-  return createUserQuestionsRouter({ db: conn!.db, jwtSecret: JWT_SECRET, now: () => NOW })
+  return createUserQuestionsRouter({ db: conn!.db, jwtSecret: JWT_SECRET, scopes: testScopes(), now: () => NOW })
 }
 function agentApp() {
-  return createAgentQuestionsRouter({ db: conn!.db, ingestToken: INGEST_TOKEN, now: () => NOW })
+  return createAgentQuestionsRouter({ db: conn!.db, tokenScopes: new Map([[INGEST_TOKEN, testScopeRef()]]),
+    now: () => NOW, })
 }
 
 describe.skipIf(noDb)('user /questions', () => {

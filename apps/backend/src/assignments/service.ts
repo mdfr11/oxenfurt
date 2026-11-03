@@ -37,10 +37,14 @@ export async function expireStaleAssignments(db: Queryable, now: Date): Promise<
 export async function loadActiveAssignment(
   db: Db,
   now: Date,
+  scopeId: string,
 ): Promise<ActiveAssignmentResponse> {
   await expireStaleAssignments(db, now)
 
-  const [row] = await db.select().from(assignments).where(eq(assignments.status, 'active'))
+  const [row] = await db
+    .select()
+    .from(assignments)
+    .where(and(eq(assignments.status, 'active'), eq(assignments.scopeId, scopeId)))
   if (row === undefined) return { assignment: null, items: [] }
 
   const items = await loadAssignmentItems(db, row.id)
@@ -56,10 +60,18 @@ export async function loadAssignmentById(
   db: Db,
   id: string,
   now: Date,
+  scopeId?: string,
 ): Promise<AssignmentDetailResponse | null> {
   await expireStaleAssignments(db, now)
 
-  const [row] = await db.select().from(assignments).where(eq(assignments.id, id))
+  const [row] = await db
+    .select()
+    .from(assignments)
+    .where(
+      scopeId === undefined
+        ? eq(assignments.id, id)
+        : and(eq(assignments.id, id), eq(assignments.scopeId, scopeId)),
+    )
   if (row === undefined) return null
 
   const items = await loadAssignmentItems(db, row.id)
@@ -67,20 +79,22 @@ export async function loadAssignmentById(
 }
 
 /**
- * The most recently created assignment, regardless of status. Home shows it
- * as a "done — replay" card until its deadline; without this the finished
- * assignment disappears the moment the last card is taken, which is exactly
- * when the learner wants to run it again.
+ * The most recently created assignment in a scope, regardless of status.
+ * Home shows it as a "done — replay" card until its deadline; without this
+ * the finished assignment disappears the moment the last card is taken,
+ * which is exactly when the learner wants to run it again.
  */
 export async function loadLatestAssignment(
   db: Db,
   now: Date,
+  scopeId: string,
 ): Promise<AssignmentDto | null> {
   await expireStaleAssignments(db, now)
 
   const [row] = await db
     .select()
     .from(assignments)
+    .where(eq(assignments.scopeId, scopeId))
     .orderBy(desc(assignments.createdAt))
     .limit(1)
   if (row === undefined) return null
@@ -112,6 +126,7 @@ export async function listAssignments(
   db: Db,
   now: Date,
   limit = 50,
+  scopeId?: string,
 ): Promise<AssignmentListItemDto[]> {
   await expireStaleAssignments(db, now)
 
@@ -124,6 +139,7 @@ export async function listAssignments(
     .from(assignments)
     .leftJoin(assignmentItems, eq(assignmentItems.assignmentId, assignments.id))
     .leftJoin(cards, eq(cards.id, assignmentItems.cardId))
+    .where(scopeId === undefined ? undefined : eq(assignments.scopeId, scopeId))
     .groupBy(assignments.id)
     .orderBy(desc(assignments.createdAt))
     .limit(limit)
@@ -156,11 +172,18 @@ export async function listAssignments(
  * cannot wrongly complete anything. Holding it across both reads means a
  * reader doesn't have to reconstruct that argument.
  */
-export async function markCardCompleted(db: Queryable, cardId: string, at: Date): Promise<void> {
+export async function markCardCompleted(
+  db: Queryable,
+  scopeId: string,
+  cardId: string,
+  at: Date,
+): Promise<void> {
+  // One active assignment PER SCOPE — the scope's own slot is the only
+  // one a card of that scope can move.
   const [active] = await db
     .select()
     .from(assignments)
-    .where(eq(assignments.status, 'active'))
+    .where(and(eq(assignments.status, 'active'), eq(assignments.scopeId, scopeId)))
     .for('update')
   if (active === undefined) return
 
@@ -178,7 +201,7 @@ export async function markCardCompleted(db: Queryable, cardId: string, at: Date)
 
   if (updated.length === 0) return
 
-  await settleActiveAssignment(db, at)
+  await settleActiveAssignment(db, scopeId, at)
 }
 
 /**
@@ -205,11 +228,15 @@ export async function markCardCompleted(db: Queryable, cardId: string, at: Date)
  * row in `applyReview`/`archiveCard`) take that lock first, so the order is
  * always card-then-assignment and this can't deadlock against them.
  */
-export async function settleActiveAssignment(db: Queryable, at: Date): Promise<void> {
+export async function settleActiveAssignment(
+  db: Queryable,
+  scopeId: string,
+  at: Date,
+): Promise<void> {
   const [active] = await db
     .select()
     .from(assignments)
-    .where(eq(assignments.status, 'active'))
+    .where(and(eq(assignments.status, 'active'), eq(assignments.scopeId, scopeId)))
     .for('update')
   if (active === undefined) return
 

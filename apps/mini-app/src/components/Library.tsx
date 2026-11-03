@@ -12,6 +12,7 @@ import type {
   TheoryPayload,
   VocabPayload,
 } from '@oxenfurt/shared'
+import { getScopeSlug } from '../lib/scope'
 import { fetchWithAuth } from '../lib/api'
 import { Markdown } from './Markdown'
 import { useT } from '../lib/i18n/useT'
@@ -91,7 +92,7 @@ export function Library({ onExit, autoOpenCardId, onAutoOpenConsumed }: LibraryP
   }, [statusFilter, typeFilter, debouncedSearch, sourceFilter])
 
   const { data: sourcesData } = useQuery({
-    queryKey: ['cards', 'sources', statusFilter],
+    queryKey: [getScopeSlug() ?? 'no-scope', 'cards', 'sources', statusFilter],
     queryFn: async () => {
       const res = await fetchWithAuth(`/cards/sources?status=${statusFilter}`)
       if (!res.ok) throw new Error('Failed to load sources')
@@ -100,7 +101,7 @@ export function Library({ onExit, autoOpenCardId, onAutoOpenConsumed }: LibraryP
   })
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['cards', 'list', queryParams],
+    queryKey: [getScopeSlug() ?? 'no-scope', 'cards', 'list', queryParams],
     queryFn: async () => {
       const res = await fetchWithAuth(`/cards?${queryParams}`)
       if (!res.ok) throw new Error('Failed to load library')

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { BottomSheet } from './BottomSheet'
 import { BookOpen, Quote, Type, X, HelpCircle } from 'lucide-react'
 import type { CardListDto, PhrasePayload, TheoryPayload, VocabPayload } from '@oxenfurt/shared'
+import { getScopeSlug } from '../lib/scope'
 import { fetchWithAuth } from '../lib/api'
 import { useT } from '../lib/i18n/useT'
 
@@ -19,7 +20,7 @@ interface Props {
 export function RelatedCardsSheet({ cardId, source, isOpen, onClose }: Props) {
   const t = useT()
   const { data, isLoading } = useQuery({
-    queryKey: ['cards', cardId, 'related'],
+    queryKey: [getScopeSlug() ?? 'no-scope', 'cards', cardId, 'related'],
     enabled: isOpen && cardId !== null && source !== null,
     queryFn: async () => {
       const res = await fetchWithAuth(`/cards/${cardId}/related`)
