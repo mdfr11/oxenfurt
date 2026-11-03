@@ -54,6 +54,7 @@ import { ClozeFeedback } from './practice/ClozeFeedback';
 import { RatingButton } from './practice/RatingButton';
 import { SpeedChip } from './practice/SpeedChip';
 import { SrsHelpSheet } from './practice/SrsHelpSheet';
+import { ScopeChip } from './practice/ScopeChip';
 import { TheoryGradeFeedback } from './practice/TheoryGradeFeedback';
 import { TypedAnswerField } from './practice/TypedAnswerField';
 import { EditCardSheet } from './EditCardSheet';
@@ -926,6 +927,7 @@ export function PracticeSession({
             : t('practice.card_n_of_m', { current: currentIndex + 1, total: queue.length })}
         </span>
         <div className="flex items-center gap-3">
+          <ScopeChip />
           {currentCard!.type === 'vocab' && (
             <span className="text-app-primary flex items-center gap-1">
               <Type size={12} strokeWidth={2.5} /> {t('practice.word_badge')}

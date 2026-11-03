@@ -123,6 +123,9 @@ Fill in:
 - `JWT_SECRET` — `openssl rand -base64 32` on the VPS
 - `INGEST_TOKEN` — `openssl rand -hex 32` on the VPS
 - `DATABASE_URL` — paste the password from `/etc/oxenfurt/.pg_password`
+- `SCOPES` / `INGEST_TOKENS` — optional, multi-scope installs only; see
+  `deploy/env/backend.env.example` and `deploy/hermes/integration.md`
+  → "Adding a scope"
 
 Permissions:
 
@@ -300,7 +303,7 @@ gunzip -c /opt/oxenfurt/backups/oxenfurt-20260515-030014.sql.gz \
 
 ### Token rotation
 
-To rotate `INGEST_TOKEN`:
+The default scope's agent token (`INGEST_TOKEN`):
 
 ```sh
 NEW=$(openssl rand -hex 32)
@@ -308,6 +311,23 @@ sed -i "s/^INGEST_TOKEN=.*/INGEST_TOKEN=${NEW}/" /etc/oxenfurt/backend.env
 sed -i "s/^OXENFURT_INGEST_TOKEN=.*/OXENFURT_INGEST_TOKEN=${NEW}/" /etc/oxenfurt/hermes-shared.env
 systemctl restart oxenfurt-backend hermes-english
 ```
+
+On a multi-scope install each additional scope has its own token inside
+`INGEST_TOKENS=slug=token,...` (in `backend.env`) mirrored into that
+agent's env leaf (`/etc/oxenfurt/hermes-<slug>.env`). Rotate them the
+same way — replace the value after `slug=`, in both files, then restart
+the backend and that scope's Hermes service:
+
+```sh
+NEW=$(openssl rand -hex 32)
+SLUG=go
+sed -i "s/\(${SLUG}=\)[0-9a-f]*/\1${NEW}/" /etc/oxenfurt/backend.env
+sed -i "s/^OXENFURT_INGEST_TOKEN=.*/OXENFURT_INGEST_TOKEN=${NEW}/" /etc/oxenfurt/hermes-${SLUG}.env
+systemctl restart oxenfurt-backend hermes-${SLUG}
+```
+
+Rotating one scope's token never disturbs the others — a token IS its
+scope, and the others simply don't match it anymore.
 
 JWT_SECRET rotation invalidates existing sessions — users have to re-open
 the Mini App. Same procedure: edit `backend.env`, restart backend.

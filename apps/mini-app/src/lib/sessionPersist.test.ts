@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { FsrsService, type DueCardDto } from '@oxenfurt/shared'
-import { loadSession, saveSession, type PersistedSession } from './sessionPersist'
+import { adoptLegacyPause, loadSession, saveSession, type PersistedSession } from './sessionPersist'
 
 const storage = new Map<string, string>()
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
@@ -94,3 +94,33 @@ describe('loadSession with legacy replay cards', () => {
     expect(JSON.parse(storage.get('oxenfurt_session')!)).toEqual(saved)
   })
 })
+
+describe('adoptLegacyPause', () => {
+  test('stamps a pre-scope pause with the default scope so it resumes again', () => {
+    const saved = session(['a', 'b', 'c'], 1)
+    delete (saved as Partial<PersistedSession>).scope
+    saveSession(saved)
+
+    // Before the upgrade the pause is invisible to every scope.
+    expect(loadSession(undefined, 'english')).toBeNull()
+
+    adoptLegacyPause('english')
+    expect(loadSession(undefined, 'english')!.cards.map((c) => c.id)).toEqual(['a', 'b', 'c'])
+    // …and still does not leak into other scopes.
+    expect(loadSession(undefined, 'go')).toBeNull()
+  })
+
+  test('leaves pauses that already carry a scope untouched', () => {
+    const saved = session(['a', 'b'], 0)
+    saveSession({ ...saved, scope: 'english' })
+    adoptLegacyPause('go')
+    expect(loadSession(undefined, 'english')!.cards).toHaveLength(2)
+    expect(loadSession(undefined, 'go')).toBeNull()
+  })
+
+  test('no-op when nothing is paused', () => {
+    adoptLegacyPause('english')
+    expect(storage.has('oxenfurt_session')).toBe(false)
+  })
+})
+

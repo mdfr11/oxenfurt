@@ -5,7 +5,9 @@ import { Spinner } from '@telegram-apps/telegram-ui'
 import { ArrowLeft, Scroll, Trophy, Key, FlaskConical, Feather } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { HeatmapCell, RecentSession, StatsResponse } from '@oxenfurt/shared'
-import { getScopeSlug } from '../lib/scope'
+import { useScopeSlug } from '../lib/scope'
+import { useScopes } from '../hooks/useScopes'
+import { ScopeSwitcher } from './ScopeSwitcher'
 import { fetchWithAuth } from '../lib/api'
 import { useT } from '../lib/i18n/useT'
 import { formatDate, formatTime } from '../lib/dates'
@@ -18,6 +20,11 @@ interface StatsProps {
 
 export function Stats({ onExit }: StatsProps) {
   const t = useT()
+  // The screen renders per-scope data; the pill row lets the learner
+  // switch decks without bouncing through Home. useScopeSlug subscribes,
+  // so a switch re-renders and the query key below refetches.
+  const scopeSlug = useScopeSlug()
+  const scopesQuery = useScopes()
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
     try {
@@ -37,7 +44,7 @@ export function Stats({ onExit }: StatsProps) {
   }, [onExit])
 
   const { data, isLoading, error } = useQuery({
-    queryKey: [getScopeSlug() ?? 'no-scope', 'sessions', 'stats'],
+    queryKey: [scopeSlug ?? 'no-scope', 'sessions', 'stats'],
     queryFn: async () => {
       const res = await fetchWithAuth('/sessions/stats')
       if (!res.ok) throw new Error(`stats fetch failed: ${res.status}`)
@@ -92,6 +99,10 @@ export function Stats({ onExit }: StatsProps) {
           <ArrowLeft size={18} />
         </button>
         <h1 className="text-xl font-bold leading-none flex-1">{t('stats.title')}</h1>
+      </div>
+
+      <div className="px-4 pb-1">
+        <ScopeSwitcher scopes={scopesQuery.data?.scopes ?? []} />
       </div>
 
       <div className="px-4 flex flex-col gap-5">

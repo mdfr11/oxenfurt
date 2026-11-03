@@ -4,12 +4,13 @@
 
 # Oxenfurt
 
+[![CI](https://github.com/mdfr11/oxenfurt/actions/workflows/ci.yml/badge.svg)](https://github.com/mdfr11/oxenfurt/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Bun](https://img.shields.io/badge/Bun-1.3-black?logo=bun)](https://bun.sh)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev)
 [![Telegram](https://img.shields.io/badge/Telegram-Mini_App-26A5E4?logo=telegram)](https://core.telegram.org/bots/webapps)
 
-> **Your private knowledge academy.** A self-hosted Telegram Mini App that turns transcripts of your live language lessons into spaced-repetition flashcards.
+> **Your private knowledge academy.** A self-hosted Telegram Mini App that turns lesson transcripts into spaced-repetition flashcards — one deck per subject, one AI agent per deck.
 
 Named after [Oxenfurt Academy](https://witcher.fandom.com/wiki/Oxenfurt_Academy) from *The Witcher* — the city where everyone goes to learn.
 
@@ -38,6 +39,7 @@ One app, many decks. Declare scopes in the backend env (`SCOPES=english:English:
 ### 🧠 Advanced Spaced Repetition
 Powered by **FSRS-5** (Free Spaced Repetition Scheduler). Unlike basic Anki, it adapts to your memory curve per-card, minimizing review time.
 - **5 Practice Modes**: Recognition, Cloze (gap-fill), Translation, Listening (TTS), and Mixed.
+- **Typed Theory with AI Grading**: Concept cards ask you to *explain in your own words*; an LLM grades the answer against the reference by meaning — interview-style active recall, not flip-through. The verdict narrows the FSRS rating choices instead of replacing your self-assessment.
 - **Undo Window**: Made a mistake? Tap undo within 3.5s.
 - **Smart Replay**: Opt-in to re-see failed cards in the same session.
 
@@ -70,6 +72,26 @@ curl -fsSL https://raw.githubusercontent.com/mdfr11/oxenfurt/master/deploy/insta
 1. A [Telegram Bot Token](https://t.me/BotFather).
 2. Your [Telegram User ID](https://t.me/userinfobot).
 3. A domain pointed at your VPS (e.g., `oxenfurt.yourname.com`).
+
+---
+
+## 🧑‍💻 Hacking locally
+
+```sh
+# 1. Postgres (the repo compose file maps it to 127.0.0.1:5432)
+docker compose up -d postgres
+
+# 2. Backend — throwaway secrets; ENABLE_DEV_AUTH mints JWTs without Telegram
+cd apps/backend
+BOT_TOKEN=000:dev JWT_SECRET=$(openssl rand -hex 32) INGEST_TOKEN=$(openssl rand -hex 32)   DATABASE_URL=postgres://oxenfurt:oxenfurt@127.0.0.1:5432/oxenfurt   OWNER_TELEGRAM_USER_ID=99282 ENABLE_DEV_AUTH=true   bun run dev
+
+# 3. Mini App (another terminal) — dev mode mocks Telegram and talks to :3000
+cd apps/mini-app && pnpm install && pnpm dev
+```
+
+Optional: seed ~30 demo cards with `bun src/db/seed-demo.ts` (same env as
+step 2). Backend integration tests need a real Postgres via
+`TEST_DATABASE_URL` — that's exactly what CI does.
 
 ---
 

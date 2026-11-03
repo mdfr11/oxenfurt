@@ -230,6 +230,12 @@ The same `INGEST_TOKEN` will be used by Hermes in Stage 7 — note it down
 or read it later from this file. Don't leak `JWT_SECRET` or
 `INGEST_TOKEN` anywhere outside `/etc/oxenfurt/`.
 
+Optional multi-scope keys (`SCOPES`, `INGEST_TOKENS`) are documented in
+`env/backend.env.example`; the full second-agent walkthrough lives in
+`hermes/integration.md` → "Adding a scope". A single-scope install needs
+neither — the app boots with one default `english` scope that owns
+`INGEST_TOKEN`.
+
 ### Verify
 
 ```bash
@@ -239,6 +245,10 @@ stat -c '%a %U:%G' /etc/oxenfurt/backend.env  # expect: 640 root:oxenfurt
 # All required keys present, no empty values
 grep -E '^(BOT_TOKEN|OWNER_TELEGRAM_USER_ID|JWT_SECRET|INGEST_TOKEN|DATABASE_URL|PORT|NODE_ENV|ENABLE_DEV_AUTH)=' /etc/oxenfurt/backend.env \
   | awk -F= '{if (length($2) == 0) {print "EMPTY: " $1; exit 1}} END {print "all keys set"}'
+
+# Optional scope keys — present only on multi-scope installs; if INGEST_TOKENS
+# exists, every slug in it must also appear in SCOPES
+grep -E '^(SCOPES|INGEST_TOKENS)=' /etc/oxenfurt/backend.env || echo "single-scope install (no SCOPES keys)"
 ```
 
 ---

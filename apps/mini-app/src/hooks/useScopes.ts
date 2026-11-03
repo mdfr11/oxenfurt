@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { ScopesResponse, ScopeSummaryDto } from '@oxenfurt/shared'
 import { fetchWithAuth } from '../lib/api'
 import { accentColor, getScopeSlug, setScopeSlug, useScopeSlug } from '../lib/scope'
+import { adoptLegacyPause } from '../lib/sessionPersist'
 
 export const SCOPES_KEY = ['scopes'] as const
 
@@ -38,6 +39,9 @@ export function useScopes() {
     const resolved =
       stored !== null && scopes.some((s) => s.slug === stored) ? stored : scopes[0]!.slug
     if (resolved !== stored) setScopeSlug(resolved)
+    // Pauses saved before scopes existed belong to the default deck; now
+    // that its slug is known, stamp them so they can resume again.
+    adoptLegacyPause(scopes[0]!.slug)
   }, [scopes])
 
   return query

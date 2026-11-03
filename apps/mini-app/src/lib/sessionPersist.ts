@@ -96,6 +96,27 @@ export function loadSession(mode?: PracticeMode, scope?: string | null): Persist
   }
 }
 
+/**
+ * One-shot upgrade for pauses saved before scopes existed. Those pauses
+ * were created in the app's only deck, which is now the default (first
+ * configured) scope — stamp it so loadSession's scope match lets them
+ * resurface instead of silently orphaning on the other side of the
+ * upgrade. No-op for pauses that already carry a scope, and for a
+ * missing/garbled store entry.
+ */
+export function adoptLegacyPause(defaultScope: string): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw === null) return
+    const parsed = JSON.parse(raw) as Partial<PersistedSession>
+    if (parsed.scope !== undefined && parsed.scope !== null) return
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, scope: defaultScope }))
+    notify()
+  } catch {
+    // Best-effort, same as the rest of this module.
+  }
+}
+
 export function clearSession(): void {
   try {
     localStorage.removeItem(STORAGE_KEY)

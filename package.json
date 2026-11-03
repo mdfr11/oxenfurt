@@ -2,7 +2,7 @@
   "name": "oxenfurt",
   "version": "0.0.0",
   "private": true,
-  "description": "Telegram Mini App for structured English practice from live-lesson transcripts",
+  "description": "Self-hosted Telegram Mini App: AI-agent flashcards with FSRS spaced repetition, one deck per agent",
   "type": "module",
   "packageManager": "pnpm@10.8.0",
   "engines": {
