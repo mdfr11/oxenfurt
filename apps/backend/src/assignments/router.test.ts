@@ -334,3 +334,139 @@ describe.skipIf(noDb)('GET /assignments', () => {
     expect(json.assignments[0]!.status).toBe('active')
   })
 })
+
+describe.skipIf(noDb)('GET /assignments/latest', () => {
+  test('returns null when nothing has ever been created', async () => {
+    const res = await userApp().request('/latest', {
+      headers: { authorization: await userHeader() },
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ assignment: null })
+  })
+
+  test('returns the newest assignment even after it is completed', async () => {
+    const ids = await seedCards(3)
+    await post(ids)
+    await conn!.db
+      .update(assignments)
+      .set({ status: 'completed', completedAt: NOW })
+      .where(eq(assignments.status, 'active'))
+
+    const res = await userApp().request('/latest', {
+      headers: { authorization: await userHeader() },
+    })
+    const json = (await res.json()) as { assignment: { status: string; total: number } }
+    expect(json.assignment.status).toBe('completed')
+    expect(json.assignment.total).toBe(3)
+  })
+
+  test('lazily expires an overdue active assignment before returning it', async () => {
+    const ids = await seedCards(3)
+    await post(ids)
+    await conn!.db
+      .update(assignments)
+      .set({ dueAt: new Date('2026-08-03T21:00:00.000Z') })
+      .where(eq(assignments.status, 'active'))
+
+    const res = await userApp().request('/latest', {
+      headers: { authorization: await userHeader() },
+    })
+    const json = (await res.json()) as { assignment: { status: string } }
+    expect(json.assignment.status).toBe('expired')
+  })
+
+  test('is not shadowed by the /:id route', async () => {
+    // A literal path segment must win over the UUID param, otherwise this
+    // endpoint would answer 400 invalid_id.
+    const res = await userApp().request('/latest', {
+      headers: { authorization: `Bearer ${INGEST_TOKEN}` },
+    })
+    expect(res.status).toBe(200)
+  })
+})
+
+describe.skipIf(noDb)('GET /assignments/:id', () => {
+  async function createAndGetId(ids: string[]): Promise<string> {
+    const res = await post(ids)
+    return ((await res.json()) as { assignment_id: string }).assignment_id
+  }
+
+  test('400 invalid_id for a non-uuid', async () => {
+    const res = await userApp().request('/not-a-uuid', {
+      headers: { authorization: await userHeader() },
+    })
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { error: string }).error).toBe('invalid_id')
+  })
+
+  test('404 for an unknown uuid', async () => {
+    const res = await userApp().request('/99999999-9999-4999-8999-999999999999', {
+      headers: { authorization: await userHeader() },
+    })
+    expect(res.status).toBe(404)
+  })
+
+  test('returns every item, including ones already completed', async () => {
+    const ids = await seedCards(3)
+    const assignmentId = await createAndGetId(ids)
+    await conn!.db
+      .update(assignmentItems)
+      .set({ completedAt: NOW })
+      .where(eq(assignmentItems.cardId, ids[0]!))
+
+    const res = await userApp().request(`/${assignmentId}`, {
+      headers: { authorization: await userHeader() },
+    })
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as {
+      assignment: { id: string; completed: number; total: number }
+      items: { card: { id: string }; completed_at: string | null }[]
+    }
+    expect(json.assignment.id).toBe(assignmentId)
+    expect(json.assignment.total).toBe(3)
+    expect(json.assignment.completed).toBe(1)
+    expect(json.items).toHaveLength(3)
+    // A drill replays the whole set, so completed items must still be here.
+    expect(json.items.filter((i) => i.completed_at !== null)).toHaveLength(1)
+  })
+
+  test('excludes archived cards from items and from the denominator', async () => {
+    const ids = await seedCards(3)
+    const assignmentId = await createAndGetId(ids)
+    await conn!.db.update(cards).set({ status: 'archived' }).where(eq(cards.id, ids[2]!))
+
+    const res = await userApp().request(`/${assignmentId}`, {
+      headers: { authorization: await userHeader() },
+    })
+    const json = (await res.json()) as {
+      assignment: { total: number }
+      items: unknown[]
+    }
+    expect(json.assignment.total).toBe(2)
+    expect(json.items).toHaveLength(2)
+  })
+
+  test('flips an overdue active assignment to expired on read', async () => {
+    const ids = await seedCards(3)
+    const assignmentId = await createAndGetId(ids)
+    await conn!.db
+      .update(assignments)
+      .set({ dueAt: new Date('2026-08-03T21:00:00.000Z') })
+      .where(eq(assignments.id, assignmentId))
+
+    const res = await userApp().request(`/${assignmentId}`, {
+      headers: { authorization: await userHeader() },
+    })
+    const json = (await res.json()) as { assignment: { status: string } }
+    expect(json.assignment.status).toBe('expired')
+  })
+
+  test('accepts the ingest token too', async () => {
+    const ids = await seedCards(3)
+    const assignmentId = await createAndGetId(ids)
+    const res = await userApp().request(`/${assignmentId}`, {
+      headers: { authorization: `Bearer ${INGEST_TOKEN}` },
+    })
+    expect(res.status).toBe(200)
+  })
+})

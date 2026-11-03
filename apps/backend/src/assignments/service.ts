@@ -14,6 +14,7 @@
 import { and, asc, desc, eq, isNull, lt, sql } from 'drizzle-orm'
 import type {
   ActiveAssignmentResponse,
+  AssignmentDetailResponse,
   AssignmentDto,
   AssignmentGroupDto,
   AssignmentItemDto,
@@ -42,22 +43,69 @@ export async function loadActiveAssignment(
   const [row] = await db.select().from(assignments).where(eq(assignments.status, 'active'))
   if (row === undefined) return { assignment: null, items: [] }
 
+  const items = await loadAssignmentItems(db, row.id)
+  return { assignment: toAssignmentDto(row, items), items }
+}
+
+/**
+ * One assignment by id with its cards, for the history detail sheet and for
+ * drill sessions. Lazy expiry runs first, so an overdue assignment is never
+ * served as `active` — a drill started from history sees the real status.
+ */
+export async function loadAssignmentById(
+  db: Db,
+  id: string,
+  now: Date,
+): Promise<AssignmentDetailResponse | null> {
+  await expireStaleAssignments(db, now)
+
+  const [row] = await db.select().from(assignments).where(eq(assignments.id, id))
+  if (row === undefined) return null
+
+  const items = await loadAssignmentItems(db, row.id)
+  return { assignment: toAssignmentDto(row, items), items }
+}
+
+/**
+ * The most recently created assignment, regardless of status. Home shows it
+ * as a "done — replay" card until its deadline; without this the finished
+ * assignment disappears the moment the last card is taken, which is exactly
+ * when the learner wants to run it again.
+ */
+export async function loadLatestAssignment(
+  db: Db,
+  now: Date,
+): Promise<AssignmentDto | null> {
+  await expireStaleAssignments(db, now)
+
+  const [row] = await db
+    .select()
+    .from(assignments)
+    .orderBy(desc(assignments.createdAt))
+    .limit(1)
+  if (row === undefined) return null
+
+  return toAssignmentDto(row, await loadAssignmentItems(db, row.id))
+}
+
+async function loadAssignmentItems(
+  db: Queryable,
+  assignmentId: string,
+): Promise<AssignmentItemDto[]> {
   const rows = await db
     .select({ item: assignmentItems, card: cards })
     .from(assignmentItems)
     .innerJoin(cards, eq(cards.id, assignmentItems.cardId))
-    .where(and(eq(assignmentItems.assignmentId, row.id), eq(cards.status, 'active')))
+    .where(and(eq(assignmentItems.assignmentId, assignmentId), eq(cards.status, 'active')))
     .orderBy(asc(assignmentItems.position))
 
-  const items: AssignmentItemDto[] = rows.map(({ item, card }) => ({
+  return rows.map(({ item, card }) => ({
     card: toDueDto(card),
     group_label: item.groupLabel,
     group_kind: item.groupKind,
     position: item.position,
     completed_at: item.completedAt === null ? null : item.completedAt.toISOString(),
   }))
-
-  return { assignment: toAssignmentDto(row, items), items }
 }
 
 export async function listAssignments(

@@ -12,7 +12,7 @@ import { Library } from './components/Library';
 import { Stats } from './components/Stats';
 import { AnswersScreen } from './components/AnswersScreen';
 import { loadPracticeMode, type PracticeMode } from './lib/practiceMode';
-import type { AssignmentOutcome } from './components/assignmentHelpers';
+import type { AssignmentOutcome, DrillOutcome } from './components/assignmentHelpers';
 
 type Screen = 'home' | 'practice' | 'summary' | 'loading' | 'library' | 'stats' | 'answers';
 
@@ -38,8 +38,15 @@ export default function App() {
   // screen with the mode reset to false, silently continuing the assignment
   // as free practice against the FSRS due queue.
   const [assignmentMode, setAssignmentMode] = useState(false);
+  // Drill ("Круги") session: which assignment to replay and which round.
+  // Null in every other mode. Parsed from the hash for the same reason as
+  // `assignmentMode` — a reload must not silently turn a replay into a free
+  // session against the FSRS due queue.
+  const [drill, setDrill] = useState<{ assignmentId: string; round: number } | null>(null);
   // Counts for the post-assignment Summary. Null for a free session.
   const [assignmentOutcome, setAssignmentOutcome] = useState<AssignmentOutcome | null>(null);
+  // Counts for the post-round Summary. Null unless the sitting was a drill.
+  const [drillOutcome, setDrillOutcome] = useState<DrillOutcome | null>(null);
   // Deep-link target for Library — when set, Library auto-opens this
   // card after its list query lands. Used by AnswersScreen's "jump to
   // card" affordance; cleared as soon as Library consumes it so going
@@ -55,10 +62,20 @@ export default function App() {
       else if (h.includes('stats')) setScreen('stats')
       else if (h.includes('answers')) setScreen('answers')
       else if (h.includes('practice')) {
-        // `#practice/assignment` vs `#practice`. The suffix is what survives
-        // a reload, so it — not React state — decides which queue the
-        // session runs against.
-        setAssignmentMode(h.includes('assignment'))
+        // `#practice/assignment`, `#practice/drill/<id>[/<round>]` or plain
+        // `#practice`. The suffix is what survives a reload, so it — not
+        // React state — decides which queue the session runs against.
+        const drillMatch = h.match(/practice\/drill\/([0-9a-f-]{36})(?:\/(\d+))?/i)
+        if (drillMatch) {
+          setDrill({
+            assignmentId: drillMatch[1]!,
+            round: drillMatch[2] === undefined ? 1 : Number(drillMatch[2]),
+          })
+          setAssignmentMode(false)
+        } else {
+          setDrill(null)
+          setAssignmentMode(h.includes('assignment'))
+        }
         setScreen('practice')
       }
       // `#summary` must be matched BEFORE the generic `home` fallback
@@ -157,9 +174,12 @@ export default function App() {
             <PracticeSession
               mode={practiceMode}
               assignmentMode={assignmentMode}
-              onComplete={(total, correct, assignment) => {
+              drillAssignmentId={drill?.assignmentId ?? null}
+              drillRound={drill?.round ?? 1}
+              onComplete={(total, correct, assignment, drillResult) => {
                 setStats({ total, correct });
                 setAssignmentOutcome(assignment);
+                setDrillOutcome(drillResult);
                 window.location.hash = '#summary';
               }}
               onExit={() => {
@@ -172,13 +192,24 @@ export default function App() {
             <Summary
               stats={stats}
               assignment={assignmentOutcome}
+              drill={drillOutcome}
               onFinish={() => { window.location.hash = '#home'; }}
-              // The assignment queue is spent by the time Summary shows, so
-              // a follow-up round is free practice — same as it was before
-              // assignments existed. The bare `#practice` hash is what says
-              // so; handleHash turns the mode off.
+              // Free-session only: after an assignment sitting, "repeat"
+              // replays the same set in drill mode instead of dropping into
+              // the due queue, so this path is never the assignment way out.
               onRepeatHard={() => {
                 window.location.hash = '#practice';
+              }}
+              // The finished assignment (or the round just played) is
+              // replayable by design: one pass is not the same as knowing it.
+              // The next round is a fresh session, never an extension of the
+              // one that just ended.
+              onRepeat={() => {
+                const assignmentId =
+                  drillOutcome?.assignmentId ?? assignmentOutcome?.assignmentId
+                if (assignmentId === undefined) return
+                const nextRound = (drillOutcome?.round ?? 0) + 1
+                window.location.hash = `#practice/drill/${assignmentId}/${nextRound}`;
               }}
             />
           </motion.div>
@@ -225,6 +256,10 @@ export default function App() {
               // a practice screen whose exit button does nothing.
               onStartAssignment={() => {
                 window.location.hash = '#practice/assignment';
+              }}
+              onRepeatAssignment={(assignmentId) => {
+                // A replay always starts from round 1 as a fresh session.
+                window.location.hash = `#practice/drill/${assignmentId}/1`;
               }}
               onOpenLibrary={() => { window.location.hash = '#library'; }}
               onOpenStats={() => { window.location.hash = '#stats'; }}

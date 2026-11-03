@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { mainButton } from '@telegram-apps/sdk-react';
 import { Library as LibraryIcon, BarChart3, Settings, Flame, ChevronDown, GraduationCap, X, History } from 'lucide-react';
@@ -16,12 +16,15 @@ import { AssignmentHistory } from './AssignmentHistory';
 import { BottomSheet } from './BottomSheet';
 import { Markdown } from './Markdown';
 import { useActiveAssignment } from '../hooks/useActiveAssignment';
+import { useLatestAssignment } from '../hooks/useAssignmentData';
 
 import { motion } from 'framer-motion';
 
 interface HomeProps {
   onStart: (mode: PracticeMode) => void;
   onStartAssignment: () => void;
+  /** Replays a finished assignment in drill mode, starting from round 1. */
+  onRepeatAssignment: (assignmentId: string) => void;
   onOpenLibrary: () => void;
   onOpenStats: () => void;
   onOpenAnswers: () => void;
@@ -51,7 +54,7 @@ function getRank(t: T, count: number): string {
   return t('rank.beginner')
 }
 
-export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, onOpenAnswers, userFirstName }: HomeProps) {
+export function Home({ onStart, onStartAssignment, onRepeatAssignment, onOpenLibrary, onOpenStats, onOpenAnswers, userFirstName }: HomeProps) {
   const [mode, setMode] = useState<PracticeMode>(() => loadPracticeMode());
   const [isSettingsOpen, setIsSettingsOpen] = useState(() => window.location.hash === '#settings');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -83,8 +86,34 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
     refetchOnMount: 'always',
   });
 
-  const { data: assignmentData, isPending: isAssignmentPending } = useActiveAssignment();
-  const assignment = assignmentData?.assignment ?? null;
+  const activeQuery = useActiveAssignment();
+  const assignment = activeQuery.data?.assignment ?? null;
+  // A submitted assignment must not vanish the moment the last card is
+  // taken: that is exactly when the learner wants to run it again. Home keeps
+  // the latest one on screen until its deadline, and the primary action
+  // becomes "Повторить задание". Only fetched when nothing is active.
+  const latestEnabled = activeQuery.data !== undefined && activeQuery.data.assignment === null;
+  const {
+    data: latestData,
+    isPending: isLatestPending,
+    // Time of the last successful fetch. Reading the clock during render is
+    // impure (and lint-enforced); this is the same information, already held
+    // in state, and it flips at the same 30 s cadence as the refetch.
+    dataUpdatedAt: latestFetchedAt,
+  } = useLatestAssignment({ enabled: latestEnabled });
+  const repeatable = useMemo(() => {
+    if (assignment !== null) return null;
+    const candidate = latestData?.assignment ?? null;
+    if (candidate === null || candidate.status !== 'completed') return null;
+    if (candidate.total === 0) return null;
+    // After the deadline the assignment belongs to history, not to today.
+    if (latestFetchedAt === 0 || new Date(candidate.due_at).getTime() <= latestFetchedAt) {
+      return null;
+    }
+    return candidate;
+  }, [assignment, latestData?.assignment, latestFetchedAt]);
+  const displayedAssignment = assignment ?? repeatable;
+  const isAssignmentPending = activeQuery.isPending || (latestEnabled && isLatestPending);
   const [isRationaleOpen, setIsRationaleOpen] = useState(false);
 
   const { data: unreadData } = useQuery({
@@ -144,7 +173,9 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
     ? t('home.resume_session')
     : assignment
       ? t('assignment.continue')
-      : t('home.start_session');
+      : repeatable
+        ? t('assignment.repeat')
+        : t('home.start_session');
 
   // Caption for the free session the button below it starts. Shown only when
   // that IS what the button starts: an assignment session runs the whole
@@ -198,8 +229,9 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
   const startMainAction = useCallback(() => {
     if (pausedSession) onStart(pausedSession.mode);
     else if (assignment) onStartAssignment();
+    else if (repeatable) onRepeatAssignment(repeatable.id);
     else onStart(mode);
-  }, [pausedSession, assignment, mode, onStart, onStartAssignment]);
+  }, [pausedSession, assignment, repeatable, mode, onStart, onStartAssignment, onRepeatAssignment]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
@@ -295,7 +327,7 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
           than clips — on a 360×640 viewport a five-group assignment can
           outgrow the space left between the header and the CTA, and the CTA
           is the one thing that must never move off screen. */}
-      {assignment && (
+      {displayedAssignment && (
         <div
           className="flex-1 min-h-0 overflow-y-auto flex flex-col relative z-0"
           style={{
@@ -320,7 +352,11 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
             {(unreadCount > 0 || pausedSession) && (
               <div className="flex flex-col gap-2.5 mb-4">{notifications}</div>
             )}
-            <AssignmentCard assignment={assignment} onOpenRationale={() => setIsRationaleOpen(true)} />
+            <AssignmentCard
+              assignment={displayedAssignment}
+              completed={repeatable !== null}
+              onOpenRationale={() => setIsRationaleOpen(true)}
+            />
           </div>
         </div>
       )}
@@ -344,7 +380,7 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
           Nothing moves when the content fits: even spacers reproduce
           `justify-center` exactly, the gap is still the 32 px `mb-8` was, and
           `overflow-y: auto` reserves no scrollbar space until it scrolls. */}
-      {!assignment && (
+      {!displayedAssignment && (
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col relative z-0">
           <div className="flex-1 min-h-0 flex flex-col items-center">
             <div className="flex-1 min-h-0" />
@@ -480,9 +516,21 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
             {mainActionLabel}
           </button>
 
-          {!assignment && modeCaption}
+          {!displayedAssignment && modeCaption}
 
-          {assignment && !pausedSession && (
+          {/* A paused free session outranks everything on the main CTA, so
+              the replay would otherwise be reachable only through history.
+              Text weight keeps it subordinate to both actions. */}
+          {repeatable && pausedSession && (
+            <button
+              onClick={() => onRepeatAssignment(repeatable.id)}
+              className="mx-auto mt-2.5 mb-3 block px-3 text-[11px] font-bold text-app-hint underline underline-offset-4 decoration-app-hint/30 active:opacity-60 transition-opacity"
+            >
+              {t('assignment.repeat')}
+            </button>
+          )}
+
+          {displayedAssignment && !pausedSession && (
             // The pressure valve: free practice one tap away, set as text
             // rather than a filled or bordered control. With chrome it rhymed
             // with the navigation row below and the eye filed it there. Text
@@ -517,14 +565,14 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
         </div>
       </div>
 
-      {assignment !== null && assignment.rationale !== null && (
+      {displayedAssignment !== null && displayedAssignment.rationale !== null && (
         <BottomSheet isOpen={isRationaleOpen} onClose={() => setIsRationaleOpen(false)} maxHeight="75vh">
           <div className="flex justify-between items-start mb-4 text-app-text gap-3">
             <div className="min-w-0">
               <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold mb-0.5">
                 {t('assignment.rationale_title')}
               </div>
-              <h2 className="text-lg font-bold leading-tight">{assignment.title}</h2>
+              <h2 className="text-lg font-bold leading-tight">{displayedAssignment.title}</h2>
             </div>
             <button
               onClick={() => setIsRationaleOpen(false)}
@@ -535,13 +583,17 @@ export function Home({ onStart, onStartAssignment, onOpenLibrary, onOpenStats, o
             </button>
           </div>
 
-          <Markdown className="text-sm text-app-text/90">{assignment.rationale}</Markdown>
+          <Markdown className="text-sm text-app-text/90">{displayedAssignment.rationale}</Markdown>
 
           <div style={{ height: 'calc(0.5rem + var(--tg-safe-area-inset-bottom, 0px))' }} />
         </BottomSheet>
       )}
 
-      <AssignmentHistory isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
+      <AssignmentHistory
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        onRepeat={onRepeatAssignment}
+      />
 
       <SettingsSheet
         isOpen={isSettingsOpen}

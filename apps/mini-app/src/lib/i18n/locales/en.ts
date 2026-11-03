@@ -376,4 +376,18 @@ export const en: Record<keyof typeof ru, string> = {
   'assignment.status_active': 'In progress',
   'assignment.status_completed': 'Done',
   'assignment.status_expired': 'Missed',
+  'assignment.repeat': 'Repeat assignment',
+  'assignment.done_badge': '✅ Done',
+  'assignment.history_repeat': 'Repeat',
+  'assignment.history_loading': 'Loading contents…',
+
+  // --- Assignment drills ("circles") ---
+  'drill.title': 'Round {round} done',
+  'drill.subtitle': 'Correct answers: {correct} of {total}',
+  'drill.round_label': 'Round {round}',
+  'drill.cta_again': 'Another round',
+  'drill.cta_finish': 'Finish',
+  'drill.progress': 'Round {round} · Card {current} / {total}',
+  'drill.empty_title': 'This assignment has no cards left',
+  'drill.empty_hint': 'Every card in this assignment is archived.',
 }

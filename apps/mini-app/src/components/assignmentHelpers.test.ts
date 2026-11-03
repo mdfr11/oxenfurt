@@ -3,6 +3,7 @@ import { RATING, type AssignmentDto, type AssignmentItemDto, type DueCardDto } f
 import {
   buildAssignmentOutcome,
   buildAssignmentQueue,
+  buildDrillQueue,
   deadlineState,
   isDrillRepeat,
   shouldRequeueAfterRating,
@@ -61,6 +62,22 @@ describe('buildAssignmentQueue', () => {
 
   test('returns an empty queue when everything is done', () => {
     expect(buildAssignmentQueue([item('a', 0, true)])).toEqual([]);
+  });
+});
+
+describe('buildDrillQueue', () => {
+  test('replays completed items instead of dropping them', () => {
+    const queue = buildDrillQueue([item('a', 0, true), item('b', 1, false)]);
+    expect(queue.map((c) => c.id)).toEqual(['a', 'b']);
+  });
+
+  test('keeps position order', () => {
+    const queue = buildDrillQueue([item('c', 2, true), item('a', 0, true), item('b', 1, true)]);
+    expect(queue.map((c) => c.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  test('an all-completed assignment still has a full queue', () => {
+    expect(buildDrillQueue([item('a', 0, true), item('b', 1, true)])).toHaveLength(2);
   });
 });
 
@@ -197,6 +214,7 @@ describe('buildAssignmentOutcome', () => {
   test('folds this sitting into the snapshot, per group', () => {
     const out = buildAssignmentOutcome(assignment(), items, new Set(['b', 'c']));
     expect(out).toEqual({
+      assignmentId: 'a1',
       title: 'Условные предложения',
       completed: 3,
       total: 3,

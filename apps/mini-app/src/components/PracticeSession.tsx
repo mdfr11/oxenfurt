@@ -33,13 +33,16 @@ import {
 import {
   buildAssignmentOutcome,
   buildAssignmentQueue,
+  buildDrillQueue,
   isDrillRepeat,
   shouldRequeueAfterRating,
   type AssignmentOutcome,
+  type DrillOutcome,
 } from './assignmentHelpers';
 import { stopSpeaking } from '../lib/tts';
 import { useCardAudio } from '../hooks/useCardAudio';
 import { ACTIVE_ASSIGNMENT_KEY, useActiveAssignment } from '../hooks/useActiveAssignment';
+import { LATEST_ASSIGNMENT_KEY, useAssignmentDetail } from '../hooks/useAssignmentData';
 import { Markdown } from './Markdown';
 import { getSettings } from '../lib/settings';
 import { loadSession } from '../lib/sessionPersist';
@@ -61,14 +64,33 @@ interface PracticeSessionProps {
    *  queue. Changes three things: where cards come from, that Hard cards
    *  re-queue, and that repeats are sent as drills. */
   assignmentMode?: boolean;
+  /** Assignment id for a drill ("Круги") session: replay the whole
+   *  assignment in rounds, regardless of completion status or FSRS due
+   *  dates. Mutually exclusive with `assignmentMode`. */
+  drillAssignmentId?: string | null;
+  /** 1-based round number inside a drill session. */
+  drillRound?: number;
   /** `assignment` is non-null only for an assignment session, and carries
    *  the counts Summary needs — including when the assignment just finished
-   *  and is therefore no longer fetchable as the active one. */
-  onComplete: (total: number, correct: number, assignment: AssignmentOutcome | null) => void;
+   *  and is therefore no longer fetchable as the active one. `drill` is
+   *  non-null only for a drill round. */
+  onComplete: (
+    total: number,
+    correct: number,
+    assignment: AssignmentOutcome | null,
+    drill: DrillOutcome | null,
+  ) => void;
   onExit: () => void;
 }
 
-export function PracticeSession({ mode, assignmentMode = false, onComplete, onExit }: PracticeSessionProps) {
+export function PracticeSession({
+  mode,
+  assignmentMode = false,
+  drillAssignmentId = null,
+  drillRound = 1,
+  onComplete,
+  onExit,
+}: PracticeSessionProps) {
   const t = useT();
   // Prevent double-exit or lingering handlers during transition
   const [isExiting, setIsExiting] = useState(false);
@@ -93,22 +115,36 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   // contract as sessionLimit).
   const cardTypeFilter = useMemo(() => getSettings().cardTypeFilter, [])
 
+  // Drill ("Круги") mode replays a completed assignment outside the FSRS
+  // due queue. The cards are fetched fresh on every mount (see
+  // useAssignmentDetail): the drill vs measurement decision reads
+  // `fsrs.last_review`, so a stale card would turn every same-day repeat into
+  // a new FSRS measurement.
+  const drillId = drillAssignmentId ?? null;
+  const drillMode = drillId !== null;
+  const drillQuery = useAssignmentDetail(drillId);
+  const drillCards = useMemo(
+    () => (drillMode ? buildDrillQueue(drillQuery.data?.items ?? []) : []),
+    [drillMode, drillQuery.data?.items],
+  );
+
   // Snapshot of any paused session for THIS mode. Read once so the
   // /due query can decide whether to fetch fresh cards. The
   // usePracticeQueue hook also reads localStorage internally for its
   // own init — cheap, and avoids prop-drilling the snapshot in. Kept in
   // lockstep with the `resumable` flag passed to that hook: an assignment
-  // never resumes from that store, so it must not claim to here either.
+  // or drill never resumes from that store, so it must not claim to here
+  // either.
   const hasResumedSession = useMemo(
-    () => !assignmentMode && loadSession(mode) !== null,
-    [assignmentMode, mode],
+    () => !assignmentMode && !drillMode && loadSession(mode) !== null,
+    [assignmentMode, drillMode, mode],
   )
 
-  // Assignment queue. The two sources are mutually exclusive by
-  // construction: this query only runs in assignment mode, the /due query
-  // below only runs outside it, so neither session type pays for the
-  // other's fetch.
-  const assignmentQuery = useActiveAssignment({ enabled: assignmentMode });
+  // Assignment queue. The sources are mutually exclusive by construction:
+  // this query only runs in assignment mode, the /due query below only runs
+  // outside both assignment and drill sessions, so no session pays for
+  // another's fetch.
+  const assignmentQuery = useActiveAssignment({ enabled: assignmentMode && !drillMode });
   const assignmentCards = useMemo(
     () => (assignmentMode ? buildAssignmentQueue(assignmentQuery.data?.items ?? []) : []),
     [assignmentMode, assignmentQuery.data?.items],
@@ -142,7 +178,7 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   // hook's shouldReseed guard.
   const dueQuery = useQuery({
     queryKey: ['cards', 'due', bypassDue, sessionLimit, cardTypeFilter],
-    enabled: !hasResumedSession && !assignmentMode,
+    enabled: !hasResumedSession && !assignmentMode && !drillMode,
     // A new sitting must fetch its own queue. Cached cards would seed the
     // working queue before the refetch finishes, replaying the previous
     // sitting and hiding the cards that are still due (seeding is one-shot).
@@ -168,9 +204,18 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   // `isLoading === false` and `error === null` forever, so reading them off
   // /due in assignment mode meant that while /assignments/active was still
   // in flight — or after it failed — the learner fell straight through to
-  // the "you're all done, have a coffee" empty state.
-  const isLoading = assignmentMode ? assignmentQuery.isPending : dueQuery.isLoading
-  const error = assignmentMode ? assignmentQuery.error : dueQuery.error
+  // the "you're all done, have a coffee" empty state. The same trap exists
+  // for drill sessions and /assignments/:id.
+  const isLoading = drillMode
+    ? drillQuery.isPending
+    : assignmentMode
+      ? assignmentQuery.isPending
+      : dueQuery.isLoading
+  const error = drillMode
+    ? drillQuery.error
+    : assignmentMode
+      ? assignmentQuery.error
+      : dueQuery.error
 
   const [isRevealed, setIsRevealed] = useState(false);
   // Cloze-only state — reset on each card via the effect below.
@@ -249,8 +294,12 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
     },
     onSuccess: () => {
       // Keeps Home's ring and the group counters honest the moment the
-      // user backs out mid-assignment.
-      if (assignmentMode) void queryClient.invalidateQueries({ queryKey: ACTIVE_ASSIGNMENT_KEY });
+      // user backs out mid-assignment. A drill can also close items of an
+      // assignment that is still live, so it invalidates the same keys.
+      if (assignmentMode || drillMode) {
+        void queryClient.invalidateQueries({ queryKey: ACTIVE_ASSIGNMENT_KEY });
+        void queryClient.invalidateQueries({ queryKey: LATEST_ASSIGNMENT_KEY });
+      }
     },
   });
 
@@ -273,26 +322,32 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   //       lose by NOT filtering is the original mode's variant — which
   //       doesn't apply to theory anyway.
   const baseCards = useMemo<DueCardDto[]>(() => {
-    const all = assignmentMode ? assignmentCards : (dueQuery.data?.cards ?? []);
+    const all = drillMode
+      ? drillCards
+      : assignmentMode
+        ? assignmentCards
+        : (dueQuery.data?.cards ?? []);
     const typedAnswerMode = mode === 'cloze' || mode === 'translation' || mode === 'listening'
-    // …and never in an assignment. An item the queue drops can never be
-    // answered, so it never completes, so the assignment never settles —
-    // it holds Home and blocks the next one until its deadline lapses. A
-    // saved mode preference must not be able to wedge the feature. The
-    // variant resolver degrades theory to recognition anyway, which is
+    // …and never in an assignment or drill. An item the queue drops can
+    // never be answered, so it never completes, so the assignment never
+    // settles — it holds Home and blocks the next one until its deadline
+    // lapses. A saved mode preference must not be able to wedge the feature.
+    // In a drill the same rule matters for a different reason: a round must
+    // contain the same set every time, or "Ещё круг" quietly gets shorter.
+    // The variant resolver degrades theory to recognition anyway, which is
     // exactly the trade the comment above already accepts.
-    if (typedAnswerMode && !assignmentMode && cardTypeFilter !== 'theory') {
+    if (typedAnswerMode && !assignmentMode && !drillMode && cardTypeFilter !== 'theory') {
       return all.filter((c) => c.type !== 'theory');
     }
     return all;
-  }, [assignmentMode, assignmentCards, dueQuery.data?.cards, mode, cardTypeFilter]);
+  }, [assignmentMode, drillMode, drillCards, assignmentCards, dueQuery.data?.cards, mode, cardTypeFilter]);
 
   // Queue + cursor + stats + pending-review undo slot + session-id ref
   // all live in this hook. See hooks/usePracticeQueue.ts for the why —
   // short version: the lock/unlock regression was a queue state-machine
   // bug, isolating the state makes it both easier to reason about and
   // easier to write regression tests for (see practiceHelpers.test.ts).
-  const queueState = usePracticeQueue({ mode, baseCards, resumable: !assignmentMode })
+  const queueState = usePracticeQueue({ mode, baseCards, resumable: !assignmentMode && !drillMode })
   const {
     queue,
     currentIndex,
@@ -446,10 +501,10 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
   const handleRate = (rating: Rating) => {
     if (!currentCard) return;
 
-    // Measurement vs training. Only assignments cram a card until it
-    // sticks, so only they can produce a repeat — a free session keeps
-    // posting honest reviews exactly as it always has.
-    const drill = assignmentMode && isDrillRepeat(currentCard, answeredThisSession.current, new Date());
+    // Measurement vs training. Only assignments and their replays cram a
+    // card until it sticks, so only they can produce a repeat — a free
+    // session keeps posting honest reviews exactly as it always has.
+    const drill = (assignmentMode || drillMode) && isDrillRepeat(currentCard, answeredThisSession.current, new Date());
     answeredThisSession.current.add(currentCard.id);
 
     if (rating === RATING.Again) { haptic('notificationOccurred', 'error'); playThudSound(); }
@@ -473,11 +528,12 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
       correct: sessionStats.correct + correctDelta,
     }
 
-    // Only Hard in an assignment repeats in this sitting. Again always
-    // advances without extending the queue, including on the last card.
+    // Only Hard in an assignment or drill repeats in this sitting. Again
+    // always advances without extending the queue, including on the last
+    // card; the card stays in the set and comes back on the next round.
     let replaySpliceIndex: number | null = null;
     let workingLength = queue.length;
-    if (shouldRequeueAfterRating(rating, assignmentMode)) {
+    if (shouldRequeueAfterRating(rating, assignmentMode || drillMode)) {
       replaySpliceIndex = queueState.spliceAhead(currentCard);
       workingLength = queue.length + 1;
     }
@@ -518,6 +574,20 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
       playSuccessChime()
       queueState.finishBackendSession(nextStats.total, nextStats.correct)
       queueState.markFinished();
+      // A drill round reports its own counts, not the assignment's: the
+      // assignment was already submitted, and this sitting is training on
+      // top of it. The title comes from the freshly fetched detail so
+      // Summary can name what was replayed.
+      const drillOutcome: DrillOutcome | null =
+        drillId === null
+          ? null
+          : {
+              assignmentId: drillId,
+              title: drillQuery.data?.assignment.title ?? '',
+              round: drillRound,
+              total: nextStats.total,
+              correct: nextStats.correct,
+            };
       onComplete(
         nextStats.total,
         nextStats.correct,
@@ -528,6 +598,7 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
               assignmentSnapshot.items,
               takenThisSession.current,
             ),
+        drillOutcome,
       );
     }
   };
@@ -676,16 +747,24 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
           <Coffee size={36} strokeWidth={1.5} />
         </div>
         <h2 className="text-2xl font-bold mb-2">
-          {bypassDue ? t('practice.empty_title_zero') : t('practice.empty_title_done')}
+          {drillMode
+            ? t('drill.empty_title')
+            : bypassDue
+              ? t('practice.empty_title_zero')
+              : t('practice.empty_title_done')}
         </h2>
         <p className="text-app-hint mb-10 max-w-[260px]">
-          {bypassDue ? t('practice.empty_hint_zero') : t('practice.empty_hint_done')}
+          {drillMode
+            ? t('drill.empty_hint')
+            : bypassDue
+              ? t('practice.empty_hint_zero')
+              : t('practice.empty_hint_done')}
         </p>
         <div className="flex flex-col gap-3 w-full">
-          {/* Never in an assignment: the queue IS the assignment, so
-              bypass_due has nothing to fetch — the /due query stays
+          {/* Never in an assignment or drill: the queue IS the assignment,
+              so bypass_due has nothing to fetch — the /due query stays
               disabled and the button would be a dead end. */}
-          {!bypassDue && !assignmentMode && (
+          {!bypassDue && !assignmentMode && !drillMode && (
             <button
               onClick={() => {
                 setBypassDue(true)
@@ -700,7 +779,7 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
           <button
             onClick={handleExit}
             className={`w-full py-4 rounded-2xl font-semibold text-lg active:scale-95 transition-transform ${
-              bypassDue || assignmentMode
+              bypassDue || assignmentMode || drillMode
                 ? 'bg-app-primary text-app-primary-text shadow-lg shadow-app-primary/20'
                 : 'border border-app-border bg-app-surface text-app-text'
             }`}
@@ -775,7 +854,11 @@ export function PracticeSession({ mode, assignmentMode = false, onComplete, onEx
       </div>
 
       <div className="p-4 flex justify-between items-center text-[10px] text-app-hint uppercase tracking-wider font-bold">
-        <span>{t('practice.card_n_of_m', { current: currentIndex + 1, total: queue.length })}</span>
+        <span>
+          {drillMode
+            ? t('drill.progress', { round: drillRound, current: currentIndex + 1, total: queue.length })
+            : t('practice.card_n_of_m', { current: currentIndex + 1, total: queue.length })}
+        </span>
         <div className="flex items-center gap-3">
           {currentCard!.type === 'vocab' && (
             <span className="text-app-primary flex items-center gap-1">

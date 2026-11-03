@@ -19,7 +19,14 @@ import type { Db } from '../db/client.ts'
 import { assignmentItems, assignments, cards } from '../db/schema.ts'
 import { ingestTokenAuth } from '../middleware/ingest-token.ts'
 import { jwtAuth } from '../middleware/auth.ts'
-import { expireStaleAssignments, listAssignments, loadActiveAssignment } from './service.ts'
+import { isUuid } from '../lib/uuid.ts'
+import {
+  expireStaleAssignments,
+  listAssignments,
+  loadActiveAssignment,
+  loadAssignmentById,
+  loadLatestAssignment,
+} from './service.ts'
 
 const MAX_DUE_MS = ASSIGNMENT_MAX_DUE_DAYS * 24 * 60 * 60 * 1000
 
@@ -203,10 +210,28 @@ export function createUserAssignmentsRouter(deps: UserAssignmentsRouterDeps): Ho
     return c.json(await loadActiveAssignment(deps.db, now()))
   })
 
+  // Home reads this to keep a completed assignment visible until its
+  // deadline, so it can be replayed without opening the history sheet.
+  // Registered before `/:id` so the literal segment wins over the param.
+  app.get('/latest', async (c) => {
+    return c.json({ assignment: await loadLatestAssignment(deps.db, now()) })
+  })
+
   app.get('/', async (c) => {
     const limitRaw = c.req.query('limit') ?? '50'
     const limit = Math.max(1, Math.min(100, Number.parseInt(limitRaw, 10) || 50))
     return c.json({ assignments: await listAssignments(deps.db, now(), limit) })
+  })
+
+  // Detail for the history sheet and for drill sessions: the assignment's
+  // cards, including items already completed. A completed assignment is a
+  // finished task, not a dead end — replaying it is the whole point.
+  app.get('/:id', async (c) => {
+    const id = c.req.param('id')
+    if (!isUuid(id)) return c.json({ error: 'invalid_id' }, 400)
+    const detail = await loadAssignmentById(deps.db, id, now())
+    if (detail === null) return c.json({ error: 'not_found' }, 404)
+    return c.json(detail)
   })
 
   return app

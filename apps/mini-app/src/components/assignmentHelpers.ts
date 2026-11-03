@@ -10,6 +10,7 @@ import type {
   Rating,
 } from '@oxenfurt/shared';
 import { RATING } from '@oxenfurt/shared';
+import type { TKey } from '../lib/i18n';
 
 /** Cards still owed, in the order the agent laid them out. Completed items
  *  never re-enter the queue — the assignment is a to-do list, not a deck. */
@@ -18,6 +19,18 @@ export function buildAssignmentQueue(items: AssignmentItemDto[]): DueCardDto[] {
     .filter((item) => item.completed_at === null)
     .sort((a, b) => a.position - b.position)
     .map((item) => item.card);
+}
+
+/**
+ * Every card in an assignment, in the agent's order, regardless of
+ * `completed_at`.
+ *
+ * A drill ("Круги") replays a finished assignment, so filtering completed
+ * items would produce an empty queue exactly when the learner asks for
+ * another round. Unlike `buildAssignmentQueue`, this is not a to-do list.
+ */
+export function buildDrillQueue(items: AssignmentItemDto[]): DueCardDto[] {
+  return [...items].sort((a, b) => a.position - b.position).map((item) => item.card);
 }
 
 /**
@@ -89,11 +102,33 @@ export interface AssignmentOutcomeGroup {
 
 /** What Summary shows after an assignment session. */
 export interface AssignmentOutcome {
+  /** Needed to start a replay ("Ещё круг") from Summary — the assignment is
+   *  already `completed` by then and no longer fetchable as the active one. */
+  assignmentId: string;
   title: string;
   completed: number;
   total: number;
   groups: AssignmentOutcomeGroup[];
 }
+
+/** What Summary shows after one drill round ("круг") of a replay. */
+export interface DrillOutcome {
+  assignmentId: string;
+  title: string;
+  round: number;
+  /** Every answer in the round, repeats included. */
+  total: number;
+  /** Answers rated Good or Easy. */
+  correct: number;
+}
+
+/** Map from group kind to its translated qualifier, shared by Summary and
+ *  the history sheet so the two can't drift. */
+export const GROUP_KIND_I18N_KEY: Record<GroupKind, TKey> = {
+  topic: 'assignment.group_topic',
+  new: 'assignment.group_new',
+  weak: 'assignment.group_weak',
+};
 
 /**
  * Folds the cards taken in this sitting into the assignment snapshot the
@@ -128,6 +163,7 @@ export function buildAssignmentOutcome(
   }
 
   return {
+    assignmentId: assignment.id,
     title: assignment.title,
     completed: Math.min(completed, assignment.total),
     total: assignment.total,

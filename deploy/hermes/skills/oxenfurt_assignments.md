@@ -48,6 +48,8 @@ GET  {OXENFURT_API_URL}/agent/diagnostics?limit=200   # where the learner is wea
 POST {OXENFURT_API_URL}/agent/assignments             # create
 GET  {OXENFURT_API_URL}/assignments/active            # is one live right now?
 GET  {OXENFURT_API_URL}/assignments?limit=50          # history, newest first
+GET  {OXENFURT_API_URL}/assignments/latest            # newest of any status
+GET  {OXENFURT_API_URL}/assignments/:id               # one assignment + its cards
 ```
 
 `/assignments` and `/assignments/active` are the same routes the Mini App
@@ -284,6 +286,15 @@ week's assignment. Cards do not expire.
   come back to you through `last_assignment.unfinished_card_ids`.
 - **The assignment completes itself** when every non-archived item has been
   rated Good or better once. You do not mark anything.
+- **Finished assignments stay replayable.** The Mini App keeps a completed
+  assignment on Home until its deadline and offers "Повторить задание"; the
+  learner can also replay any old assignment from history, in unlimited rounds
+  ("Круги"). Repeats are the app's business: they never change the assignment's
+  status, and same-day repeats do not reach FSRS. So when the learner says
+  "повторить" or "I still don't remember it", do **not** create a replacement
+  assignment and do **not** send `replace: true` — point them at the replay
+  button on Home or in history. The next assignment comes after the next
+  lesson, as usual.
 - **Single active assignment.** Creating one while another is live returns
   `409 assignment_active` (with `assignment_id` when the backend can name it).
   **Do NOT retry with `replace: true` automatically.** An unfinished assignment

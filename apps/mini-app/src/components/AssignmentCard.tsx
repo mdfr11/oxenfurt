@@ -1,6 +1,10 @@
 // The assignment block on Home. A dial-sized ring carrying the count, the
 // agent and the deadline beside it, and one bar per group underneath.
 //
+// A completed assignment keeps the same block until its deadline, with a
+// green ring and a "Сдано" badge: the primary action becomes the replay, not
+// the end of the story.
+//
 // Answers "why exactly this, today" — without the group breakdown an
 // assignment reads as a random pile and the agent's judgement is invisible.
 // The bars answer the follow-up: four fragile old cards left is a different
@@ -15,6 +19,9 @@ import { useT } from '../lib/i18n/useT';
 interface AssignmentCardProps {
   assignment: AssignmentDto;
   onOpenRationale: () => void;
+  /** True when this assignment is already submitted but still inside its
+   *  deadline. The card then advertises the replay instead of progress. */
+  completed?: boolean;
 }
 
 // Ring geometry in viewBox units. The full-size ring on the no-assignment
@@ -27,7 +34,7 @@ const RING_RADIUS = 80;
 const RING_STROKE = 16;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-export function AssignmentCard({ assignment, onOpenRationale }: AssignmentCardProps) {
+export function AssignmentCard({ assignment, onOpenRationale, completed = false }: AssignmentCardProps) {
   const t = useT();
   // Pinned to the deadline rather than re-read on every render — Home
   // re-renders on a 30 s refetch cadence and the day count cannot change
@@ -68,7 +75,7 @@ export function AssignmentCard({ assignment, onOpenRationale }: AssignmentCardPr
               strokeWidth={RING_STROKE}
               fill="transparent"
               strokeLinecap="round"
-              className="text-app-primary"
+              className={completed ? 'text-emerald-500' : 'text-app-primary'}
               style={{ strokeDasharray: RING_CIRCUMFERENCE, strokeDashoffset }}
             />
           </svg>
@@ -81,7 +88,7 @@ export function AssignmentCard({ assignment, onOpenRationale }: AssignmentCardPr
         <span className="flex-1 min-w-0">
           <span className="flex items-baseline justify-between gap-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-app-hint opacity-70 truncate">
-              {t('assignment.from_agent')}
+              {completed ? t('assignment.done_badge') : t('assignment.from_agent')}
             </span>
             <span
               className={`text-[10px] font-bold uppercase tracking-wider shrink-0 ${

@@ -30,7 +30,7 @@ You finish a 60-minute session with your tutor. Your head is full of 20 new word
 ## ✨ Features
 
 ### 📋 Tutor-Style Assignments
-After each lesson the agent composes a bounded, deadline-bound set of ~20 existing cards — new material, the point you struggled with, and what you keep forgetting — and that assignment becomes the app's primary screen until it's done or its deadline passes. Free practice over the full due queue stays available underneath, untouched.
+After each lesson the agent composes a bounded, deadline-bound set of ~20 existing cards — new material, the point you struggled with, and what you keep forgetting — and that assignment becomes the app's primary screen until it's done or its deadline passes. A finished assignment stays replayable in unlimited "circles" from Home or history, so one pass is never treated as proof of knowing it. Free practice over the full due queue stays available underneath, untouched.
 
 ### 🧠 Advanced Spaced Repetition
 Powered by **FSRS-5** (Free Spaced Repetition Scheduler). Unlike basic Anki, it adapts to your memory curve per-card, minimizing review time.

@@ -386,4 +386,18 @@ export const ru = {
   'assignment.status_active': 'В работе',
   'assignment.status_completed': 'Сдано',
   'assignment.status_expired': 'Просрочено',
+  'assignment.repeat': 'Повторить задание',
+  'assignment.done_badge': '✅ Сдано',
+  'assignment.history_repeat': 'Повторить',
+  'assignment.history_loading': 'Загружаем состав…',
+
+  // --- Assignment drills ("Круги") ---
+  'drill.title': 'Круг {round} готов',
+  'drill.subtitle': 'Верных ответов: {correct} из {total}',
+  'drill.round_label': 'Круг {round}',
+  'drill.cta_again': 'Ещё круг',
+  'drill.cta_finish': 'Закончить',
+  'drill.progress': 'Круг {round} · Карточка {current} / {total}',
+  'drill.empty_title': 'В задании не осталось карточек',
+  'drill.empty_hint': 'Все карточки этого задания в архиве.',
 } as const

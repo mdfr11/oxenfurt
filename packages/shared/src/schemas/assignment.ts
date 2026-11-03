@@ -76,6 +76,21 @@ export interface ActiveAssignmentResponse {
   items: AssignmentItemDto[]
 }
 
+/** One assignment by id, with its cards. Used by the history detail sheet
+ *  and by drill sessions ("circles"), which replay a finished assignment
+ *  outside the FSRS due queue. */
+export interface AssignmentDetailResponse {
+  assignment: AssignmentDto
+  items: AssignmentItemDto[]
+}
+
+/** The most recently created assignment, whatever its status. Home uses it
+ *  to keep a completed assignment on screen until its deadline, so the
+ *  learner can replay it without digging into history. */
+export interface LatestAssignmentResponse {
+  assignment: AssignmentDto | null
+}
+
 export interface AssignmentListItemDto {
   id: string
   title: string
