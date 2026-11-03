@@ -85,7 +85,10 @@ export function createApp(deps: AppDeps): Hono {
           return null
         },
         credentials: !allowAny,
-        allowHeaders: ['authorization', 'content-type'],
+        // x-scope rides every Mini App request since scopes; without it in
+        // the allow-list the dev CORS preflight rejects the header and
+        // every fetch fails (production is same-origin and unaffected).
+        allowHeaders: ['authorization', 'content-type', 'x-scope'],
       }),
     )
   }

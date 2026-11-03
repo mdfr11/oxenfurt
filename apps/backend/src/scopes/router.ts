@@ -10,7 +10,7 @@ import type { ScopeRow } from '../db/schema.ts'
 import type { ScopesResponse, ScopeSummaryDto } from '@oxenfurt/shared'
 import type { Db } from '../db/client.ts'
 import { assignments, cards } from '../db/schema.ts'
-import { jwtAuthWithScope } from '../middleware/scope.ts'
+import { jwtAuth } from '../middleware/auth.ts'
 
 export interface ScopesRouterDeps {
   db: Db
@@ -23,7 +23,12 @@ export function createScopesRouter(deps: ScopesRouterDeps): Hono {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
 
-  app.use('*', jwtAuthWithScope({ jwtSecret: deps.jwtSecret, scopes: deps.scopes, now }))
+  // Plain JWT auth — deliberately NOT the scope-resolving stack. This is
+  // the endpoint that decides which scope is valid: a client holding a
+  // stale persisted slug (a scope the operator removed from config) must
+  // still get the list so it can fall back to the default. Resolving
+  // X-Scope here would 400 that client and deadlock every scoped request.
+  app.use('*', jwtAuth({ jwtSecret: deps.jwtSecret, ...(now === undefined ? {} : { now }) }))
 
   app.get('/', async (c) => {
     const at = now()

@@ -40,9 +40,9 @@ interface AppSettings {
   // Restrict the practice session to one card type. 'all' = no filter
   // (current behaviour). 'theory' is the obvious use case — grammar
   // notes get lost in a mixed-with-vocab session — but the option is
-  // there for any single-type focus. Typed-answer modes (cloze /
-  // translation / listening) auto-degrade to recognition for theory
-  // cards since theory has nothing to type or pronounce.
+  // there for any single-type focus. In typed-answer modes theory cards
+  // get the `typing` exercise (type your explanation, graded against
+  // the reference); recognition/listening keep them as flip-cards.
   cardTypeFilter: 'all' | 'vocab' | 'phrase' | 'theory';
 }
 

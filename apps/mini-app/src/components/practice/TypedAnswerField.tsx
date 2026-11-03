@@ -26,6 +26,12 @@ interface TypedAnswerFieldProps {
   onGiveUp: () => void
   placeholder: string
   matchResult: MatchResult | null
+  /** Free-form answers (typed theory): textarea instead of input, Enter
+   *  still submits. */
+  multiline?: boolean
+  /** Async grading in flight: disables input + submit, shows busyLabel. */
+  busy?: boolean
+  busyLabel?: string
 }
 
 export function TypedAnswerField({
@@ -36,6 +42,9 @@ export function TypedAnswerField({
   onGiveUp,
   placeholder,
   matchResult,
+  multiline = false,
+  busy = false,
+  busyLabel,
 }: TypedAnswerFieldProps) {
   const t = useT()
   const isError = matchResult && matchResult.kind === 'miss'
@@ -107,40 +116,74 @@ export function TypedAnswerField({
 
   return (
     <>
-      <div className="w-full max-w-[240px] relative">
-        <motion.input
-          ref={inputRef}
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              onSubmit()
-            }
-          }}
-          placeholder={placeholder}
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          animate={
-            isError
-              ? { x: [0, -10, 10, -10, 10, 0] }
-              : isSuccess
-                ? { scale: [1, 1.02, 1] }
-                : {}
-          }
-          transition={{ duration: 0.4 }}
-          className={`w-full text-center text-lg bg-app-bg border rounded-xl py-3 ${showMic ? 'pl-4 pr-12' : 'px-4'} focus:outline-none transition-colors ${
-            isError
-              ? 'border-rose-500 bg-rose-500/5'
-              : isSuccess
-                ? 'border-emerald-500 bg-emerald-500/5'
-                : isListening
-                  ? 'border-app-primary bg-app-primary/5'
+      <div className={`relative ${multiline ? 'w-full max-w-[320px]' : 'w-full max-w-[240px]'}`}>
+        {multiline ? (
+          <textarea
+            ref={(node) => {
+              // Ref plumbing: the parent owns an HTMLInputElement ref for
+              // focusing; a textarea satisfies the same "focus the field"
+              // job. Kept permissive on purpose.
+              ;(inputRef as React.MutableRefObject<HTMLElement | null>).current = node
+            }}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                onSubmit()
+              }
+            }}
+            placeholder={placeholder}
+            rows={4}
+            maxLength={2000}
+            disabled={busy}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            className={`w-full text-center text-base bg-app-bg border rounded-xl py-3 px-4 focus:outline-none transition-colors resize-none ${
+              isError
+                ? 'border-rose-500 bg-rose-500/5'
+                : isSuccess
+                  ? 'border-emerald-500 bg-emerald-500/5'
                   : 'border-app-border focus:border-app-primary'
-          }`}
-        />
+            }`}
+          />
+        ) : (
+          <motion.input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                onSubmit()
+              }
+            }}
+            placeholder={placeholder}
+            disabled={busy}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            animate={
+              isError
+                ? { x: [0, -10, 10, -10, 10, 0] }
+                : isSuccess
+                  ? { scale: [1, 1.02, 1] }
+                  : {}
+            }
+            transition={{ duration: 0.4 }}
+            className={`w-full text-center text-lg bg-app-bg border rounded-xl py-3 ${showMic ? 'pl-4 pr-12' : 'px-4'} focus:outline-none transition-colors ${
+              isError
+                ? 'border-rose-500 bg-rose-500/5'
+                : isSuccess
+                  ? 'border-emerald-500 bg-emerald-500/5'
+                  : isListening
+                    ? 'border-app-primary bg-app-primary/5'
+                    : 'border-app-border focus:border-app-primary'
+            }`}
+          />
+        )}
         {showMic && (
           <motion.button
             type="button"
@@ -165,16 +208,19 @@ export function TypedAnswerField({
       )}
       <button
         onClick={onSubmit}
-        className="w-full max-w-[240px] py-3 rounded-xl bg-app-primary text-app-primary-text font-semibold active:scale-95 transition-transform"
+        disabled={busy}
+        className={`w-full ${multiline ? 'max-w-[320px]' : 'max-w-[240px]'} py-3 rounded-xl bg-app-primary text-app-primary-text font-semibold active:scale-95 transition-transform ${busy ? 'opacity-60 pointer-events-none animate-pulse' : ''}`}
       >
-        {t('practice.btn_submit')}
+        {busy && busyLabel ? busyLabel : t('practice.btn_submit')}
       </button>
-      <button
-        onClick={onGiveUp}
-        className="text-[12px] text-app-hint underline underline-offset-4 decoration-app-hint/50 active:opacity-60"
-      >
-        {t('practice.btn_give_up')}
-      </button>
+      {!busy && (
+        <button
+          onClick={onGiveUp}
+          className="text-[12px] text-app-hint underline underline-offset-4 decoration-app-hint/50 active:opacity-60"
+        >
+          {t('practice.btn_give_up')}
+        </button>
+      )}
     </>
   )
 }

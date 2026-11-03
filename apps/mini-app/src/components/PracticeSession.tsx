@@ -24,7 +24,7 @@ import {
 import { fetchWithAuth } from '../lib/api';
 import { formatInterval, previewIntervals } from '../lib/fsrs';
 import { playPopSound, playSuccessChime, playThudSound } from '../lib/audio';
-import { pickVariantFor, type PracticeMode, type ExerciseVariant } from '../lib/practiceMode';
+import { pickTheoryVariant, pickVariantFor, type PracticeMode, type ExerciseVariant } from '../lib/practiceMode';
 import {
   buildClozeSentence,
   buildPhraseCloze,
@@ -54,6 +54,7 @@ import { ClozeFeedback } from './practice/ClozeFeedback';
 import { RatingButton } from './practice/RatingButton';
 import { SpeedChip } from './practice/SpeedChip';
 import { SrsHelpSheet } from './practice/SrsHelpSheet';
+import { TheoryGradeFeedback } from './practice/TheoryGradeFeedback';
 import { TypedAnswerField } from './practice/TypedAnswerField';
 import { EditCardSheet } from './EditCardSheet';
 import { RelatedCardsSheet } from './RelatedCardsSheet';
@@ -230,6 +231,11 @@ export function PracticeSession({
   // Cloze-only state — reset on each card via the effect below.
   const [typedAnswer, setTypedAnswer] = useState('');
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  // Semantic verdict for typed theory answers (kind: 'explanation' on
+  // /grade). Null when there is nothing to grade — self-assessment mode,
+  // a give-up, or a failed grade call all leave the full rating row.
+  const [theoryGrade, setTheoryGrade] = useState<{ verdict: 'correct' | 'close' | 'wrong'; reason: string } | null>(null);
+  const [theoryGrading, setTheoryGrading] = useState(false);
   const [translationTooltip, setTranslationTooltip] = useState<{ text: string; translation: string | null; x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -317,39 +323,18 @@ export function PracticeSession({
   // is training and must not touch FSRS.
   const answeredThisSession = useRef<Set<string>>(new Set());
 
-  // Typed-answer modes (cloze/translation/listening) have no sensible
-  // rendering for theory cards — they have no `term` to gap-fill,
-  // translate, or pronounce. Two cases:
-  //   * type filter = 'all' / 'vocab' / 'phrase' AND mode is typed-answer
-  //     → drop theory cards so the session stays coherent with the mode
-  //   * type filter = 'theory' AND mode is typed-answer
-  //     → that's a contradiction the type-filter UI should prevent, but
-  //       if it happens (e.g. mid-deploy stale state) we DON'T filter
-  //       theory out — letting the session be empty was worse than just
-  //       running the session in recognition. The variant resolver below
-  //       already forces theory → recognition, so the only thing we'd
-  //       lose by NOT filtering is the original mode's variant — which
-  //       doesn't apply to theory anyway.
+  // Theory cards used to be dropped from typed-answer sessions — they had
+  // no typed exercise. Now they have one (`typing`: type your explanation,
+  // grade it against the reference), so every session runs the full deck.
+  // Recognition/listening still flip theory cards — see pickTheoryVariant.
   const baseCards = useMemo<DueCardDto[]>(() => {
     const all = drillMode
       ? drillCards
       : assignmentMode
         ? assignmentCards
         : (dueQuery.data?.cards ?? []);
-    const typedAnswerMode = mode === 'cloze' || mode === 'translation' || mode === 'listening'
-    // …and never in an assignment or drill. An item the queue drops can
-    // never be answered, so it never completes, so the assignment never
-    // settles — it holds Home and blocks the next one until its deadline
-    // lapses. A saved mode preference must not be able to wedge the feature.
-    // In a drill the same rule matters for a different reason: a round must
-    // contain the same set every time, or "Ещё круг" quietly gets shorter.
-    // The variant resolver degrades theory to recognition anyway, which is
-    // exactly the trade the comment above already accepts.
-    if (typedAnswerMode && !assignmentMode && !drillMode && cardTypeFilter !== 'theory') {
-      return all.filter((c) => c.type !== 'theory');
-    }
     return all;
-  }, [assignmentMode, drillMode, drillCards, assignmentCards, dueQuery.data?.cards, mode, cardTypeFilter]);
+  }, [drillMode, drillCards, assignmentMode, assignmentCards, dueQuery.data?.cards]);
 
   // Queue + cursor + stats + pending-review undo slot + session-id ref
   // all live in this hook. See hooks/usePracticeQueue.ts for the why —
@@ -400,13 +385,14 @@ export function PracticeSession({
     }
   }, [currentCard])
 
-  // Resolve the exercise variant for the current card. Theory always
-  // degrades to `recognition` — it has no term to type or audio to test on.
-  // Vocab cloze also degrades to recognition when the card has no context
-  // sentence (cabinet-edited cards can clear it) — there's nothing to blank.
+  // Resolve the exercise variant for the current card. Theory gets its own
+  // resolver — `typing` in typed-answer sessions and every other card in
+  // mixed, flip-card otherwise. Vocab cloze degrades to recognition when
+  // the card has no context sentence (cabinet-edited cards can clear it) —
+  // there's nothing to blank.
   const variant: ExerciseVariant = (() => {
     if (currentCard === undefined) return 'recognition'
-    if (currentCard.type === 'theory') return 'recognition'
+    if (currentCard.type === 'theory') return pickTheoryVariant(mode, currentCard.id)
     const picked = pickVariantFor(mode, currentCard.id)
     if (
       picked === 'cloze' &&
@@ -418,7 +404,26 @@ export function PracticeSession({
     return picked
   })()
 
-  const expectsTypedAnswer = variant === 'cloze' || variant === 'translation' || variant === 'listening'
+  const expectsTypedAnswer = variant === 'cloze' || variant === 'translation' || variant === 'listening' || variant === 'typing'
+
+  // Objective grade → rating corridor. The LLM verdict says WHAT the
+  // recall was; the FSRS rating must still say how it FELT (effort,
+  // confidence). So the verdict narrows the options instead of replacing
+  // them: correct keeps Hard/Good/Easy (correct but labored is an honest
+  // Hard), close keeps Hard/Good, wrong keeps Again/Hard (Hard, not just
+  // Again, because a false-negative grade shouldn't lock the user out of
+  // "I actually knew this"). No verdict (AI off, give-up, grade failed) →
+  // the full row; the suggestion is ringed, one tap confirms.
+  const theoryCorridor: { allowed: Rating[]; suggested: Rating } | null =
+    theoryGrade !== null && currentCard?.type === 'theory' && variant === 'typing'
+      ? theoryGrade.verdict === 'correct'
+        ? { allowed: [RATING.Hard, RATING.Good, RATING.Easy], suggested: RATING.Good }
+        : theoryGrade.verdict === 'close'
+          ? { allowed: [RATING.Hard, RATING.Good], suggested: RATING.Good }
+          : { allowed: [RATING.Again, RATING.Hard], suggested: RATING.Again }
+      : null
+  const ratingAllowed = (r: Rating) => theoryCorridor === null || theoryCorridor.allowed.includes(r)
+  const ratingSuggested = (r: Rating) => theoryCorridor?.suggested === r
 
   // Produce-direction flip. Only applies to vocab cards in the recognition
   // variant — there we swap front (term + audio) with back (translation).
@@ -438,6 +443,8 @@ export function PracticeSession({
     setSeenCardId(currentCard?.id)
     setTypedAnswer('')
     setMatchResult(null)
+    setTheoryGrade(null)
+    setTheoryGrading(false)
   }
 
   // Don't auto-focus the input — the soft keyboard popping up on every
@@ -469,8 +476,56 @@ export function PracticeSession({
     playPopSound()
   };
 
-  const handleAnswerSubmit = () => {
+  const handleAnswerSubmit = async () => {
     if (isRevealed || !expectsTypedAnswer || !currentCard) return;
+    // Theory: no fuzzy match — the typed answer is graded against the
+    // reference by meaning, or revealed for self-assessment when AI
+    // grading is off / unavailable. The reference stays hidden until the
+    // grade lands so the user can't peek while waiting.
+    if (currentCard.type === 'theory') {
+      const theoryPayload = currentCard.payload as TheoryPayload;
+      const answer = typedAnswer.trim();
+      if (answer.length === 0) return; // nothing typed — the give-up link is the honest path
+      if (!getSettings().aiGradingEnabled) {
+        setMatchResult(null);
+        setTheoryGrade(null);
+        setIsRevealed(true);
+        haptic('impactOccurred', 'light');
+        playPopSound();
+        return;
+      }
+      setTheoryGrading(true);
+      try {
+        const res = await fetchWithAuth('/grade', {
+          method: 'POST',
+          body: JSON.stringify({
+            kind: 'explanation',
+            user_answer: answer,
+            expected: theoryPayload.answer,
+            hint: theoryPayload.question,
+          }),
+        });
+        if (res.ok) {
+          const verdict = (await res.json()) as { verdict: 'correct' | 'close' | 'wrong'; reason: string };
+          setTheoryGrade(verdict);
+          if (verdict.verdict === 'correct') { haptic('notificationOccurred', 'success'); playPopSound(); }
+          else if (verdict.verdict === 'close') { haptic('impactOccurred', 'medium'); playPopSound(); }
+          else { haptic('notificationOccurred', 'error'); playThudSound(); }
+        } else {
+          // 503 llm_not_configured / 502 llm_failed / network — degrade to
+          // self-assessment rather than blocking the session.
+          setTheoryGrade(null);
+          haptic('impactOccurred', 'light');
+        }
+      } catch {
+        setTheoryGrade(null);
+        haptic('impactOccurred', 'light');
+      } finally {
+        setTheoryGrading(false);
+        setIsRevealed(true);
+      }
+      return;
+    }
     let expected: string | null = null
     if (currentCard.type === 'vocab') {
       const vocabPayload = currentCard.payload as VocabPayload;
@@ -1121,6 +1176,27 @@ export function PracticeSession({
                         <p className="text-xs text-app-hint font-mono">{phrase.pattern}</p>
                       )}
                     </>
+                  ) : variant === 'typing' && theory ? (
+                    <>
+                      <div className="text-[10px] uppercase tracking-widest text-app-hint font-bold">{t('practice.prompt_theory_typing')}</div>
+                      <div className="overflow-y-auto max-h-[30vh] w-full px-2 text-center">
+                        <Markdown className="text-lg font-bold leading-snug">
+                          {theory.question}
+                        </Markdown>
+                      </div>
+                      <TypedAnswerField
+                        inputRef={inputRef}
+                        value={typedAnswer}
+                        onChange={setTypedAnswer}
+                        onSubmit={handleAnswerSubmit}
+                        onGiveUp={handleGiveUp}
+                        placeholder={t('practice.placeholder_theory')}
+                        matchResult={matchResult}
+                        multiline
+                        busy={theoryGrading}
+                        busyLabel={t('practice.theory_grading')}
+                      />
+                    </>
                   ) : theory ? (
                     <div data-testid="card-term" className="overflow-y-auto max-h-full w-full px-2 text-center">
                       <Markdown className="text-xl font-bold leading-snug">
@@ -1215,6 +1291,9 @@ export function PracticeSession({
                       }
                       hint={vocab?.translation ?? phrase?.translation}
                     />
+                  )}
+                  {theoryGrade && theory && variant === 'typing' && (
+                    <TheoryGradeFeedback verdict={theoryGrade.verdict} reason={theoryGrade.reason} />
                   )}
                   {vocab && flipForProduce ? (
                     <>
@@ -1324,10 +1403,10 @@ export function PracticeSession({
         <div className="flex gap-2 h-16 relative">
           {/* Rating Buttons - only visible when revealed and NOT undoing */}
           <div className={`absolute inset-0 flex gap-2 transition-opacity duration-200 ${isRevealed && !pendingReview ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-            <RatingButton label={t('practice.rating_again')} sub={intervalLabels?.[RATING.Again] ?? '…'} bg="bg-rose-500/10" color="text-rose-600 dark:text-rose-400" onClick={() => handleRate(RATING.Again)} />
-            <RatingButton label={t('practice.rating_hard')} sub={intervalLabels?.[RATING.Hard] ?? '…'} bg="bg-orange-500/10" color="text-orange-600 dark:text-orange-400" onClick={() => handleRate(RATING.Hard)} />
-            <RatingButton label={t('practice.rating_good')} sub={intervalLabels?.[RATING.Good] ?? '…'} bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" onClick={() => handleRate(RATING.Good)} />
-            <RatingButton label={t('practice.rating_easy')} sub={intervalLabels?.[RATING.Easy] ?? '…'} bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" onClick={() => handleRate(RATING.Easy)} />
+            <RatingButton label={t('practice.rating_again')} sub={intervalLabels?.[RATING.Again] ?? '…'} bg="bg-rose-500/10" color="text-rose-600 dark:text-rose-400" onClick={() => handleRate(RATING.Again)} disabled={!ratingAllowed(RATING.Again)} suggested={ratingSuggested(RATING.Again)} />
+            <RatingButton label={t('practice.rating_hard')} sub={intervalLabels?.[RATING.Hard] ?? '…'} bg="bg-orange-500/10" color="text-orange-600 dark:text-orange-400" onClick={() => handleRate(RATING.Hard)} disabled={!ratingAllowed(RATING.Hard)} suggested={ratingSuggested(RATING.Hard)} />
+            <RatingButton label={t('practice.rating_good')} sub={intervalLabels?.[RATING.Good] ?? '…'} bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" onClick={() => handleRate(RATING.Good)} disabled={!ratingAllowed(RATING.Good)} suggested={ratingSuggested(RATING.Good)} />
+            <RatingButton label={t('practice.rating_easy')} sub={intervalLabels?.[RATING.Easy] ?? '…'} bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" onClick={() => handleRate(RATING.Easy)} disabled={!ratingAllowed(RATING.Easy)} suggested={ratingSuggested(RATING.Easy)} />
           </div>
 
           <AnimatePresence>

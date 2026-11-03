@@ -138,4 +138,39 @@ describe('POST /grade', () => {
     expect(llm.calls[0]!.opts?.jsonMode).toBe(true)
     expect(llm.calls[0]!.opts?.temperature).toBe(0)
   })
+
+  test('kind=explanation uses the coverage prompt and accepts long answers', async () => {
+    const llm = stubLlm(JSON.stringify({ verdict: 'close', reason: 'нет ключевой детали' }))
+    const longAnswer = 'а'.repeat(1500)
+    const longReference = 'б'.repeat(1500)
+    const res = await buildApp(llm).request('/', {
+      method: 'POST',
+      headers: { authorization: await authHeader(), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'explanation',
+        user_answer: longAnswer,
+        expected: longReference,
+        hint: 'Чем goroutine отличается от потока ОС?',
+      }),
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ verdict: 'close', reason: 'нет ключевой детали' })
+    const prompt = llm.calls[0]!.messages.map((m) => m.content).join('\n')
+    expect(prompt).toContain("Question:")
+    expect(prompt).toContain("Reference answer:")
+    expect(prompt).toContain("Learner's answer:")
+    expect(prompt).not.toContain('English answer from a language learner')
+  })
+
+  test('default kind keeps the term prompt for legacy callers', async () => {
+    const llm = stubLlm(JSON.stringify({ verdict: 'correct', reason: 'ok' }))
+    await buildApp(llm).request('/', {
+      method: 'POST',
+      headers: { authorization: await authHeader(), 'content-type': 'application/json' },
+      body: validBody,
+    })
+    const prompt = llm.calls[0]!.messages.map((m) => m.content).join('\n')
+    expect(prompt).toContain('English answer from a language learner')
+    expect(prompt).toContain('Expected:')
+  })
 })
