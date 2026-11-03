@@ -38,6 +38,7 @@ import {
   shouldRequeueAfterRating,
   type AssignmentOutcome,
   type DrillOutcome,
+  type RatingSessionKind,
 } from './assignmentHelpers';
 import { stopSpeaking } from '../lib/tts';
 import { useCardAudio } from '../hooks/useCardAudio';
@@ -127,6 +128,13 @@ export function PracticeSession({
     () => (drillMode ? buildDrillQueue(drillQuery.data?.items ?? []) : []),
     [drillMode, drillQuery.data?.items],
   );
+  // The in-session repeat rule differs per queue; see
+  // `shouldRequeueAfterRating` for why a circle is not an assignment pass.
+  const sessionKind: RatingSessionKind = drillMode
+    ? 'drill'
+    : assignmentMode
+      ? 'assignment'
+      : 'free';
 
   // Snapshot of any paused session for THIS mode. Read once so the
   // /due query can decide whether to fetch fresh cards. The
@@ -528,12 +536,14 @@ export function PracticeSession({
       correct: sessionStats.correct + correctDelta,
     }
 
-    // Only Hard in an assignment or drill repeats in this sitting. Again
-    // always advances without extending the queue, including on the last
-    // card; the card stays in the set and comes back on the next round.
+    // Hard gets a second chance in the same sitting only on an assignment's
+    // first pass, where the item is still owed and otherwise unreachable. A
+    // drill circle stays a single clean pass: the card is already guaranteed
+    // a slot in the next circle, so re-queuing would only lengthen this one.
+    // Again always advances without extending the queue.
     let replaySpliceIndex: number | null = null;
     let workingLength = queue.length;
-    if (shouldRequeueAfterRating(rating, assignmentMode || drillMode)) {
+    if (shouldRequeueAfterRating(rating, sessionKind)) {
       replaySpliceIndex = queueState.spliceAhead(currentCard);
       workingLength = queue.length + 1;
     }

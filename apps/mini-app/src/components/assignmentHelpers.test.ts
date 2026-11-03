@@ -148,22 +148,27 @@ describe('deadlineState', () => {
 
 describe('shouldRequeueAfterRating', () => {
   test('Again never re-queues a card in the current session', () => {
-    expect(shouldRequeueAfterRating(RATING.Again, true)).toBe(false);
-    expect(shouldRequeueAfterRating(RATING.Again, false)).toBe(false);
+    expect(shouldRequeueAfterRating(RATING.Again, 'assignment')).toBe(false);
+    expect(shouldRequeueAfterRating(RATING.Again, 'drill')).toBe(false);
+    expect(shouldRequeueAfterRating(RATING.Again, 'free')).toBe(false);
   });
 
-  test('an assignment still re-queues Hard', () => {
-    expect(shouldRequeueAfterRating(RATING.Hard, true)).toBe(true);
+  test('an assignment first pass still re-queues Hard', () => {
+    expect(shouldRequeueAfterRating(RATING.Hard, 'assignment')).toBe(true);
+  });
+
+  test('a drill circle never re-queues Hard — the next circle has it', () => {
+    expect(shouldRequeueAfterRating(RATING.Hard, 'drill')).toBe(false);
   });
 
   test('an assignment never re-queues a taken card', () => {
-    expect(shouldRequeueAfterRating(RATING.Good, true)).toBe(false);
-    expect(shouldRequeueAfterRating(RATING.Easy, true)).toBe(false);
+    expect(shouldRequeueAfterRating(RATING.Good, 'assignment')).toBe(false);
+    expect(shouldRequeueAfterRating(RATING.Easy, 'assignment')).toBe(false);
   });
 
   test('free practice never re-queues cards', () => {
     for (const rating of Object.values(RATING)) {
-      expect(shouldRequeueAfterRating(rating, false)).toBe(false);
+      expect(shouldRequeueAfterRating(rating, 'free')).toBe(false);
     }
   });
 });

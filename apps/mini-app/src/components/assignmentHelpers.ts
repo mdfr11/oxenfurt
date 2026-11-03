@@ -79,18 +79,29 @@ export function deadlineState(dueAt: string, now: Date): { days: number; urgent:
   return { days, urgent: days === 0 };
 }
 
+/** Which queue a rating is happening in. The in-session repeat rule differs
+ *  between them, and the difference is a product decision, not an accident —
+ *  so it is named here rather than passed as two booleans. */
+export type RatingSessionKind = 'free' | 'assignment' | 'drill';
+
 /**
  * Whether a rating sends the card back into the same sitting's queue.
  *
- * Again leaves the card for a future sitting in both modes. Assignment
- * items rated Again remain incomplete and return when the assignment is
- * opened again. Only Hard in an assignment repeats in the current queue.
+ * Free practice never repeats a card in-session. An assignment's first pass
+ * re-queues Hard: the item is still owed (Hard does not stamp it complete) and
+ * would otherwise be unreachable until the learner re-enters, which is the
+ * trap this rule was written for.
+ *
+ * A drill circle does not re-queue anything: the next circle is one tap away
+ * and always contains the whole set, so a repeat would only lengthen the
+ * current round and make its counts ("Карточка 3 / 7") harder to read.
+ * Again leaves the card for a future sitting in every mode.
  */
 export function shouldRequeueAfterRating(
   rating: Rating,
-  assignmentMode: boolean,
+  sessionKind: RatingSessionKind,
 ): boolean {
-  return assignmentMode && rating === RATING.Hard;
+  return sessionKind === 'assignment' && rating === RATING.Hard;
 }
 
 export interface AssignmentOutcomeGroup {
