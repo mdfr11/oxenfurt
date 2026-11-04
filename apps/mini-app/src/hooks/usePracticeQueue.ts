@@ -42,7 +42,6 @@ export interface PendingReview {
   timeoutId: number
   previousIndex: number
   previousStats: SessionStats
-  replaySpliceIndex: number | null
 }
 
 export interface SessionStats {
@@ -90,9 +89,7 @@ export interface UsePracticeQueueResult {
   /** Splice a Hard assignment card a few positions ahead of the cursor.
    *  Returns the splice position so the caller can stash it
    *  on PendingReview for undo. */
-  spliceAhead: (card: DueCardDto, offset?: number) => number
   /** Reverse a previous splice (used by undo). */
-  removeAt: (index: number) => void
   /** Advance the cursor by one and merge the rating into stats. */
   advance: (delta: { total: 1; correct: 0 | 1 }) => void
   /** Restore an earlier cursor + stats from a PendingReview snapshot. */
@@ -192,19 +189,6 @@ export function usePracticeQueue({
     })
   }, [resumable, mode, queue, currentIndex, sessionStats])
 
-  const spliceAhead = (card: DueCardDto, offset = 4): number => {
-    const pos = Math.min(currentIndex + offset, queue.length)
-    setQueue((q) => {
-      const insertAt = Math.min(currentIndex + offset, q.length)
-      return [...q.slice(0, insertAt), card, ...q.slice(insertAt)]
-    })
-    return pos
-  }
-
-  const removeAt = (index: number): void => {
-    setQueue((q) => [...q.slice(0, index), ...q.slice(index + 1)])
-  }
-
   const advance = (delta: { total: 1; correct: 0 | 1 }): void => {
     setSessionStats((prev) => ({
       total: prev.total + delta.total,
@@ -260,8 +244,6 @@ export function usePracticeQueue({
     progress,
     pendingReview,
     resumed,
-    spliceAhead,
-    removeAt,
     advance,
     rollback,
     setPendingReview,

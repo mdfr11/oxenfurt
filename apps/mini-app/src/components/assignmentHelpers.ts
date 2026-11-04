@@ -7,9 +7,7 @@ import type {
   AssignmentItemDto,
   DueCardDto,
   GroupKind,
-  Rating,
 } from '@oxenfurt/shared';
-import { RATING } from '@oxenfurt/shared';
 import type { TKey } from '../lib/i18n';
 
 /** Cards still owed, in the order the agent laid them out. Completed items
@@ -77,31 +75,6 @@ export function deadlineState(dueAt: string, now: Date): { days: number; urgent:
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const days = Math.max(0, Math.round((dueMidnight.getTime() - todayMidnight.getTime()) / 86_400_000));
   return { days, urgent: days === 0 };
-}
-
-/** Which queue a rating is happening in. The in-session repeat rule differs
- *  between them, and the difference is a product decision, not an accident —
- *  so it is named here rather than passed as two booleans. */
-export type RatingSessionKind = 'free' | 'assignment' | 'drill';
-
-/**
- * Whether a rating sends the card back into the same sitting's queue.
- *
- * Free practice never repeats a card in-session. An assignment's first pass
- * re-queues Hard: the item is still owed (Hard does not stamp it complete) and
- * would otherwise be unreachable until the learner re-enters, which is the
- * trap this rule was written for.
- *
- * A drill circle does not re-queue anything: the next circle is one tap away
- * and always contains the whole set, so a repeat would only lengthen the
- * current round and make its counts ("Карточка 3 / 7") harder to read.
- * Again leaves the card for a future sitting in every mode.
- */
-export function shouldRequeueAfterRating(
-  rating: Rating,
-  sessionKind: RatingSessionKind,
-): boolean {
-  return sessionKind === 'assignment' && rating === RATING.Hard;
 }
 
 export interface AssignmentOutcomeGroup {

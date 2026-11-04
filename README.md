@@ -41,7 +41,7 @@ Powered by **FSRS-5** (Free Spaced Repetition Scheduler). Unlike basic Anki, it 
 - **5 Practice Modes**: Recognition, Cloze (gap-fill), Translation, Listening (TTS), and Mixed.
 - **Typed Theory with AI Grading**: Concept cards ask you to *explain in your own words*; an LLM grades the answer against the reference by meaning — interview-style active recall, not flip-through. The verdict narrows the FSRS rating choices instead of replacing your self-assessment.
 - **Undo Window**: Made a mistake? Tap undo within 3.5s.
-- **Smart Replay**: Opt-in to re-see failed cards in the same session.
+- **Clean Single-Pass Sessions**: a sitting never re-queues a card mid-session — replays are always a conscious choice from Summary: re-drill the hard ones, or replay the whole assignment in another "circle".
 
 ### 🎨 Witcher-Inspired "Dark Academia" UI
 A premium, polished interface using an independent **Zinc/Indigo** palette.

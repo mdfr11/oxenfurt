@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { RATING, type AssignmentDto, type AssignmentItemDto, type DueCardDto } from '@oxenfurt/shared';
+import { type AssignmentDto, type AssignmentItemDto, type DueCardDto } from '@oxenfurt/shared';
 import {
   buildAssignmentOutcome,
   buildAssignmentQueue,
   buildDrillQueue,
   deadlineState,
   isDrillRepeat,
-  shouldRequeueAfterRating,
 } from './assignmentHelpers';
 
 const NOW = new Date('2026-08-04T12:00:00.000Z');
@@ -146,32 +145,6 @@ describe('deadlineState', () => {
   });
 });
 
-describe('shouldRequeueAfterRating', () => {
-  test('Again never re-queues a card in the current session', () => {
-    expect(shouldRequeueAfterRating(RATING.Again, 'assignment')).toBe(false);
-    expect(shouldRequeueAfterRating(RATING.Again, 'drill')).toBe(false);
-    expect(shouldRequeueAfterRating(RATING.Again, 'free')).toBe(false);
-  });
-
-  test('an assignment first pass still re-queues Hard', () => {
-    expect(shouldRequeueAfterRating(RATING.Hard, 'assignment')).toBe(true);
-  });
-
-  test('a drill circle never re-queues Hard — the next circle has it', () => {
-    expect(shouldRequeueAfterRating(RATING.Hard, 'drill')).toBe(false);
-  });
-
-  test('an assignment never re-queues a taken card', () => {
-    expect(shouldRequeueAfterRating(RATING.Good, 'assignment')).toBe(false);
-    expect(shouldRequeueAfterRating(RATING.Easy, 'assignment')).toBe(false);
-  });
-
-  test('free practice never re-queues cards', () => {
-    for (const rating of Object.values(RATING)) {
-      expect(shouldRequeueAfterRating(rating, 'free')).toBe(false);
-    }
-  });
-});
 
 function assignment(overrides: Partial<AssignmentDto> = {}): AssignmentDto {
   return {

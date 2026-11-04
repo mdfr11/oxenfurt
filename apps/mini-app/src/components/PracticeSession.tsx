@@ -35,10 +35,8 @@ import {
   buildAssignmentQueue,
   buildDrillQueue,
   isDrillRepeat,
-  shouldRequeueAfterRating,
   type AssignmentOutcome,
   type DrillOutcome,
-  type RatingSessionKind,
 } from './assignmentHelpers';
 import { stopSpeaking } from '../lib/tts';
 import { useCardAudio } from '../hooks/useCardAudio';
@@ -131,14 +129,6 @@ export function PracticeSession({
     () => (drillMode ? buildDrillQueue(drillQuery.data?.items ?? []) : []),
     [drillMode, drillQuery.data?.items],
   );
-  // The in-session repeat rule differs per queue; see
-  // `shouldRequeueAfterRating` for why a circle is not an assignment pass.
-  const sessionKind: RatingSessionKind = drillMode
-    ? 'drill'
-    : assignmentMode
-      ? 'assignment'
-      : 'free';
-
   // Snapshot of any paused session for THIS mode. Read once so the
   // /due query can decide whether to fetch fresh cards. The
   // usePracticeQueue hook also reads localStorage internally for its
@@ -593,17 +583,12 @@ export function PracticeSession({
       correct: sessionStats.correct + correctDelta,
     }
 
-    // Hard gets a second chance in the same sitting only on an assignment's
-    // first pass, where the item is still owed and otherwise unreachable. A
-    // drill circle stays a single clean pass: the card is already guaranteed
-    // a slot in the next circle, so re-queuing would only lengthen this one.
-    // Again always advances without extending the queue.
-    let replaySpliceIndex: number | null = null;
-    let workingLength = queue.length;
-    if (shouldRequeueAfterRating(rating, sessionKind)) {
-      replaySpliceIndex = queueState.spliceAhead(currentCard);
-      workingLength = queue.length + 1;
-    }
+    // No rating re-queues into the same sitting — a sitting is a single
+    // clean pass in every mode. A Hard on an assignment item leaves the
+    // item owed (Hard doesn't stamp completion), same as Again: the
+    // learner re-enters the assignment to take it, and the next drill
+    // circle always contains the whole set anyway.
+    const workingLength = queue.length
 
     // Flush any existing pending review immediately before queueing the next one.
     if (pendingReview) {
@@ -624,7 +609,6 @@ export function PracticeSession({
       timeoutId,
       previousIndex: currentIndex,
       previousStats: sessionStats,
-      replaySpliceIndex,
     });
 
     if (currentIndex < workingLength - 1) {
@@ -676,11 +660,6 @@ export function PracticeSession({
   const handleUndo = () => {
     if (!pendingReview) return;
     clearTimeout(pendingReview.timeoutId);
-    // If the previous Hard spliced the card into the queue, also remove
-    // that splice so the future-position state is consistent with undo.
-    if (pendingReview.replaySpliceIndex !== null) {
-      queueState.removeAt(pendingReview.replaySpliceIndex);
-    }
     // Undo the drill bookkeeping too, or the re-answer would count as a
     // repeat and never reach FSRS. Only when this rating WAS the
     // measurement — undoing a repeat must leave the earlier answer on
